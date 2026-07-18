@@ -4,17 +4,17 @@ udp_bridge:
   morai_ip: "192.168.0.151"
 
   ports:
-    camera: 1000
-    lidar: 2000
-    gps: 3000
-    imu: 4000
+    camera: 1001
+    lidar: 2001
+    gps: 3001
+    imu: 4001
     collision_data: 907
     competition_vehicle_status: 909
     ego_ctrl_cmd_morai: 9093
     ego_ctrl_cmd_local: 9094
 
   monitor:
-    print_payload_hex_bytes: 32
+    print_payload_hex_bytes: 181
     print_rate_hz: 1.0
 
   status_adapter:
@@ -46,4 +46,3 @@ udp_bridge:
     ctrl_mode: 2
     gear: 4
     long_cmd_type: 1
-

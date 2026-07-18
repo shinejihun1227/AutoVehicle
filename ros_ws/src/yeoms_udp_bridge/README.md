@@ -8,14 +8,17 @@ This package is the UDP front-end for MORAI.
 Windows MORAI IP: 192.168.0.151
 Ubuntu algorithm IP: 192.168.0.200
 
-Camera UDP receive port: 1000
-LiDAR UDP receive port: 2000
-GPS UDP receive port: 3000
-IMU UDP receive port: 4000
+Camera UDP receive port: 1001
+LiDAR UDP receive port: 2001
+GPS UDP receive port: 3001
+IMU UDP receive port: 4001
 CollisionData UDP receive port: 907
 Competition Vehicle Status UDP receive port: 909
 Ego Ctrl Cmd MORAI receive port: 9093
 Ego Ctrl Cmd local port: 9094
+
+Note: MORAI's Host Port is the simulator-side source port. The UDP bridge must bind
+to the Destination Port shown in packet captures.
 ```
 
 ## First Check
@@ -56,4 +59,3 @@ The node will then publish:
 ```
 
 These are the inputs used by `yeoms_control`.
-
