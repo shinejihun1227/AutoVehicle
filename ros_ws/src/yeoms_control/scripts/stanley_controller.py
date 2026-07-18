@@ -28,6 +28,15 @@ class StanleyController:
         self.command_topic = rospy.get_param("~command_topic", rospy.get_param(f"/{ns}/command_topic", "/control/ctrl_cmd"))
         self.command_type = rospy.get_param("~command_type", rospy.get_param(f"/{ns}/command_type", "twist"))
         self.frame_id = rospy.get_param("~frame_id", rospy.get_param(f"/{ns}/frame_id", "map"))
+        self.default_target_speed = float(
+            rospy.get_param("~default_target_speed_mps", rospy.get_param(f"/{ns}/default_target_speed_mps", 1.5))
+        )
+        self.target_speed_override = float(
+            rospy.get_param("~target_speed_override_mps", rospy.get_param(f"/{ns}/target_speed_override_mps", -1.0))
+        )
+        self.max_target_speed = float(
+            rospy.get_param("~max_target_speed_mps", rospy.get_param(f"/{ns}/max_target_speed_mps", 1.5))
+        )
 
         waypoint_file = rospy.get_param(
             "~waypoint_file",
@@ -48,7 +57,6 @@ class StanleyController:
         self.max_steer_rate = float(
             rospy.get_param("~max_steer_rate_radps", rospy.get_param(f"/{ns}/max_steer_rate_radps", 0.6))
         )
-        self.default_target_speed = float(rospy.get_param("~default_target_speed_mps", rospy.get_param(f"/{ns}/default_target_speed_mps", 4.0)))
         self.speed_kp = float(rospy.get_param("~speed_kp", rospy.get_param(f"/{ns}/speed_kp", 0.35)))
         self.max_accel = float(rospy.get_param("~max_accel_cmd", rospy.get_param(f"/{ns}/max_accel_cmd", 1.0)))
         self.max_brake = float(rospy.get_param("~max_brake_cmd", rospy.get_param(f"/{ns}/max_brake_cmd", 1.0)))
@@ -235,6 +243,11 @@ class StanleyController:
         steering = self._clamp(steering, -self.max_steer, self.max_steer)
 
         target_speed = current_wp.target_speed or self.default_target_speed
+        if self.target_speed_override > 0.0:
+            target_speed = self.target_speed_override
+        if self.max_target_speed > 0.0:
+            target_speed = min(target_speed, self.max_target_speed)
+
         if self.stop_at_final and target_idx >= len(self.waypoints) - 1:
             if math.hypot(self.x - current_wp.x, self.y - current_wp.y) <= self.reached_radius:
                 target_speed = 0.0

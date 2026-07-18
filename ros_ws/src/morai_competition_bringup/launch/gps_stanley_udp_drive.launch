@@ -5,6 +5,8 @@
   <arg name="origin_lat" default="0.0" />
   <arg name="origin_lon" default="0.0" />
   <arg name="origin_alt" default="0.0" />
+  <arg name="target_speed_override_mps" default="1.5" />
+  <arg name="max_target_speed_mps" default="1.5" />
 
   <!-- UDP GPS -> /localization/ego_pose, /localization/ego_twist -->
   <include file="$(find yeoms_udp_bridge)/launch/udp_gps_localization.launch">
@@ -17,6 +19,8 @@
   <include file="$(find yeoms_control)/launch/stanley_test.launch">
     <arg name="waypoint_file" value="$(arg waypoint_file)" />
     <arg name="command_type" value="$(arg command_type)" />
+    <arg name="target_speed_override_mps" value="$(arg target_speed_override_mps)" />
+    <arg name="max_target_speed_mps" value="$(arg max_target_speed_mps)" />
   </include>
 
   <!-- /control/ctrl_cmd -> MORAI Ego Ctrl Cmd UDP, target port 9093 -->

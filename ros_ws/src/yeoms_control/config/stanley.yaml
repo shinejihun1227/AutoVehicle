@@ -20,7 +20,12 @@ stanley:
   steering_filter_alpha: 0.35
   max_steer_rate_radps: 0.6
 
-  default_target_speed_mps: 1.0
+  # Replay recorded paths a little faster than the 1.0 m/s recording default.
+  # Set target_speed_override_mps to -1.0 if you want to use each CSV row's
+  # target_speed value instead.
+  default_target_speed_mps: 1.5
+  target_speed_override_mps: 1.5
+  max_target_speed_mps: 1.5
   max_accel_cmd: 1.0
   max_brake_cmd: 1.0
   speed_kp: 0.35
