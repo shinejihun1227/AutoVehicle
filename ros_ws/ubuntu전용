@@ -1,7 +1,12 @@
+cd ~/AutoVehicle
+git pull
+
 cd ~/morai_stanley_ws
 
-rm -rf src/yeoms_control src/yeoms_udp_bridge src/morai_competition_bringup
-rm -rf src/yeoms_base_bridge src/yeoms_bringup src/yeoms_path_recorder src/yeoms_pure_pursuit
+rm -rf src/yeoms_base_bridge
+rm -rf src/yeoms_bringup
+rm -rf src/yeoms_path_recorder
+rm -rf src/yeoms_pure_pursuit
 
 cp -r ~/AutoVehicle/ros_ws/src/yeoms_base_bridge src/
 cp -r ~/AutoVehicle/ros_ws/src/yeoms_bringup src/
@@ -15,7 +20,6 @@ chmod +x src/yeoms_pure_pursuit/scripts/*.py
 source /opt/ros/noetic/setup.bash
 catkin_make
 source devel/setup.bash
-rospack profile
 
 경로저장
 roslaunch yeoms_bringup record_gps_path.launch output_file:=$HOME/morai_recorded_paths/01.csv
