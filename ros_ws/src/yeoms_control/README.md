@@ -91,3 +91,21 @@ roslaunch morai_competition_bringup gps_stanley_dry_run.launch
 
 This computes `/control/ctrl_cmd` only. It does not send UDP control packets to
 MORAI yet.
+
+## GPS + Stanley UDP Drive
+
+Use this only after the dry run publishes stable `/control/ctrl_cmd` values:
+
+```bash
+roslaunch morai_competition_bringup gps_stanley_udp_drive.launch
+```
+
+The default waypoint file is `test_straight_slow.csv`, which limits the first
+test to `1.0 m/s`.
+
+Check:
+
+```bash
+rostopic echo /control/ctrl_cmd
+rostopic echo /udp_bridge/ctrl_cmd_debug
+```

@@ -81,3 +81,36 @@ The node will then publish:
 ```
 
 These are the inputs used by `yeoms_control`.
+
+## Ego Ctrl Cmd UDP Sender
+
+`udp_ctrl_cmd_sender.py` converts `/control/ctrl_cmd` into the MORAI UDP
+`Ego Ctrl Cmd` packet.
+
+Current mapping:
+
+```text
+/control/ctrl_cmd.linear.x   target speed in m/s
+/control/ctrl_cmd.angular.z  steering angle in rad
+```
+
+The sender converts speed to km/h, normalizes steering to `-1.0..1.0`, and sends
+a 55-byte UDP packet to MORAI:
+
+```text
+target_ip:   192.168.0.151
+target_port: 9093
+local_port:  9094
+```
+
+For the first real vehicle movement test, use the top-level launch:
+
+```bash
+roslaunch morai_competition_bringup gps_stanley_udp_drive.launch
+```
+
+Monitor the outgoing packet conversion:
+
+```bash
+rostopic echo /udp_bridge/ctrl_cmd_debug
+```

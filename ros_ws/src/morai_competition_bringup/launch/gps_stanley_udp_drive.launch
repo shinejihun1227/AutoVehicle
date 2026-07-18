@@ -1,0 +1,22 @@
+<launch>
+  <arg name="waypoint_file" default="$(find yeoms_control)/waypoints/test_straight_slow.csv" />
+  <arg name="command_type" default="twist" />
+  <arg name="record_bag" default="false" />
+
+  <!-- UDP GPS -> /localization/ego_pose, /localization/ego_twist -->
+  <include file="$(find yeoms_udp_bridge)/launch/udp_gps_localization.launch" />
+
+  <!-- Stanley -> /control/ctrl_cmd -->
+  <include file="$(find yeoms_control)/launch/stanley_test.launch">
+    <arg name="waypoint_file" value="$(arg waypoint_file)" />
+    <arg name="command_type" value="$(arg command_type)" />
+  </include>
+
+  <!-- /control/ctrl_cmd -> MORAI Ego Ctrl Cmd UDP, target port 9093 -->
+  <node pkg="yeoms_udp_bridge"
+        type="udp_ctrl_cmd_sender.py"
+        name="udp_ctrl_cmd_sender"
+        output="screen" />
+
+  <include if="$(arg record_bag)" file="$(find morai_competition_bringup)/launch/logging.launch" />
+</launch>
