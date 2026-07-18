@@ -69,4 +69,5 @@ chmod +x ~/morai_stanley_ws/src/yeoms_udp_bridge/scripts/*.py && \
 source /opt/ros/noetic/setup.bash && \
 cd ~/morai_stanley_ws && \
 catkin_make && \
-source devel/setup.bash
+source devel/setup.bash && \
+roslaunch yeoms_udp_bridge udp_gps_localization.launch
