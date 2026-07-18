@@ -56,3 +56,5 @@ echo "Setup complete."
 echo "Next terminal 1: roscore"
 echo "Next terminal 2: roslaunch yeoms_udp_bridge udp_monitor.launch"
 echo "Next terminal 3: rostopic echo /udp_bridge/packet_info"
+
+sudo bash -c "source /opt/ros/noetic/setup.bash && source /home/$USER/morai_stanley_ws/devel/setup.bash && roslaunch yeoms_udp_bridge udp_monitor.launch"
