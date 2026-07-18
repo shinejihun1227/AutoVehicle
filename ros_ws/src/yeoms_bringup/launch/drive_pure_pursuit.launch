@@ -2,6 +2,7 @@
   <arg name="waypoint_file" default="$(env HOME)/morai_recorded_paths/01.csv" />
   <arg name="target_speed_mps" default="1.0" />
   <arg name="max_speed_mps" default="1.0" />
+  <arg name="use_csv_target_speed" default="false" />
 
   <include file="$(find yeoms_base_bridge)/launch/gps_localization.launch" />
 
@@ -9,7 +10,10 @@
     <arg name="waypoint_file" value="$(arg waypoint_file)" />
     <arg name="target_speed_mps" value="$(arg target_speed_mps)" />
     <arg name="max_speed_mps" value="$(arg max_speed_mps)" />
+    <arg name="use_csv_target_speed" value="$(arg use_csv_target_speed)" />
   </include>
 
-  <include file="$(find yeoms_base_bridge)/launch/ctrl_cmd_sender.launch" />
+  <include file="$(find yeoms_base_bridge)/launch/ctrl_cmd_sender.launch">
+    <arg name="max_speed_mps" value="$(arg max_speed_mps)" />
+  </include>
 </launch>

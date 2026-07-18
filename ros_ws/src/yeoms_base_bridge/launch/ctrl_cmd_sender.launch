@@ -1,6 +1,8 @@
 <launch>
   <arg name="config_file" default="$(find yeoms_base_bridge)/config/base_bridge.yaml" />
+  <arg name="max_speed_mps" default="1.2" />
   <rosparam command="load" file="$(arg config_file)" />
+  <param name="/ctrl_cmd/max_speed_mps" value="$(arg max_speed_mps)" />
 
   <node pkg="yeoms_base_bridge"
         type="ctrl_cmd_sender.py"

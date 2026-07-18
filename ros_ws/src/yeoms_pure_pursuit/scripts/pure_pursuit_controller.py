@@ -33,6 +33,7 @@ class PurePursuitController:
         self.lookahead_speed_gain = float(rospy.get_param(ns + "/lookahead_speed_gain", 1.0))
         self.target_speed = float(rospy.get_param(ns + "/target_speed_mps", 1.0))
         self.max_speed = float(rospy.get_param(ns + "/max_speed_mps", 1.0))
+        self.use_csv_target_speed = bool(rospy.get_param(ns + "/use_csv_target_speed", False))
         self.max_steer = float(rospy.get_param(ns + "/max_steer_rad", 0.25))
         self.steering_alpha = self._clamp(float(rospy.get_param(ns + "/steering_filter_alpha", 0.2)), 0.0, 1.0)
         self.max_steer_rate = float(rospy.get_param(ns + "/max_steer_rate_radps", 0.3))
@@ -123,7 +124,8 @@ class PurePursuitController:
         steer = math.atan2(2.0 * self.wheelbase * math.sin(heading_error), distance)
         steer = self._clamp(steer, -self.max_steer, self.max_steer)
 
-        speed = min(target.target_speed, self.target_speed, self.max_speed)
+        speed = target.target_speed if self.use_csv_target_speed else self.target_speed
+        speed = min(speed, self.max_speed)
         if self.stop_at_final and target_idx >= len(self.waypoints) - 1:
             final = self.waypoints[-1]
             if math.hypot(self.x - final.x, self.y - final.y) <= self.finish_radius:

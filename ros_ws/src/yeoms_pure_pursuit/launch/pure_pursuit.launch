@@ -3,10 +3,12 @@
   <arg name="waypoint_file" default="$(env HOME)/morai_recorded_paths/01.csv" />
   <arg name="target_speed_mps" default="1.0" />
   <arg name="max_speed_mps" default="1.0" />
+  <arg name="use_csv_target_speed" default="false" />
   <rosparam command="load" file="$(arg config_file)" />
   <param name="/pure_pursuit/waypoint_file" value="$(arg waypoint_file)" />
   <param name="/pure_pursuit/target_speed_mps" value="$(arg target_speed_mps)" />
   <param name="/pure_pursuit/max_speed_mps" value="$(arg max_speed_mps)" />
+  <param name="/pure_pursuit/use_csv_target_speed" value="$(arg use_csv_target_speed)" />
 
   <node pkg="yeoms_pure_pursuit"
         type="pure_pursuit_controller.py"
