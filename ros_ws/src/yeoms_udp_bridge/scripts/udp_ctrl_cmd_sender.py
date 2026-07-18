@@ -48,7 +48,8 @@ class UdpCtrlCmdSender:
         self.last_send_time = now
 
         target_speed_mps = self._clamp(float(msg.linear.x), 0.0, self.max_speed_mps)
-        steering_cmd = self._clamp(float(msg.angular.z), -self.max_steer_rad, self.max_steer_rad)
+        steering_rad = self._clamp(float(msg.angular.z), -self.max_steer_rad, self.max_steer_rad)
+        steering_cmd = steering_rad / self.max_steer_rad if self.max_steer_rad > 0.0 else 0.0
         if self.invert_steering:
             steering_cmd *= -1.0
 
@@ -72,8 +73,8 @@ class UdpCtrlCmdSender:
         self.sock.sendto(payload, (self.target_ip, self.target_port))
         self.debug_pub.publish(
             String(
-                "bytes=%d mode=%d gear=%d long_cmd_type=%d velocity_kmh=%.3f steering_cmd_rad=%.3f"
-                % (len(payload), self.ctrl_mode, self.gear, self.long_cmd_type, velocity_kmh, steering_cmd)
+                "bytes=%d mode=%d gear=%d long_cmd_type=%d velocity_kmh=%.3f steering_cmd=%.3f steering_rad=%.3f"
+                % (len(payload), self.ctrl_mode, self.gear, self.long_cmd_type, velocity_kmh, steering_cmd, steering_rad)
             )
         )
 

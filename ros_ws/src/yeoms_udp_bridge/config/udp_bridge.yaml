@@ -62,7 +62,7 @@ udp_bridge:
     yaw_filter_alpha: 0.12
     max_yaw_rate_radps: 0.35
     yaw_consistency_count: 3
-    use_imu_yaw: false
+    use_imu_yaw: true
     imu_topic: "/udp_bridge/imu"
     imu_timeout_s: 0.5
     imu_yaw_offset_rad: 0.0
@@ -89,7 +89,6 @@ udp_bridge:
     # 1=accel/brake command, 2=velocity command, 3=acceleration command.
     long_cmd_type: 2
     max_speed_mps: 1.5
-    # MORAI Ego Ctrl Cmd steering is sent as a front-wheel steering angle in rad.
     max_steer_rad: 0.45
     invert_steering: false
     send_rate_limit_hz: 20.0
