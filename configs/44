@@ -31,6 +31,27 @@ cd ~/morai_stanley_ws
 catkin_make
 source devel/setup.bash
 
+ㅡㅡㅡㅡㅡ
+
+cd ~/AutoVehicle
+git pull
+
+rm -rf ~/morai_stanley_ws/src/yeoms_udp_bridge
+rm -rf ~/morai_stanley_ws/src/morai_competition_bringup
+rm -rf ~/morai_stanley_ws/src/yeoms_control
+
+cp -r ~/AutoVehicle/ros_ws/src/yeoms_udp_bridge ~/morai_stanley_ws/src/
+cp -r ~/AutoVehicle/ros_ws/src/morai_competition_bringup ~/morai_stanley_ws/src/
+cp -r ~/AutoVehicle/ros_ws/src/yeoms_control ~/morai_stanley_ws/src/
+
+chmod +x ~/morai_stanley_ws/src/yeoms_udp_bridge/scripts/*.py
+chmod +x ~/morai_stanley_ws/src/yeoms_control/scripts/*.py
+
+source /opt/ros/noetic/setup.bash
+cd ~/morai_stanley_ws
+catkin_make
+source devel/setup.bash
+
 기록
 source /opt/ros/noetic/setup.bash && source ~/morai_stanley_ws/devel/setup.bash
 roslaunch morai_competition_bringup gps_waypoint_record.launch \
