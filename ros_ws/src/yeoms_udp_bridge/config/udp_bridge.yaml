@@ -18,25 +18,30 @@ udp_bridge:
     print_rate_hz: 1.0
 
   status_adapter:
-    # Start in raw mode until the exact competition packet layout is confirmed.
-    parser_mode: "raw"
+    # Experimental parser inferred from captured 181-byte #MoraiInfo$ screenshots.
+    # Change this back to "raw" if the published pose values look unstable.
+    parser_mode: "photo_guess"
     vehicle_status_port: 909
     pose_topic: "/localization/ego_pose"
     twist_topic: "/localization/ego_twist"
     frame_id: "map"
 
-    # Use these only after packet offsets are confirmed from MORAI docs/example code.
     # All offsets are byte offsets from the beginning of the UDP payload.
+    # photo_guess assumption from the current screenshots:
+    #   yaw: float32 at 86, x: float32 at 94, y: float32 at 98.
+    # x/y are origin-shifted on node startup so local waypoints can begin near 0,0.
     little_endian: true
-    x_offset: -1
-    y_offset: -1
+    x_offset: 94
+    y_offset: 98
     z_offset: -1
-    yaw_offset: -1
+    yaw_offset: 86
     yaw_unit: "deg"
     velocity_x_offset: -1
     velocity_y_offset: -1
     velocity_z_offset: -1
-    numeric_type: "float64"
+    numeric_type: "float32"
+    auto_origin: true
+    max_reasonable_speed_mps: 50.0
 
   ctrl_sender:
     subscribe_topic: "/control/ctrl_cmd"

@@ -37,25 +37,45 @@ rostopic echo /udp_bridge/packet_info
 
 If packets arrive, the network and MORAI UDP settings are working.
 
-## Next Step
+## Experimental Localization Check
 
-`udp_status_to_localization.py` starts in `parser_mode: raw` because the exact competition packet byte layout must be confirmed from MORAI docs or example code.
+`udp_status_to_localization.py` currently uses `parser_mode: photo_guess`.
+This is an experimental parser inferred from the captured 181-byte `#MoraiInfo$`
+screenshots. It should be used only to confirm that localization topics can be
+published before the official packet layout is finalized.
 
-After offsets are known, update `config/udp_bridge.yaml`:
+Run localization only, without sending vehicle control packets:
+
+```bash
+roslaunch yeoms_udp_bridge udp_localization_guess.launch
+```
+
+Then check:
+
+```bash
+rostopic echo /localization/ego_pose
+rostopic echo /localization/ego_twist
+rostopic echo /udp_bridge/status_debug
+```
+
+Current guessed offsets are:
 
 ```yaml
 status_adapter:
-  parser_mode: "offset"
-  x_offset: 0
-  y_offset: 8
-  yaw_offset: 16
+  parser_mode: "photo_guess"
+  numeric_type: "float32"
+  yaw_offset: 86
+  x_offset: 94
+  y_offset: 98
+  auto_origin: true
 ```
 
-The node will then publish:
+The node publishes:
 
 ```text
 /localization/ego_pose
 /localization/ego_twist
+/udp_bridge/status_debug
 ```
 
-These are the inputs used by `yeoms_control`.
+These localization topics are the inputs used by `yeoms_control`.
