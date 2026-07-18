@@ -139,7 +139,15 @@ softening_gain: 2.0
 crosstrack_error_gain: 0.75
 steering_filter_alpha: 0.35
 max_steer_rate_radps: 0.6
+path_yaw_lookahead_m: 3.0
+waypoint_smoothing_window: 5
+allow_target_backtrack: false
 ```
+
+Recorded GPS paths can be jagged because each waypoint contains GPS noise.
+`waypoint_smoothing_window` smooths the loaded path, and
+`path_yaw_lookahead_m` calculates path heading from a point several meters ahead
+instead of the immediately next point.
 
 If the vehicle consistently turns the wrong way, change
 `udp_bridge.yaml -> ctrl_sender.invert_steering` and test again. If the first

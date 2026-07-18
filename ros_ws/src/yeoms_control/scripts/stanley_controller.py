@@ -56,6 +56,18 @@ class StanleyController:
         self.search_window = int(rospy.get_param("~target_search_window", rospy.get_param(f"/{ns}/target_search_window", 50)))
         self.reached_radius = float(rospy.get_param("~waypoint_reached_radius_m", rospy.get_param(f"/{ns}/waypoint_reached_radius_m", 2.0)))
         self.stop_at_final = bool(rospy.get_param("~stop_at_final_waypoint", rospy.get_param(f"/{ns}/stop_at_final_waypoint", True)))
+        self.path_yaw_lookahead_m = float(
+            rospy.get_param("~path_yaw_lookahead_m", rospy.get_param(f"/{ns}/path_yaw_lookahead_m", 3.0))
+        )
+        self.allow_target_backtrack = bool(
+            rospy.get_param("~allow_target_backtrack", rospy.get_param(f"/{ns}/allow_target_backtrack", False))
+        )
+        self.waypoint_smoothing_window = int(
+            rospy.get_param("~waypoint_smoothing_window", rospy.get_param(f"/{ns}/waypoint_smoothing_window", 5))
+        )
+        self.min_waypoint_spacing_m = float(
+            rospy.get_param("~min_waypoint_spacing_m", rospy.get_param(f"/{ns}/min_waypoint_spacing_m", 0.3))
+        )
 
         self.x = None
         self.y = None
@@ -80,6 +92,7 @@ class StanleyController:
         self.heading_error_pub = rospy.Publisher("/control/stanley_heading_error_rad", Float32, queue_size=1)
         self.cte_term_pub = rospy.Publisher("/control/stanley_crosstrack_term_rad", Float32, queue_size=1)
 
+        self.waypoints = self._preprocess_waypoints(self.waypoints)
         self._publish_path()
         rospy.loginfo("Stanley controller ready: %d waypoints, command_type=%s", len(self.waypoints), self.command_type)
 
@@ -108,6 +121,37 @@ class StanleyController:
         if len(waypoints) < 2:
             raise rospy.ROSInitException("at least two waypoints are required")
         return waypoints
+
+    def _preprocess_waypoints(self, waypoints):
+        spaced = []
+        for wp in waypoints:
+            if not spaced or math.hypot(wp.x - spaced[-1].x, wp.y - spaced[-1].y) >= self.min_waypoint_spacing_m:
+                spaced.append(wp)
+
+        if len(spaced) < 2:
+            raise rospy.ROSInitException("at least two spaced waypoints are required")
+
+        window = max(1, self.waypoint_smoothing_window)
+        if window <= 1 or len(spaced) < 3:
+            return spaced
+
+        half = window // 2
+        smoothed = []
+        for idx, wp in enumerate(spaced):
+            if idx == 0 or idx == len(spaced) - 1:
+                smoothed.append(wp)
+                continue
+            start = max(0, idx - half)
+            end = min(len(spaced), idx + half + 1)
+            segment = spaced[start:end]
+            smoothed.append(
+                Waypoint(
+                    x=sum(p.x for p in segment) / len(segment),
+                    y=sum(p.y for p in segment) / len(segment),
+                    target_speed=wp.target_speed,
+                )
+            )
+        return smoothed
 
     def _make_command_publisher(self):
         if self.command_type == "morai":
@@ -170,7 +214,8 @@ class StanleyController:
         self.target_idx = target_idx
 
         current_wp = self.waypoints[target_idx]
-        next_wp = self.waypoints[min(target_idx + 1, len(self.waypoints) - 1)]
+        yaw_idx = self._advance_index_by_distance(target_idx, self.path_yaw_lookahead_m)
+        next_wp = self.waypoints[yaw_idx]
         path_yaw = math.atan2(next_wp.y - current_wp.y, next_wp.x - current_wp.x)
 
         heading_error = self._normalize_angle(path_yaw - self.yaw)
@@ -215,7 +260,7 @@ class StanleyController:
         return self.last_steering
 
     def _nearest_waypoint_index(self, x, y):
-        start = max(0, self.target_idx - 5)
+        start = max(0, self.target_idx - 5) if self.allow_target_backtrack else self.target_idx
         end = min(len(self.waypoints), self.target_idx + self.search_window)
         best_idx = start
         best_dist = float("inf")
@@ -227,6 +272,20 @@ class StanleyController:
                 best_idx = idx
                 best_dist = dist
         return best_idx
+
+    def _advance_index_by_distance(self, start_idx, distance_m):
+        if start_idx >= len(self.waypoints) - 1:
+            return start_idx
+
+        traveled = 0.0
+        prev = self.waypoints[start_idx]
+        for idx in range(start_idx + 1, len(self.waypoints)):
+            current = self.waypoints[idx]
+            traveled += math.hypot(current.x - prev.x, current.y - prev.y)
+            if traveled >= distance_m:
+                return idx
+            prev = current
+        return len(self.waypoints) - 1
 
     def _compute_speed_cmd(self, target_speed):
         error = target_speed - self.speed

@@ -29,3 +29,7 @@ stanley:
   target_search_window: 50
   waypoint_reached_radius_m: 2.0
   stop_at_final_waypoint: true
+  path_yaw_lookahead_m: 3.0
+  allow_target_backtrack: false
+  waypoint_smoothing_window: 5
+  min_waypoint_spacing_m: 0.3
