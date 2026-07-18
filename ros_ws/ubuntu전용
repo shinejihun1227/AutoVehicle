@@ -16,3 +16,11 @@ source /opt/ros/noetic/setup.bash
 catkin_make
 source devel/setup.bash
 rospack profile
+
+
+roslaunch yeoms_bringup record_gps_path.launch output_file:=$HOME/morai_recorded_paths/01.csv
+
+roslaunch yeoms_bringup drive_pure_pursuit.launch \
+  waypoint_file:=$HOME/morai_recorded_paths/01.csv \
+  target_speed_mps:=6.0 \
+  max_speed_mps:=6.0
