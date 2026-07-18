@@ -1,0 +1,14 @@
+<launch>
+  <arg name="bag_dir" default="$(env HOME)/morai_competition_logs" />
+
+  <node pkg="rosbag" type="record" name="competition_rosbag_record" output="screen"
+        args="-o $(arg bag_dir)/competition
+              /localization/ego_pose
+              /localization/ego_twist
+              /perception/obstacles
+              /planning/target_path
+              /planning/target_speed
+              /control/ctrl_cmd
+              /diagnostics/health" />
+</launch>
+

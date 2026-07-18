@@ -1,0 +1,19 @@
+morai:
+  server_pc_ip: "TBD"
+  client_pc_ip: "TBD"
+  team_pc_ip: "TBD"
+  ros_master_uri: "http://TBD:11311"
+  ros_ip: "TBD"
+
+udp:
+  ego_ctrl_cmd:
+    target_ip: "TBD"
+    target_port: 0
+    longi_type: 1
+  collision_data:
+    listen_ip: "0.0.0.0"
+    listen_port: 0
+  vehicle_status:
+    listen_ip: "0.0.0.0"
+    listen_port: 0
+

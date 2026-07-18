@@ -1,0 +1,11 @@
+<launch>
+  <!-- Sensor nodes will be connected after MORAI message types and network files are confirmed. -->
+  <group ns="sensors">
+    <param name="gps/enabled" value="true" />
+    <param name="imu/enabled" value="true" />
+    <param name="lidar_front/enabled" value="true" />
+    <param name="lidar_rear/enabled" value="false" />
+    <param name="camera_front/enabled" value="false" />
+  </group>
+</launch>
+

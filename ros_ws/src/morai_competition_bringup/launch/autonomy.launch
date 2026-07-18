@@ -1,0 +1,21 @@
+<launch>
+  <!-- Placeholder launch file. Replace these comments with actual nodes module by module. -->
+
+  <group ns="localization">
+    <param name="enabled" value="false" />
+  </group>
+
+  <group ns="perception">
+    <param name="enabled" value="false" />
+  </group>
+
+  <group ns="planning">
+    <param name="enabled" value="false" />
+  </group>
+
+  <group ns="control">
+    <param name="enabled" value="false" />
+    <param name="longi_type" value="1" />
+  </group>
+</launch>
+

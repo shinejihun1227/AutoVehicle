@@ -1,0 +1,14 @@
+vehicle:
+  model: "2023_Hyundai_ioniq5"
+  map: "R-KR_PG_K-City_2025"
+  dimensions:
+    length_m: 4.635
+    width_m: 1.892
+    height_m: 2.434
+    wheelbase_m: 3.000
+    front_overhang_m: 0.845
+    rear_overhang_m: 0.79
+  steering:
+    minimum_turning_radius_m: 5.87
+    maximum_wheel_angle_deg: 40.0
+
