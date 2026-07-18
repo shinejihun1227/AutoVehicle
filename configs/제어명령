@@ -63,3 +63,32 @@ roslaunch morai_competition_bringup gps_waypoint_record.launch output_file:=$HOM
 
 source /opt/ros/noetic/setup.bash && source ~/morai_stanley_ws/devel/setup.bash
 roslaunch morai_competition_bringup gps_stanley_udp_drive.launch waypoint_file:=$HOME/morai_recorded_paths/kcity_test_01.csv
+
+ㅡㅡㅡ
+source /opt/ros/noetic/setup.bash && source ~/morai_stanley_ws/devel/setup.bash
+roslaunch morai_competition_bringup gps_waypoint_record.launch \
+  output_file:=$HOME/morai_recorded_paths/kcity_test_01.csv \
+  target_speed_mps:=1.5 \
+  min_distance_m:=0.5
+
+
+source /opt/ros/noetic/setup.bash && source ~/morai_stanley_ws/devel/setup.bash
+rosrun yeoms_control waypoint_origin.py $HOME/morai_recorded_paths/kcity_test_01.csv
+
+
+nano ~/morai_stanley_ws/src/yeoms_udp_bridge/config/udp_bridge.yaml
+
+cd ~/morai_stanley_ws
+catkin_make
+source devel/setup.bash
+
+source /opt/ros/noetic/setup.bash && source ~/morai_stanley_ws/devel/setup.bash
+roslaunch morai_competition_bringup gps_stanley_udp_drive.launch \
+  waypoint_file:=$HOME/morai_recorded_paths/kcity_test_01.csv \
+  origin_lat:=37.24097500 \
+  origin_lon:=126.77435000 \
+  origin_alt:=0.000
+
+
+source /opt/ros/noetic/setup.bash && source ~/morai_stanley_ws/devel/setup.bash
+rostopic echo /udp_bridge/ctrl_cmd_debug
