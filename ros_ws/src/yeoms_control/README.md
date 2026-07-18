@@ -109,3 +109,21 @@ Check:
 rostopic echo /control/ctrl_cmd
 rostopic echo /udp_bridge/ctrl_cmd_debug
 ```
+
+## First Tuning Notes
+
+If the vehicle oscillates left and right on a straight path, reduce steering
+aggressiveness first:
+
+```yaml
+stanley_gain: 0.35
+softening_gain: 2.0
+crosstrack_error_gain: 0.75
+steering_filter_alpha: 0.35
+max_steer_rate_radps: 0.6
+```
+
+If the vehicle consistently turns the wrong way, change
+`udp_bridge.yaml -> ctrl_sender.invert_steering` and test again. If the first
+path is not aligned with the vehicle's starting direction, regenerate waypoints
+or start the vehicle facing the test path direction.

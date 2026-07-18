@@ -42,6 +42,12 @@ class StanleyController:
         self.softening_gain = float(rospy.get_param("~softening_gain", rospy.get_param(f"/{ns}/softening_gain", 1.0)))
         self.heading_error_gain = float(rospy.get_param("~heading_error_gain", rospy.get_param(f"/{ns}/heading_error_gain", 1.0)))
         self.crosstrack_error_gain = float(rospy.get_param("~crosstrack_error_gain", rospy.get_param(f"/{ns}/crosstrack_error_gain", 1.0)))
+        self.steering_filter_alpha = float(
+            rospy.get_param("~steering_filter_alpha", rospy.get_param(f"/{ns}/steering_filter_alpha", 0.35))
+        )
+        self.max_steer_rate = float(
+            rospy.get_param("~max_steer_rate_radps", rospy.get_param(f"/{ns}/max_steer_rate_radps", 0.6))
+        )
         self.default_target_speed = float(rospy.get_param("~default_target_speed_mps", rospy.get_param(f"/{ns}/default_target_speed_mps", 4.0)))
         self.speed_kp = float(rospy.get_param("~speed_kp", rospy.get_param(f"/{ns}/speed_kp", 0.35)))
         self.max_accel = float(rospy.get_param("~max_accel_cmd", rospy.get_param(f"/{ns}/max_accel_cmd", 1.0)))
@@ -56,6 +62,8 @@ class StanleyController:
         self.yaw = None
         self.speed = 0.0
         self.target_idx = 0
+        self.last_steering = 0.0
+        self.last_control_time = None
 
         if self.use_odometry:
             rospy.Subscriber(self.odom_topic, Odometry, self._odom_cb, queue_size=1)
@@ -139,6 +147,7 @@ class StanleyController:
                 continue
 
             steering, target_speed, cte, target_idx = self._compute_control()
+            steering = self._filter_steering(steering)
             accel, brake = self._compute_speed_cmd(target_speed)
             self._publish_command(steering, target_speed, accel, brake)
             self.target_idx_pub.publish(Int32(target_idx))
@@ -173,6 +182,24 @@ class StanleyController:
                 target_speed = 0.0
 
         return steering, target_speed, cte, target_idx
+
+    def _filter_steering(self, raw_steering):
+        now = rospy.Time.now()
+        if self.last_control_time is None:
+            self.last_control_time = now
+            self.last_steering = self._clamp(raw_steering, -self.max_steer, self.max_steer)
+            return self.last_steering
+
+        dt = max((now - self.last_control_time).to_sec(), 1.0 / max(self.rate_hz, 1.0))
+        self.last_control_time = now
+
+        alpha = self._clamp(self.steering_filter_alpha, 0.0, 1.0)
+        filtered = alpha * raw_steering + (1.0 - alpha) * self.last_steering
+
+        max_delta = self.max_steer_rate * dt
+        delta = self._clamp(filtered - self.last_steering, -max_delta, max_delta)
+        self.last_steering = self._clamp(self.last_steering + delta, -self.max_steer, self.max_steer)
+        return self.last_steering
 
     def _nearest_waypoint_index(self, x, y):
         start = max(0, self.target_idx - 5)
@@ -248,4 +275,3 @@ if __name__ == "__main__":
     rospy.init_node("stanley_controller")
     controller = StanleyController()
     controller.run()
-
