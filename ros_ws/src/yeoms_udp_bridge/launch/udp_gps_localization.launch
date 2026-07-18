@@ -3,7 +3,7 @@
   <rosparam command="load" file="$(arg config_file)" />
 
   <node pkg="yeoms_udp_bridge"
-        type="udp_status_to_localization.py"
-        name="udp_status_to_localization"
+        type="udp_gps_to_localization.py"
+        name="udp_gps_to_localization"
         output="screen" />
 </launch>
