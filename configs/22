@@ -20,3 +20,11 @@ sudo bash -c "export ROS_MASTER_URI=http://localhost:11311 && source /opt/ros/no
 
 
 grep -n "print_payload_hex_bytes" ~/morai_stanley_ws/src/yeoms_udp_bridge/config/udp_bridge.yaml
+
+python3 - <<'PY'
+from pathlib import Path
+path = Path.home() / "morai_stanley_ws/src/yeoms_udp_bridge/config/udp_bridge.yaml"
+text = path.read_text()
+text = text.replace("print_payload_hex_bytes: 32", "print_payload_hex_bytes: 181")
+path.write_text(text)
+PY
