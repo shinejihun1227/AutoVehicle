@@ -5,8 +5,8 @@
   <arg name="origin_lat" default="0.0" />
   <arg name="origin_lon" default="0.0" />
   <arg name="origin_alt" default="0.0" />
-  <arg name="target_speed_override_mps" default="1.5" />
-  <arg name="max_target_speed_mps" default="1.5" />
+  <arg name="target_speed_override_mps" default="1.3" />
+  <arg name="max_target_speed_mps" default="1.3" />
 
   <!-- UDP GPS -> /localization/ego_pose, /localization/ego_twist -->
   <include file="$(find yeoms_udp_bridge)/launch/udp_gps_localization.launch">

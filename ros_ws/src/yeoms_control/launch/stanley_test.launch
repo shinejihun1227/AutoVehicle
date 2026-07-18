@@ -2,8 +2,8 @@
   <arg name="config_file" default="$(find yeoms_control)/config/stanley.yaml" />
   <arg name="waypoint_file" default="$(find yeoms_control)/waypoints/test_straight.csv" />
   <arg name="command_type" default="twist" />
-  <arg name="target_speed_override_mps" default="1.5" />
-  <arg name="max_target_speed_mps" default="1.5" />
+  <arg name="target_speed_override_mps" default="1.3" />
+  <arg name="max_target_speed_mps" default="1.3" />
 
   <rosparam command="load" file="$(arg config_file)" />
 

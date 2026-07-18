@@ -53,12 +53,12 @@ udp_bridge:
     min_course_speed_mps: 0.2
     min_position_delta_m: 0.35
     max_reasonable_speed_mps: 50.0
-    speed_filter_alpha: 0.25
-    position_filter_alpha: 0.45
-    stationary_speed_decay: 0.55
+    speed_filter_alpha: 0.2
+    position_filter_alpha: 0.35
+    stationary_speed_decay: 0.4
     zero_speed_threshold_mps: 0.08
-    min_yaw_update_speed_mps: 0.35
-    max_yaw_jump_rad: 0.85
+    min_yaw_update_speed_mps: 0.6
+    max_yaw_jump_rad: 0.5
 
   imu_adapter:
     imu_port: 4001

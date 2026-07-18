@@ -12,20 +12,20 @@ stanley:
   # map.x=East, map.y=North, yaw positive counter-clockwise, steering positive=left.
   control_rate_hz: 20.0
   wheelbase_m: 3.0
-  max_steer_rad: 0.45
-  stanley_gain: 0.35
-  softening_gain: 2.0
+  max_steer_rad: 0.38
+  stanley_gain: 0.22
+  softening_gain: 3.0
   heading_error_gain: 1.0
-  crosstrack_error_gain: 0.75
-  steering_filter_alpha: 0.35
-  max_steer_rate_radps: 0.6
+  crosstrack_error_gain: 0.55
+  steering_filter_alpha: 0.25
+  max_steer_rate_radps: 0.4
 
-  # Replay recorded paths a little faster than the 1.0 m/s recording default.
+  # Stable replay speed for the current GPS-only yaw estimate.
   # Set target_speed_override_mps to -1.0 if you want to use each CSV row's
   # target_speed value instead.
-  default_target_speed_mps: 1.5
-  target_speed_override_mps: 1.5
-  max_target_speed_mps: 1.5
+  default_target_speed_mps: 1.3
+  target_speed_override_mps: 1.3
+  max_target_speed_mps: 1.3
   max_accel_cmd: 1.0
   max_brake_cmd: 1.0
   speed_kp: 0.35
@@ -34,7 +34,7 @@ stanley:
   target_search_window: 50
   waypoint_reached_radius_m: 2.0
   stop_at_final_waypoint: true
-  path_yaw_lookahead_m: 3.0
+  path_yaw_lookahead_m: 5.0
   allow_target_backtrack: false
-  waypoint_smoothing_window: 5
-  min_waypoint_spacing_m: 0.3
+  waypoint_smoothing_window: 9
+  min_waypoint_spacing_m: 0.5
