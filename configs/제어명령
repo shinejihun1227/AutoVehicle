@@ -23,3 +23,23 @@ roslaunch morai_competition_bringup gps_stanley_dry_run.launch
 
 source /opt/ros/noetic/setup.bash && source ~/morai_stanley_ws/devel/setup.bash
 rostopic echo /control/ctrl_cmd
+
+
+ㅡㅡㅡㅡ주행ㅡㅡㅡ
+cd ~/AutoVehicle && \
+git pull && \
+rm -rf ~/morai_stanley_ws/src/yeoms_udp_bridge ~/morai_stanley_ws/src/yeoms_control ~/morai_stanley_ws/src/morai_competition_bringup && \
+cp -r ~/AutoVehicle/ros_ws/src/yeoms_udp_bridge ~/morai_stanley_ws/src/ && \
+cp -r ~/AutoVehicle/ros_ws/src/yeoms_control ~/morai_stanley_ws/src/ && \
+cp -r ~/AutoVehicle/ros_ws/src/morai_competition_bringup ~/morai_stanley_ws/src/ && \
+chmod +x ~/morai_stanley_ws/src/yeoms_udp_bridge/scripts/*.py ~/morai_stanley_ws/src/yeoms_control/scripts/*.py && \
+source /opt/ros/noetic/setup.bash && \
+cd ~/morai_stanley_ws && \
+catkin_make && \
+source devel/setup.bash
+
+source /opt/ros/noetic/setup.bash && source ~/morai_stanley_ws/devel/setup.bash
+roslaunch morai_competition_bringup gps_stanley_udp_drive.launch
+
+source /opt/ros/noetic/setup.bash && source ~/morai_stanley_ws/devel/setup.bash
+rostopic echo /udp_bridge/ctrl_cmd_debug
