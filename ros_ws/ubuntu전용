@@ -29,3 +29,30 @@ roslaunch yeoms_bringup drive_pure_pursuit.launch \
   waypoint_file:=$HOME/morai_recorded_paths/01.csv \
   target_speed_mps:=6.0 \
   max_speed_mps:=6.0
+
+
+
+마지막
+cd ~/AutoVehicle
+git pull
+
+cd ~/morai_stanley_ws
+
+rm -rf src/yeoms_bringup
+rm -rf src/yeoms_pure_pursuit
+
+cp -r ~/AutoVehicle/ros_ws/src/yeoms_bringup src/
+cp -r ~/AutoVehicle/ros_ws/src/yeoms_pure_pursuit src/
+
+chmod +x src/yeoms_pure_pursuit/scripts/*.py
+
+source /opt/ros/noetic/setup.bash
+catkin_make
+source devel/setup.bash
+
+roslaunch yeoms_bringup drive_pure_pursuit.launch \
+  waypoint_file:=$HOME/morai_recorded_paths/01.csv \
+  target_speed_mps:=6.0 \
+  max_speed_mps:=6.0 \
+  min_curve_speed_mps:=2.5 \
+  curve_min_lookahead_m:=3.0
