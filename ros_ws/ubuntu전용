@@ -1,0 +1,28 @@
+cd ~/AutoVehicle
+git pull
+
+rm -rf ~/morai_stanley_ws/src/yeoms_control
+rm -rf ~/morai_stanley_ws/src/yeoms_udp_bridge
+rm -rf ~/morai_stanley_ws/src/morai_competition_bringup
+rm -rf ~/morai_stanley_ws/src/yeoms_base_bridge
+rm -rf ~/morai_stanley_ws/src/yeoms_path_recorder
+rm -rf ~/morai_stanley_ws/src/yeoms_pure_pursuit
+rm -rf ~/morai_stanley_ws/src/yeoms_bringup
+
+cp -r ~/AutoVehicle/ros_ws/src/yeoms_base_bridge ~/morai_stanley_ws/src/
+cp -r ~/AutoVehicle/ros_ws/src/yeoms_path_recorder ~/morai_stanley_ws/src/
+cp -r ~/AutoVehicle/ros_ws/src/yeoms_pure_pursuit ~/morai_stanley_ws/src/
+cp -r ~/AutoVehicle/ros_ws/src/yeoms_bringup ~/morai_stanley_ws/src/
+
+source /opt/ros/noetic/setup.bash
+cd ~/morai_stanley_ws
+catkin_make
+source devel/setup.bash
+
+
+roslaunch yeoms_bringup record_gps_path.launch output_file:=$HOME/morai_recorded_paths/01.csv
+
+roslaunch yeoms_bringup drive_pure_pursuit.launch \
+  waypoint_file:=$HOME/morai_recorded_paths/01.csv \
+  target_speed_mps:=1.0 \
+  max_speed_mps:=1.0
