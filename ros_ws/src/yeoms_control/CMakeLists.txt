@@ -13,6 +13,7 @@ catkin_package()
 
 catkin_install_python(PROGRAMS
   scripts/stanley_controller.py
+  scripts/waypoint_recorder.py
   DESTINATION ${CATKIN_PACKAGE_BIN_DESTINATION}
 )
 

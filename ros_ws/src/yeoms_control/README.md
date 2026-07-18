@@ -127,3 +127,42 @@ If the vehicle consistently turns the wrong way, change
 `udp_bridge.yaml -> ctrl_sender.invert_steering` and test again. If the first
 path is not aligned with the vehicle's starting direction, regenerate waypoints
 or start the vehicle facing the test path direction.
+
+## Record A Driven Path
+
+Drive the vehicle manually once and record the GPS localization path as a
+Stanley-compatible CSV:
+
+```bash
+roslaunch morai_competition_bringup gps_waypoint_record.launch
+```
+
+By default, the file is saved under:
+
+```text
+~/morai_recorded_paths/path_YYYYMMDD_HHMMSS.csv
+```
+
+You can also choose the output path:
+
+```bash
+roslaunch morai_competition_bringup gps_waypoint_record.launch \
+  output_file:=$HOME/morai_recorded_paths/kcity_test_01.csv \
+  target_speed_mps:=1.0 \
+  min_distance_m:=0.5
+```
+
+After recording, follow that path with Stanley and UDP control:
+
+```bash
+roslaunch morai_competition_bringup gps_stanley_udp_drive.launch \
+  waypoint_file:=$HOME/morai_recorded_paths/kcity_test_01.csv
+```
+
+Recorded CSV format:
+
+```csv
+x,y,target_speed
+0.000000,0.000000,1.000
+0.502100,0.010500,1.000
+```
