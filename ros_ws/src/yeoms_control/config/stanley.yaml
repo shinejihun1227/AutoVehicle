@@ -8,6 +8,8 @@ stanley:
   command_type: "twist"
   frame_id: "map"
 
+  # Coordinate convention:
+  # map.x=East, map.y=North, yaw positive counter-clockwise, steering positive=left.
   control_rate_hz: 20.0
   wheelbase_m: 3.0
   max_steer_rad: 0.45

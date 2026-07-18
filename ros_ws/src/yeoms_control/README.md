@@ -34,6 +34,22 @@ Alternative input:
 
 Set `use_odometry: true` in `config/stanley.yaml` to use odometry.
 
+## Coordinate Convention
+
+The controller uses the project-wide ROS ENU convention:
+
+```text
+map.x: East
+map.y: North
+map.z: Up
+yaw=0: +x/East
+yaw positive: counter-clockwise
+steering positive: left turn
+```
+
+See `docs/20_coordinate_convention.md` for the full convention and Stanley
+cross-track error sign rule.
+
 ## Output
 
 Default output:
@@ -78,6 +94,8 @@ rostopic echo /control/ctrl_cmd
 rostopic echo /control/stanley_target_index
 rostopic echo /control/stanley_cross_track_error
 rostopic echo /control/stanley_steering_rad
+rostopic echo /control/stanley_heading_error_rad
+rostopic echo /control/stanley_crosstrack_term_rad
 ```
 
 ## GPS + Stanley Dry Run

@@ -76,6 +76,9 @@ class StanleyController:
         self.target_idx_pub = rospy.Publisher("/control/stanley_target_index", Int32, queue_size=1)
         self.cte_pub = rospy.Publisher("/control/stanley_cross_track_error", Float32, queue_size=1)
         self.steer_pub = rospy.Publisher("/control/stanley_steering_rad", Float32, queue_size=1)
+        self.path_yaw_pub = rospy.Publisher("/control/stanley_path_yaw_rad", Float32, queue_size=1)
+        self.heading_error_pub = rospy.Publisher("/control/stanley_heading_error_rad", Float32, queue_size=1)
+        self.cte_term_pub = rospy.Publisher("/control/stanley_crosstrack_term_rad", Float32, queue_size=1)
 
         self._publish_path()
         rospy.loginfo("Stanley controller ready: %d waypoints, command_type=%s", len(self.waypoints), self.command_type)
@@ -148,13 +151,16 @@ class StanleyController:
                 rate.sleep()
                 continue
 
-            steering, target_speed, cte, target_idx = self._compute_control()
+            steering, target_speed, cte, target_idx, path_yaw, heading_error, cte_term = self._compute_control()
             steering = self._filter_steering(steering)
             accel, brake = self._compute_speed_cmd(target_speed)
             self._publish_command(steering, target_speed, accel, brake)
             self.target_idx_pub.publish(Int32(target_idx))
             self.cte_pub.publish(Float32(cte))
             self.steer_pub.publish(Float32(steering))
+            self.path_yaw_pub.publish(Float32(path_yaw))
+            self.heading_error_pub.publish(Float32(heading_error))
+            self.cte_term_pub.publish(Float32(cte_term))
             rate.sleep()
 
     def _compute_control(self):
@@ -171,8 +177,13 @@ class StanleyController:
 
         dx = front_x - current_wp.x
         dy = front_y - current_wp.y
-        # Positive cross-track error means the path is left of the vehicle heading.
-        cte = dy * math.cos(path_yaw) - dx * math.sin(path_yaw)
+        # ROS ENU convention:
+        #   map x=East, y=North, yaw positive counter-clockwise.
+        #   steering > 0 means left turn.
+        # If the vehicle is left of a path segment, steering should be negative
+        # to return to the path. Therefore cte is positive when the path is left
+        # of the vehicle, not when the vehicle is left of the path.
+        cte = dx * math.sin(path_yaw) - dy * math.cos(path_yaw)
 
         cte_term = math.atan2(self.k * cte, self.speed + self.softening_gain)
         steering = self.heading_error_gain * heading_error + self.crosstrack_error_gain * cte_term
@@ -183,7 +194,7 @@ class StanleyController:
             if math.hypot(self.x - current_wp.x, self.y - current_wp.y) <= self.reached_radius:
                 target_speed = 0.0
 
-        return steering, target_speed, cte, target_idx
+        return steering, target_speed, cte, target_idx, path_yaw, heading_error, cte_term
 
     def _filter_steering(self, raw_steering):
         now = rospy.Time.now()
