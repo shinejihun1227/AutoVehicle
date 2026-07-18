@@ -38,6 +38,9 @@ stanley:
   startup_hold_time_s: 0.5
   startup_ramp_time_s: 3.0
   startup_steer_limit_rad: 0.15
+  startup_direction_guard_time_s: 4.0
+  startup_direction_guard_min_yaw_rad: 0.12
+  startup_direction_guard_lookahead_m: 5.0
 
   target_search_window: 50
   waypoint_reached_radius_m: 2.0

@@ -94,6 +94,24 @@ class StanleyController:
         self.startup_steer_limit = float(
             rospy.get_param("~startup_steer_limit_rad", rospy.get_param(f"/{ns}/startup_steer_limit_rad", 0.15))
         )
+        self.startup_direction_guard_time = float(
+            rospy.get_param(
+                "~startup_direction_guard_time_s",
+                rospy.get_param(f"/{ns}/startup_direction_guard_time_s", 4.0),
+            )
+        )
+        self.startup_direction_guard_min_yaw = float(
+            rospy.get_param(
+                "~startup_direction_guard_min_yaw_rad",
+                rospy.get_param(f"/{ns}/startup_direction_guard_min_yaw_rad", 0.12),
+            )
+        )
+        self.startup_direction_guard_lookahead = float(
+            rospy.get_param(
+                "~startup_direction_guard_lookahead_m",
+                rospy.get_param(f"/{ns}/startup_direction_guard_lookahead_m", 5.0),
+            )
+        )
         self.search_window = int(rospy.get_param("~target_search_window", rospy.get_param(f"/{ns}/target_search_window", 50)))
         self.reached_radius = float(rospy.get_param("~waypoint_reached_radius_m", rospy.get_param(f"/{ns}/waypoint_reached_radius_m", 2.0)))
         self.stop_at_final = bool(rospy.get_param("~stop_at_final_waypoint", rospy.get_param(f"/{ns}/stop_at_final_waypoint", True)))
@@ -149,6 +167,7 @@ class StanleyController:
         self.hybrid_steer_pub = rospy.Publisher("/control/hybrid_steering_rad", Float32, queue_size=1)
 
         self.waypoints = self._preprocess_waypoints(self.waypoints)
+        self.startup_curve_sign = self._initial_curve_sign()
         self._publish_path()
         rospy.loginfo("Stanley controller ready: %d waypoints, command_type=%s", len(self.waypoints), self.command_type)
 
@@ -469,8 +488,40 @@ class StanleyController:
         ramp = self._clamp((elapsed - self.startup_hold_time) / ramp_time, 0.0, 1.0)
         steer_limit = self.startup_steer_limit + ramp * (self.max_steer - self.startup_steer_limit)
         steering = self._clamp(steering, -steer_limit, steer_limit)
+        steering = self._apply_startup_direction_guard(steering, elapsed)
         target_speed *= ramp
         return steering, target_speed
+
+    def _apply_startup_direction_guard(self, steering, elapsed):
+        if elapsed > self.startup_hold_time + self.startup_direction_guard_time:
+            return steering
+        if abs(self.startup_curve_sign) <= self.startup_direction_guard_min_yaw:
+            return steering
+
+        # During startup, suppress steering that goes against the first path bend.
+        if self.startup_curve_sign > 0.0 and steering < 0.0:
+            return 0.0
+        if self.startup_curve_sign < 0.0 and steering > 0.0:
+            return 0.0
+        return steering
+
+    def _initial_curve_sign(self):
+        if len(self.waypoints) < 3:
+            return 0.0
+
+        first_yaw = math.atan2(
+            self.waypoints[1].y - self.waypoints[0].y,
+            self.waypoints[1].x - self.waypoints[0].x,
+        )
+        lookahead_idx = self._advance_index_by_distance(0, self.startup_direction_guard_lookahead)
+        if lookahead_idx <= 0:
+            return 0.0
+
+        lookahead_yaw = math.atan2(
+            self.waypoints[lookahead_idx].y - self.waypoints[0].y,
+            self.waypoints[lookahead_idx].x - self.waypoints[0].x,
+        )
+        return self._normalize_angle(lookahead_yaw - first_yaw)
 
     def _has_reached_final_waypoint(self):
         final_wp = self.waypoints[-1]
