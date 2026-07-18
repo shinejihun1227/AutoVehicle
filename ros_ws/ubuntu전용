@@ -26,3 +26,14 @@ roslaunch yeoms_bringup drive_pure_pursuit.launch \
   waypoint_file:=$HOME/morai_recorded_paths/01.csv \
   target_speed_mps:=1.0 \
   max_speed_mps:=1.0
+
+cd ~/AutoVehicle
+git pull
+
+cd ~/morai_stanley_ws
+rm -rf src/yeoms_base_bridge src/yeoms_bringup src/yeoms_path_recorder src/yeoms_pure_pursuit
+
+cp -r ~/AutoVehicle/ros_ws/src/yeoms_base_bridge src/
+cp -r ~/AutoVehicle/ros_ws/src/yeoms_bringup src/
+cp -r ~/AutoVehicle/ros_ws/src/yeoms_path_recorder src/
+cp -r ~/AutoVehicle/ros_ws/src/yeoms_pure_pursuit src/
