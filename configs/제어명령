@@ -54,3 +54,12 @@ roslaunch morai_competition_bringup gps_waypoint_record.launch output_file:=$HOM
 
 source /opt/ros/noetic/setup.bash && source ~/morai_stanley_ws/devel/setup.bash
 roslaunch morai_competition_bringup gps_stanley_udp_drive.launch waypoint_file:=$HOME/morai_recorded_paths/kcity_test_01.csv
+4
+
+mkdir -p ~/morai_recorded_paths
+
+source /opt/ros/noetic/setup.bash && source ~/morai_stanley_ws/devel/setup.bash
+roslaunch morai_competition_bringup gps_waypoint_record.launch output_file:=$HOME/morai_recorded_paths/kcity_test_01.csv target_speed_mps:=1.0 min_distance_m:=0.5
+
+source /opt/ros/noetic/setup.bash && source ~/morai_stanley_ws/devel/setup.bash
+roslaunch morai_competition_bringup gps_stanley_udp_drive.launch waypoint_file:=$HOME/morai_recorded_paths/kcity_test_01.csv
