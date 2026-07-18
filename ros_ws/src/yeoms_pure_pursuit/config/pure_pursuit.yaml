@@ -9,9 +9,15 @@ pure_pursuit:
   min_lookahead_m: 4.0
   max_lookahead_m: 10.0
   lookahead_speed_gain: 1.0
+  curve_lookahead_enabled: true
+  curve_lookahead_heading_rad: 0.35
+  curve_min_lookahead_m: 3.0
   target_speed_mps: 1.0
   max_speed_mps: 1.0
   use_csv_target_speed: false
+  curve_slowdown_enabled: true
+  curve_heading_slowdown_rad: 0.35
+  min_curve_speed_mps: 2.5
   max_steer_rad: 0.25
   steering_filter_alpha: 0.2
   max_steer_rate_radps: 0.3

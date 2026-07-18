@@ -4,11 +4,21 @@
   <arg name="target_speed_mps" default="1.0" />
   <arg name="max_speed_mps" default="1.0" />
   <arg name="use_csv_target_speed" default="false" />
+  <arg name="curve_slowdown_enabled" default="true" />
+  <arg name="curve_heading_slowdown_rad" default="0.35" />
+  <arg name="min_curve_speed_mps" default="2.5" />
+  <arg name="curve_lookahead_heading_rad" default="0.35" />
+  <arg name="curve_min_lookahead_m" default="3.0" />
   <rosparam command="load" file="$(arg config_file)" />
   <param name="/pure_pursuit/waypoint_file" value="$(arg waypoint_file)" />
   <param name="/pure_pursuit/target_speed_mps" value="$(arg target_speed_mps)" />
   <param name="/pure_pursuit/max_speed_mps" value="$(arg max_speed_mps)" />
   <param name="/pure_pursuit/use_csv_target_speed" value="$(arg use_csv_target_speed)" />
+  <param name="/pure_pursuit/curve_slowdown_enabled" value="$(arg curve_slowdown_enabled)" />
+  <param name="/pure_pursuit/curve_heading_slowdown_rad" value="$(arg curve_heading_slowdown_rad)" />
+  <param name="/pure_pursuit/min_curve_speed_mps" value="$(arg min_curve_speed_mps)" />
+  <param name="/pure_pursuit/curve_lookahead_heading_rad" value="$(arg curve_lookahead_heading_rad)" />
+  <param name="/pure_pursuit/curve_min_lookahead_m" value="$(arg curve_min_lookahead_m)" />
 
   <node pkg="yeoms_pure_pursuit"
         type="pure_pursuit_controller.py"

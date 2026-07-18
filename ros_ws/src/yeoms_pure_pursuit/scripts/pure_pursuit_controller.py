@@ -31,9 +31,15 @@ class PurePursuitController:
         self.min_lookahead = float(rospy.get_param(ns + "/min_lookahead_m", 4.0))
         self.max_lookahead = float(rospy.get_param(ns + "/max_lookahead_m", 10.0))
         self.lookahead_speed_gain = float(rospy.get_param(ns + "/lookahead_speed_gain", 1.0))
+        self.curve_lookahead_enabled = bool(rospy.get_param(ns + "/curve_lookahead_enabled", True))
+        self.curve_lookahead_heading = float(rospy.get_param(ns + "/curve_lookahead_heading_rad", 0.35))
+        self.curve_min_lookahead = float(rospy.get_param(ns + "/curve_min_lookahead_m", 3.0))
         self.target_speed = float(rospy.get_param(ns + "/target_speed_mps", 1.0))
         self.max_speed = float(rospy.get_param(ns + "/max_speed_mps", 1.0))
         self.use_csv_target_speed = bool(rospy.get_param(ns + "/use_csv_target_speed", False))
+        self.curve_slowdown_enabled = bool(rospy.get_param(ns + "/curve_slowdown_enabled", True))
+        self.curve_heading_slowdown = float(rospy.get_param(ns + "/curve_heading_slowdown_rad", 0.35))
+        self.min_curve_speed = float(rospy.get_param(ns + "/min_curve_speed_mps", 2.5))
         self.max_steer = float(rospy.get_param(ns + "/max_steer_rad", 0.25))
         self.steering_alpha = self._clamp(float(rospy.get_param(ns + "/steering_filter_alpha", 0.2)), 0.0, 1.0)
         self.max_steer_rate = float(rospy.get_param(ns + "/max_steer_rate_radps", 0.3))
@@ -61,6 +67,8 @@ class PurePursuitController:
         self.steer_pub = rospy.Publisher("/control/pure_pursuit_steering_rad", Float32, queue_size=1)
         self.heading_error_pub = rospy.Publisher("/control/pure_pursuit_heading_error_rad", Float32, queue_size=1)
         self.lookahead_pub = rospy.Publisher("/control/lookahead_distance_m", Float32, queue_size=1)
+        self.curve_speed_limit_pub = rospy.Publisher("/control/curve_speed_limit_mps", Float32, queue_size=1)
+        self.raw_steer_pub = rospy.Publisher("/control/pure_pursuit_raw_steering_rad", Float32, queue_size=1)
         self._publish_path()
         rospy.loginfo("Pure Pursuit ready: %d waypoints from %s", len(self.waypoints), waypoint_file)
 
@@ -101,37 +109,68 @@ class PurePursuitController:
                 rate.sleep()
                 continue
 
-            steer, speed, target_idx, heading_error, lookahead = self._compute_control()
+            steer, speed, target_idx, heading_error, lookahead, curve_speed_limit = self._compute_control()
+            raw_steer = steer
             steer = self._filter_steer(steer)
             self._publish_cmd(speed, steer)
             self.target_idx_pub.publish(Int32(target_idx))
             self.steer_pub.publish(Float32(steer))
             self.heading_error_pub.publish(Float32(heading_error))
             self.lookahead_pub.publish(Float32(lookahead))
+            self.curve_speed_limit_pub.publish(Float32(curve_speed_limit))
+            self.raw_steer_pub.publish(Float32(raw_steer))
             rate.sleep()
 
     def _compute_control(self):
         nearest = self._nearest_index()
         lookahead = self._clamp(self.lookahead + self.lookahead_speed_gain * self.speed, self.min_lookahead, self.max_lookahead)
+        heading_probe_idx = self._advance_index(nearest, lookahead)
+        heading_probe = self.waypoints[heading_probe_idx]
+        probe_heading_error = self._target_heading_error(heading_probe)
+        lookahead = self._apply_curve_lookahead(lookahead, abs(probe_heading_error))
         target_idx = self._advance_index(nearest, lookahead)
         self.target_idx = max(self.target_idx, nearest)
         target = self.waypoints[target_idx]
 
-        dx = target.x - self.x
-        dy = target.y - self.y
-        distance = max(math.hypot(dx, dy), 1.0e-3)
-        heading_error = self._normalize_angle(math.atan2(dy, dx) - self.yaw)
+        distance, heading_error = self._target_distance_and_heading_error(target)
         steer = math.atan2(2.0 * self.wheelbase * math.sin(heading_error), distance)
         steer = self._clamp(steer, -self.max_steer, self.max_steer)
 
         speed = target.target_speed if self.use_csv_target_speed else self.target_speed
         speed = min(speed, self.max_speed)
+        curve_speed_limit = self._curve_speed_limit(speed, abs(heading_error))
+        speed = min(speed, curve_speed_limit)
         if self.stop_at_final and target_idx >= len(self.waypoints) - 1:
             final = self.waypoints[-1]
             if math.hypot(self.x - final.x, self.y - final.y) <= self.finish_radius:
                 self.finished = True
-                return 0.0, 0.0, target_idx, heading_error, lookahead
-        return steer, speed, target_idx, heading_error, lookahead
+                return 0.0, 0.0, target_idx, heading_error, lookahead, 0.0
+        return steer, speed, target_idx, heading_error, lookahead, curve_speed_limit
+
+    def _target_distance_and_heading_error(self, target):
+        dx = target.x - self.x
+        dy = target.y - self.y
+        distance = max(math.hypot(dx, dy), 1.0e-3)
+        heading_error = self._normalize_angle(math.atan2(dy, dx) - self.yaw)
+        return distance, heading_error
+
+    def _target_heading_error(self, target):
+        _, heading_error = self._target_distance_and_heading_error(target)
+        return heading_error
+
+    def _apply_curve_lookahead(self, base_lookahead, abs_heading_error):
+        if not self.curve_lookahead_enabled or self.curve_lookahead_heading <= 0.0:
+            return base_lookahead
+        ratio = self._clamp(abs_heading_error / self.curve_lookahead_heading, 0.0, 1.0)
+        curve_min = max(0.1, min(self.curve_min_lookahead, self.max_lookahead))
+        return base_lookahead - ratio * (base_lookahead - curve_min)
+
+    def _curve_speed_limit(self, base_speed, abs_heading_error):
+        if not self.curve_slowdown_enabled or self.curve_heading_slowdown <= 0.0:
+            return base_speed
+        ratio = self._clamp(abs_heading_error / self.curve_heading_slowdown, 0.0, 1.0)
+        min_speed = self._clamp(self.min_curve_speed, 0.0, base_speed)
+        return base_speed - ratio * (base_speed - min_speed)
 
     def _nearest_index(self):
         start = max(0, self.target_idx - 5)
