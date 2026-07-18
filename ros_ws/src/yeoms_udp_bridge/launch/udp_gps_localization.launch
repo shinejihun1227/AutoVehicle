@@ -3,10 +3,12 @@
   <arg name="origin_lat" default="0.0" />
   <arg name="origin_lon" default="0.0" />
   <arg name="origin_alt" default="0.0" />
+  <arg name="use_imu_yaw" default="false" />
   <rosparam command="load" file="$(arg config_file)" />
   <param name="/udp_bridge/gps_adapter/origin_lat" value="$(arg origin_lat)" />
   <param name="/udp_bridge/gps_adapter/origin_lon" value="$(arg origin_lon)" />
   <param name="/udp_bridge/gps_adapter/origin_alt" value="$(arg origin_alt)" />
+  <param name="/udp_bridge/gps_adapter/use_imu_yaw" value="$(arg use_imu_yaw)" />
 
   <node pkg="yeoms_udp_bridge"
         type="udp_gps_to_localization.py"
