@@ -35,6 +35,9 @@ stanley:
   max_brake_cmd: 1.0
   speed_kp: 0.35
   speed_deadband_mps: 0.15
+  startup_hold_time_s: 0.5
+  startup_ramp_time_s: 3.0
+  startup_steer_limit_rad: 0.15
 
   target_search_window: 50
   waypoint_reached_radius_m: 2.0

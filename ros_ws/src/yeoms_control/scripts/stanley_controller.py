@@ -85,6 +85,15 @@ class StanleyController:
         self.max_accel = float(rospy.get_param("~max_accel_cmd", rospy.get_param(f"/{ns}/max_accel_cmd", 1.0)))
         self.max_brake = float(rospy.get_param("~max_brake_cmd", rospy.get_param(f"/{ns}/max_brake_cmd", 1.0)))
         self.speed_deadband = float(rospy.get_param("~speed_deadband_mps", rospy.get_param(f"/{ns}/speed_deadband_mps", 0.15)))
+        self.startup_ramp_time = float(
+            rospy.get_param("~startup_ramp_time_s", rospy.get_param(f"/{ns}/startup_ramp_time_s", 3.0))
+        )
+        self.startup_hold_time = float(
+            rospy.get_param("~startup_hold_time_s", rospy.get_param(f"/{ns}/startup_hold_time_s", 0.5))
+        )
+        self.startup_steer_limit = float(
+            rospy.get_param("~startup_steer_limit_rad", rospy.get_param(f"/{ns}/startup_steer_limit_rad", 0.15))
+        )
         self.search_window = int(rospy.get_param("~target_search_window", rospy.get_param(f"/{ns}/target_search_window", 50)))
         self.reached_radius = float(rospy.get_param("~waypoint_reached_radius_m", rospy.get_param(f"/{ns}/waypoint_reached_radius_m", 2.0)))
         self.stop_at_final = bool(rospy.get_param("~stop_at_final_waypoint", rospy.get_param(f"/{ns}/stop_at_final_waypoint", True)))
@@ -118,6 +127,8 @@ class StanleyController:
         self.target_idx = 0
         self.last_steering = 0.0
         self.last_control_time = None
+        self.start_time = None
+        self.finished = False
 
         if self.use_odometry:
             rospy.Subscriber(self.odom_topic, Odometry, self._odom_cb, queue_size=1)
@@ -239,6 +250,13 @@ class StanleyController:
                 rospy.logwarn_throttle(2.0, "waiting for ego pose")
                 rate.sleep()
                 continue
+            if self.start_time is None:
+                self.start_time = rospy.Time.now()
+
+            if self.finished:
+                self._publish_stop_command()
+                rate.sleep()
+                continue
 
             (
                 steering,
@@ -252,6 +270,7 @@ class StanleyController:
                 pure_pursuit_steering,
                 hybrid_steering,
             ) = self._compute_control()
+            steering, target_speed = self._apply_startup_ramp(steering, target_speed)
             steering = self._filter_steering(steering)
             accel, brake = self._compute_speed_cmd(target_speed)
             self._publish_command(steering, target_speed, accel, brake)
@@ -311,9 +330,12 @@ class StanleyController:
         target_speed = self._apply_tracking_speed_limits(target_speed, path_heading_change, cte)
 
         if self.stop_at_final and target_idx >= len(self.waypoints) - 2:
-            final_wp = self.waypoints[-1]
-            if math.hypot(self.x - final_wp.x, self.y - final_wp.y) <= self.reached_radius:
+            if self._has_reached_final_waypoint():
                 target_speed = 0.0
+                steering = 0.0
+                stanley_steering = 0.0
+                pure_pursuit_steering = 0.0
+                self.finished = True
 
         return (
             steering,
@@ -332,7 +354,7 @@ class StanleyController:
         now = rospy.Time.now()
         if self.last_control_time is None:
             self.last_control_time = now
-            self.last_steering = self._clamp(raw_steering, -self.max_steer, self.max_steer)
+            self.last_steering = 0.0
             return self.last_steering
 
         dt = max((now - self.last_control_time).to_sec(), 1.0 / max(self.rate_hz, 1.0))
@@ -434,6 +456,47 @@ class StanleyController:
         if error > 0:
             return self._clamp(self.speed_kp * error, 0.0, self.max_accel), 0.0
         return 0.0, self._clamp(-self.speed_kp * error, 0.0, self.max_brake)
+
+    def _apply_startup_ramp(self, steering, target_speed):
+        if self.start_time is None:
+            return 0.0, 0.0
+
+        elapsed = max((rospy.Time.now() - self.start_time).to_sec(), 0.0)
+        if elapsed < self.startup_hold_time:
+            return 0.0, 0.0
+
+        ramp_time = max(self.startup_ramp_time, 1.0e-3)
+        ramp = self._clamp((elapsed - self.startup_hold_time) / ramp_time, 0.0, 1.0)
+        steer_limit = self.startup_steer_limit + ramp * (self.max_steer - self.startup_steer_limit)
+        steering = self._clamp(steering, -steer_limit, steer_limit)
+        target_speed *= ramp
+        return steering, target_speed
+
+    def _has_reached_final_waypoint(self):
+        final_wp = self.waypoints[-1]
+        if math.hypot(self.x - final_wp.x, self.y - final_wp.y) <= self.reached_radius:
+            return True
+
+        if len(self.waypoints) < 2:
+            return True
+
+        prev_wp = self.waypoints[-2]
+        seg_x = final_wp.x - prev_wp.x
+        seg_y = final_wp.y - prev_wp.y
+        seg_len_sq = seg_x * seg_x + seg_y * seg_y
+        if seg_len_sq <= 1.0e-9:
+            return False
+
+        progress = ((self.x - prev_wp.x) * seg_x + (self.y - prev_wp.y) * seg_y) / seg_len_sq
+        lateral = abs((self.x - prev_wp.x) * seg_y - (self.y - prev_wp.y) * seg_x) / math.sqrt(seg_len_sq)
+        return progress >= 1.0 and lateral <= max(self.reached_radius, 1.5)
+
+    def _publish_stop_command(self):
+        self._publish_command(0.0, 0.0, 0.0, 1.0)
+        self.steer_pub.publish(Float32(0.0))
+        self.stanley_raw_steer_pub.publish(Float32(0.0))
+        self.pure_pursuit_steer_pub.publish(Float32(0.0))
+        self.hybrid_steer_pub.publish(Float32(0.0))
 
     def _apply_tracking_speed_limits(self, target_speed, path_heading_change, cte):
         if target_speed <= 0.0:
