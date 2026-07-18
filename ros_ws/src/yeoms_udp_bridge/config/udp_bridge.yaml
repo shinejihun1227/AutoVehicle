@@ -62,7 +62,7 @@ udp_bridge:
     yaw_filter_alpha: 0.12
     max_yaw_rate_radps: 0.35
     yaw_consistency_count: 3
-    use_imu_yaw: true
+    use_imu_yaw: false
     imu_topic: "/udp_bridge/imu"
     imu_timeout_s: 0.5
     imu_yaw_offset_rad: 0.0
