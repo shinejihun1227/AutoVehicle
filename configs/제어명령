@@ -42,4 +42,7 @@ source /opt/ros/noetic/setup.bash && source ~/morai_stanley_ws/devel/setup.bash
 roslaunch morai_competition_bringup gps_stanley_udp_drive.launch
 
 source /opt/ros/noetic/setup.bash && source ~/morai_stanley_ws/devel/setup.bash
+rostopic echo /udp_bridge/gps_debug
+
+source /opt/ros/noetic/setup.bash && source ~/morai_stanley_ws/devel/setup.bash
 rostopic echo /udp_bridge/ctrl_cmd_debug
