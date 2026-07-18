@@ -24,6 +24,7 @@
   </include>
 
   <!-- /control/ctrl_cmd -> MORAI Ego Ctrl Cmd UDP, target port 9093 -->
+  <param name="/udp_bridge/ctrl_sender/max_speed_mps" value="$(arg max_target_speed_mps)" />
   <node pkg="yeoms_udp_bridge"
         type="udp_ctrl_cmd_sender.py"
         name="udp_ctrl_cmd_sender"
