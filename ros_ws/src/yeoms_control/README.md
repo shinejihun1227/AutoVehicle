@@ -175,7 +175,8 @@ You can also choose the output path:
 roslaunch morai_competition_bringup gps_waypoint_record.launch \
   output_file:=$HOME/morai_recorded_paths/kcity_test_01.csv \
   target_speed_mps:=1.0 \
-  min_distance_m:=0.5
+  min_distance_m:=0.2 \
+  min_time_s:=0.1
 ```
 
 After recording, follow that path with Stanley and UDP control:

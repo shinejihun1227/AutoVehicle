@@ -1,7 +1,8 @@
 <launch>
   <arg name="output_file" default="" />
   <arg name="target_speed_mps" default="1.0" />
-  <arg name="min_distance_m" default="0.5" />
+  <arg name="min_distance_m" default="0.2" />
+  <arg name="min_time_s" default="0.1" />
   <arg name="use_measured_speed" default="false" />
 
   <!-- UDP GPS -> /localization/ego_pose, /localization/ego_twist -->
@@ -15,6 +16,7 @@
     <arg name="output_file" value="$(arg output_file)" />
     <arg name="target_speed_mps" value="$(arg target_speed_mps)" />
     <arg name="min_distance_m" value="$(arg min_distance_m)" />
+    <arg name="min_time_s" value="$(arg min_time_s)" />
     <arg name="use_measured_speed" value="$(arg use_measured_speed)" />
   </include>
 </launch>
