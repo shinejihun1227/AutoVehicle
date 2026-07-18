@@ -11,8 +11,9 @@
 
   <exec_depend>roslaunch</exec_depend>
   <exec_depend>rosbridge_server</exec_depend>
+  <exec_depend>yeoms_control</exec_depend>
+  <exec_depend>yeoms_udp_bridge</exec_depend>
 
   <export>
   </export>
 </package>
-
