@@ -48,8 +48,14 @@ udp_bridge:
     # displacement as the default motion estimate.
     motion_source: "position"
     min_course_speed_mps: 0.2
-    min_position_delta_m: 0.03
+    min_position_delta_m: 0.35
     max_reasonable_speed_mps: 50.0
+    speed_filter_alpha: 0.25
+    position_filter_alpha: 0.45
+    stationary_speed_decay: 0.55
+    zero_speed_threshold_mps: 0.08
+    min_yaw_update_speed_mps: 0.35
+    max_yaw_jump_rad: 0.85
 
   ctrl_sender:
     subscribe_topic: "/control/ctrl_cmd"

@@ -22,6 +22,12 @@ class UdpGpsToLocalization:
         self.motion_source = rospy.get_param("/udp_bridge/gps_adapter/motion_source", "position")
         self.min_position_delta_m = float(rospy.get_param("/udp_bridge/gps_adapter/min_position_delta_m", 0.03))
         self.max_reasonable_speed_mps = float(rospy.get_param("/udp_bridge/gps_adapter/max_reasonable_speed_mps", 50.0))
+        self.speed_filter_alpha = float(rospy.get_param("/udp_bridge/gps_adapter/speed_filter_alpha", 0.25))
+        self.position_filter_alpha = float(rospy.get_param("/udp_bridge/gps_adapter/position_filter_alpha", 0.45))
+        self.stationary_speed_decay = float(rospy.get_param("/udp_bridge/gps_adapter/stationary_speed_decay", 0.55))
+        self.zero_speed_threshold_mps = float(rospy.get_param("/udp_bridge/gps_adapter/zero_speed_threshold_mps", 0.08))
+        self.min_yaw_update_speed_mps = float(rospy.get_param("/udp_bridge/gps_adapter/min_yaw_update_speed_mps", 0.35))
+        self.max_yaw_jump_rad = float(rospy.get_param("/udp_bridge/gps_adapter/max_yaw_jump_rad", 0.85))
 
         self.pose_pub = rospy.Publisher(
             rospy.get_param("/udp_bridge/gps_adapter/pose_topic", "/localization/ego_pose"),
@@ -40,8 +46,12 @@ class UdpGpsToLocalization:
         self.last_yaw = 0.0
         self.last_x = None
         self.last_y = None
+        self.filtered_x = None
+        self.filtered_y = None
         self.last_time = None
         self.last_speed = 0.0
+        self.last_motion_yaw = None
+        self.consistent_motion_count = 0
 
         self.sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
         self.sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
@@ -77,13 +87,26 @@ class UdpGpsToLocalization:
                 rospy.loginfo("GPS origin set lat=%.8f lon=%.8f", self.origin_lat, self.origin_lon)
 
             now = rospy.Time.now()
-            x, y = self._latlon_to_local_xy(gps["lat"], gps["lon"])
+            raw_x, raw_y = self._latlon_to_local_xy(gps["lat"], gps["lon"])
+            x, y = self._filter_position(raw_x, raw_y)
             speed, yaw, motion_source = self._estimate_motion(x, y, now, gps["speed_mps"], gps["course_deg"])
             self._publish_state(x, y, yaw, speed, now)
             self.debug_pub.publish(
                 String(
-                    "lat=%.8f lon=%.8f x=%.3f y=%.3f speed=%.3f yaw=%.3f source=%s gprmc_speed=%.3f gprmc_course=%.3f"
-                    % (gps["lat"], gps["lon"], x, y, speed, yaw, motion_source, gps["speed_mps"], gps["course_deg"])
+                    "lat=%.8f lon=%.8f raw_x=%.3f raw_y=%.3f x=%.3f y=%.3f speed=%.3f yaw=%.3f source=%s gprmc_speed=%.3f gprmc_course=%.3f"
+                    % (
+                        gps["lat"],
+                        gps["lon"],
+                        raw_x,
+                        raw_y,
+                        x,
+                        y,
+                        speed,
+                        yaw,
+                        motion_source,
+                        gps["speed_mps"],
+                        gps["course_deg"],
+                    )
                 )
             )
 
@@ -143,6 +166,17 @@ class UdpGpsToLocalization:
         self.last_yaw = yaw
         return yaw
 
+    def _filter_position(self, raw_x, raw_y):
+        if self.filtered_x is None:
+            self.filtered_x = raw_x
+            self.filtered_y = raw_y
+            return self.filtered_x, self.filtered_y
+
+        alpha = self._clamp(self.position_filter_alpha, 0.0, 1.0)
+        self.filtered_x = alpha * raw_x + (1.0 - alpha) * self.filtered_x
+        self.filtered_y = alpha * raw_y + (1.0 - alpha) * self.filtered_y
+        return self.filtered_x, self.filtered_y
+
     def _estimate_motion(self, x, y, now, gprmc_speed_mps, gprmc_course_deg):
         if self.motion_source == "gprmc":
             yaw = self._course_to_ros_yaw(gprmc_course_deg, gprmc_speed_mps)
@@ -159,22 +193,54 @@ class UdpGpsToLocalization:
         dy = y - self.last_y
         distance = math.hypot(dx, dy)
 
+        if dt <= 0.0 or distance < self.min_position_delta_m:
+            return self._decay_speed(), self.last_yaw, "position:hold"
+
+        measured_speed = distance / dt
+        if not math.isfinite(measured_speed) or measured_speed > self.max_reasonable_speed_mps:
+            rospy.logwarn_throttle(1.0, "GPS position speed rejected: %.3f m/s", measured_speed)
+            self.last_x = x
+            self.last_y = y
+            self.last_time = now
+            return self._decay_speed(), self.last_yaw, "position:rejected"
+
+        measured_yaw = math.atan2(dy, dx)
+        yaw_source = self._update_yaw_if_consistent(measured_yaw, measured_speed)
+        alpha = self._clamp(self.speed_filter_alpha, 0.0, 1.0)
+        self.last_speed = alpha * measured_speed + (1.0 - alpha) * self.last_speed
         self.last_x = x
         self.last_y = y
         self.last_time = now
+        return self.last_speed, self.last_yaw, yaw_source
 
-        if dt <= 0.0 or distance < self.min_position_delta_m:
-            return self.last_speed, self.last_yaw, "position:hold"
+    def _update_yaw_if_consistent(self, measured_yaw, measured_speed):
+        if measured_speed < self.min_yaw_update_speed_mps:
+            return "position:yaw_hold"
 
-        speed = distance / dt
-        if not math.isfinite(speed) or speed > self.max_reasonable_speed_mps:
-            rospy.logwarn_throttle(1.0, "GPS position speed rejected: %.3f m/s", speed)
-            return self.last_speed, self.last_yaw, "position:rejected"
+        if self.last_motion_yaw is None:
+            self.last_motion_yaw = measured_yaw
+            self.consistent_motion_count = 1
+            return "position:yaw_seed"
 
-        yaw = math.atan2(dy, dx)
-        self.last_speed = speed
-        self.last_yaw = yaw
-        return speed, yaw, "position"
+        yaw_delta = abs(self._normalize_angle(measured_yaw - self.last_motion_yaw))
+        if yaw_delta <= self.max_yaw_jump_rad:
+            self.consistent_motion_count += 1
+            self.last_motion_yaw = measured_yaw
+        else:
+            self.consistent_motion_count = 1
+            self.last_motion_yaw = measured_yaw
+            return "position:yaw_jump_hold"
+
+        if self.consistent_motion_count >= 2:
+            self.last_yaw = measured_yaw
+            return "position"
+        return "position:yaw_warmup"
+
+    def _decay_speed(self):
+        self.last_speed *= self._clamp(self.stationary_speed_decay, 0.0, 1.0)
+        if self.last_speed < self.zero_speed_threshold_mps:
+            self.last_speed = 0.0
+        return self.last_speed
 
     def _publish_state(self, x, y, yaw, speed_mps, now):
 
@@ -196,6 +262,14 @@ class UdpGpsToLocalization:
 
         self.pose_pub.publish(pose)
         self.twist_pub.publish(twist)
+
+    @staticmethod
+    def _normalize_angle(angle):
+        return math.atan2(math.sin(angle), math.cos(angle))
+
+    @staticmethod
+    def _clamp(value, low, high):
+        return max(low, min(high, value))
 
 
 if __name__ == "__main__":

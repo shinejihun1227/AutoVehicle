@@ -59,6 +59,23 @@ The GPS localization node sets the first received GPS position as `(0, 0)`.
 changes by default because MORAI GPRMC speed/course fields may stay at zero in
 some UDP configurations.
 
+Noise handling is configured in `config/udp_bridge.yaml`:
+
+```yaml
+gps_adapter:
+  min_position_delta_m: 0.35
+  speed_filter_alpha: 0.25
+  position_filter_alpha: 0.45
+  stationary_speed_decay: 0.55
+  min_yaw_update_speed_mps: 0.35
+  max_yaw_jump_rad: 0.85
+```
+
+If the vehicle is stopped but `speed` remains high, increase
+`min_position_delta_m` or decrease `speed_filter_alpha`. If yaw reacts too
+slowly while driving, decrease `min_yaw_update_speed_mps` or increase
+`max_yaw_jump_rad`.
+
 ## Vehicle Status Parser
 
 `udp_status_to_localization.py` starts in `parser_mode: raw` because the exact competition packet byte layout must be confirmed from MORAI docs or example code.
