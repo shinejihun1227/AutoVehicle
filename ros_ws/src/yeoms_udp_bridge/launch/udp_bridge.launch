@@ -1,0 +1,15 @@
+<launch>
+  <arg name="config_file" default="$(find yeoms_udp_bridge)/config/udp_bridge.yaml" />
+  <rosparam command="load" file="$(arg config_file)" />
+
+  <node pkg="yeoms_udp_bridge"
+        type="udp_status_to_localization.py"
+        name="udp_status_to_localization"
+        output="screen" />
+
+  <node pkg="yeoms_udp_bridge"
+        type="udp_ctrl_cmd_sender.py"
+        name="udp_ctrl_cmd_sender"
+        output="screen" />
+</launch>
+

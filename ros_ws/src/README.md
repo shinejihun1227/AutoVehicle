@@ -5,6 +5,7 @@
 ```text
 morai_competition_bringup
 yeoms_control
+yeoms_udp_bridge
 morai_competition_bridge
 morai_competition_localization
 morai_competition_perception
