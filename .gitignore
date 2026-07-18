@@ -1,10 +1,7 @@
-tmp_rule_pages/
-*.pyc
-__pycache__/
-.catkin_tools/
 build/
 devel/
 install/
 logs/
-.vscode/
-*.zip
+*.bag
+*.pyc
+__pycache__/

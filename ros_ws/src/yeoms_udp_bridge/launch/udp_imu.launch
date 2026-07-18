@@ -1,9 +1,0 @@
-<launch>
-  <arg name="config_file" default="$(find yeoms_udp_bridge)/config/udp_bridge.yaml" />
-  <rosparam command="load" file="$(arg config_file)" />
-
-  <node pkg="yeoms_udp_bridge"
-        type="udp_imu_to_topic.py"
-        name="udp_imu_to_topic"
-        output="screen" />
-</launch>

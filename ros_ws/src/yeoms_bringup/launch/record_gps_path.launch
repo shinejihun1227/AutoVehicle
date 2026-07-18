@@ -1,0 +1,13 @@
+<launch>
+  <arg name="output_file" default="$(env HOME)/morai_recorded_paths/01.csv" />
+  <arg name="target_speed_mps" default="1.0" />
+  <arg name="min_spacing_m" default="0.4" />
+
+  <include file="$(find yeoms_base_bridge)/launch/gps_localization.launch" />
+
+  <include file="$(find yeoms_path_recorder)/launch/record_path.launch">
+    <arg name="output_file" value="$(arg output_file)" />
+    <arg name="target_speed_mps" value="$(arg target_speed_mps)" />
+    <arg name="min_spacing_m" value="$(arg min_spacing_m)" />
+  </include>
+</launch>
