@@ -3,3 +3,5 @@ cat ~/vehicle_status_samples.txt
 
 grep "competition_vehicle_status" ~/udp_monitor.log | tail -n 10 > ~/vehicle_status_moving_samples.txt
 cat ~/vehicle_status_moving_samples.txt
+
+sudo bash -c "export ROS_MASTER_URI=http://localhost:11311 && source /opt/ros/noetic/setup.bash && source /home/$(whoami)/morai_stanley_ws/devel/setup.bash && roslaunch yeoms_udp_bridge udp_monitor.launch" | tee ~/udp_monitor.log
