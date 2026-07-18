@@ -17,6 +17,11 @@ stanley:
   softening_gain: 3.0
   heading_error_gain: 1.0
   crosstrack_error_gain: 0.55
+  pure_pursuit_weight: 0.3
+  pure_pursuit_lookahead_m: 4.0
+  min_pure_pursuit_lookahead_m: 3.0
+  max_pure_pursuit_lookahead_m: 7.0
+  pure_pursuit_lookahead_speed_gain: 0.5
   steering_filter_alpha: 0.25
   max_steer_rate_radps: 0.4
 

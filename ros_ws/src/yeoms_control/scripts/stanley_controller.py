@@ -51,6 +51,30 @@ class StanleyController:
         self.softening_gain = float(rospy.get_param("~softening_gain", rospy.get_param(f"/{ns}/softening_gain", 1.0)))
         self.heading_error_gain = float(rospy.get_param("~heading_error_gain", rospy.get_param(f"/{ns}/heading_error_gain", 1.0)))
         self.crosstrack_error_gain = float(rospy.get_param("~crosstrack_error_gain", rospy.get_param(f"/{ns}/crosstrack_error_gain", 1.0)))
+        self.pure_pursuit_weight = float(
+            rospy.get_param("~pure_pursuit_weight", rospy.get_param(f"/{ns}/pure_pursuit_weight", 0.3))
+        )
+        self.pure_pursuit_lookahead = float(
+            rospy.get_param("~pure_pursuit_lookahead_m", rospy.get_param(f"/{ns}/pure_pursuit_lookahead_m", 4.0))
+        )
+        self.min_pure_pursuit_lookahead = float(
+            rospy.get_param(
+                "~min_pure_pursuit_lookahead_m",
+                rospy.get_param(f"/{ns}/min_pure_pursuit_lookahead_m", 3.0),
+            )
+        )
+        self.max_pure_pursuit_lookahead = float(
+            rospy.get_param(
+                "~max_pure_pursuit_lookahead_m",
+                rospy.get_param(f"/{ns}/max_pure_pursuit_lookahead_m", 7.0),
+            )
+        )
+        self.pure_pursuit_lookahead_speed_gain = float(
+            rospy.get_param(
+                "~pure_pursuit_lookahead_speed_gain",
+                rospy.get_param(f"/{ns}/pure_pursuit_lookahead_speed_gain", 0.5),
+            )
+        )
         self.steering_filter_alpha = float(
             rospy.get_param("~steering_filter_alpha", rospy.get_param(f"/{ns}/steering_filter_alpha", 0.35))
         )
@@ -106,9 +130,12 @@ class StanleyController:
         self.target_idx_pub = rospy.Publisher("/control/stanley_target_index", Int32, queue_size=1)
         self.cte_pub = rospy.Publisher("/control/stanley_cross_track_error", Float32, queue_size=1)
         self.steer_pub = rospy.Publisher("/control/stanley_steering_rad", Float32, queue_size=1)
+        self.stanley_raw_steer_pub = rospy.Publisher("/control/stanley_raw_steering_rad", Float32, queue_size=1)
         self.path_yaw_pub = rospy.Publisher("/control/stanley_path_yaw_rad", Float32, queue_size=1)
         self.heading_error_pub = rospy.Publisher("/control/stanley_heading_error_rad", Float32, queue_size=1)
         self.cte_term_pub = rospy.Publisher("/control/stanley_crosstrack_term_rad", Float32, queue_size=1)
+        self.pure_pursuit_steer_pub = rospy.Publisher("/control/pure_pursuit_steering_rad", Float32, queue_size=1)
+        self.hybrid_steer_pub = rospy.Publisher("/control/hybrid_steering_rad", Float32, queue_size=1)
 
         self.waypoints = self._preprocess_waypoints(self.waypoints)
         self._publish_path()
@@ -213,16 +240,30 @@ class StanleyController:
                 rate.sleep()
                 continue
 
-            steering, target_speed, cte, target_idx, path_yaw, heading_error, cte_term = self._compute_control()
+            (
+                steering,
+                target_speed,
+                cte,
+                target_idx,
+                path_yaw,
+                heading_error,
+                cte_term,
+                stanley_steering,
+                pure_pursuit_steering,
+                hybrid_steering,
+            ) = self._compute_control()
             steering = self._filter_steering(steering)
             accel, brake = self._compute_speed_cmd(target_speed)
             self._publish_command(steering, target_speed, accel, brake)
             self.target_idx_pub.publish(Int32(target_idx))
             self.cte_pub.publish(Float32(cte))
             self.steer_pub.publish(Float32(steering))
+            self.stanley_raw_steer_pub.publish(Float32(stanley_steering))
             self.path_yaw_pub.publish(Float32(path_yaw))
             self.heading_error_pub.publish(Float32(heading_error))
             self.cte_term_pub.publish(Float32(cte_term))
+            self.pure_pursuit_steer_pub.publish(Float32(pure_pursuit_steering))
+            self.hybrid_steer_pub.publish(Float32(hybrid_steering))
             rate.sleep()
 
     def _compute_control(self):
@@ -254,7 +295,12 @@ class StanleyController:
         cte = self._apply_deadband(cte, self.cte_deadband)
 
         cte_term = math.atan2(self.k * cte, self.speed + self.softening_gain)
-        steering = self.heading_error_gain * heading_error + self.crosstrack_error_gain * cte_term
+        stanley_steering = self.heading_error_gain * heading_error + self.crosstrack_error_gain * cte_term
+        stanley_steering = self._clamp(stanley_steering, -self.max_steer, self.max_steer)
+
+        pure_pursuit_steering = self._compute_pure_pursuit_steering(target_idx)
+        pp_weight = self._clamp(self.pure_pursuit_weight, 0.0, 1.0)
+        steering = (1.0 - pp_weight) * stanley_steering + pp_weight * pure_pursuit_steering
         steering = self._clamp(steering, -self.max_steer, self.max_steer)
 
         target_speed = current_wp.target_speed or self.default_target_speed
@@ -269,7 +315,18 @@ class StanleyController:
             if math.hypot(self.x - final_wp.x, self.y - final_wp.y) <= self.reached_radius:
                 target_speed = 0.0
 
-        return steering, target_speed, cte, target_idx, path_yaw, heading_error, cte_term
+        return (
+            steering,
+            target_speed,
+            cte,
+            target_idx,
+            path_yaw,
+            heading_error,
+            cte_term,
+            stanley_steering,
+            pure_pursuit_steering,
+            steering,
+        )
 
     def _filter_steering(self, raw_steering):
         now = rospy.Time.now()
@@ -352,6 +409,23 @@ class StanleyController:
                 return idx
             prev = current
         return len(self.waypoints) - 1
+
+    def _compute_pure_pursuit_steering(self, start_idx):
+        lookahead = self.pure_pursuit_lookahead + self.pure_pursuit_lookahead_speed_gain * self.speed
+        lookahead = self._clamp(
+            lookahead,
+            max(0.1, self.min_pure_pursuit_lookahead),
+            max(self.min_pure_pursuit_lookahead, self.max_pure_pursuit_lookahead),
+        )
+        target_idx = self._advance_index_by_distance(start_idx, lookahead)
+        target_wp = self.waypoints[target_idx]
+
+        dx = target_wp.x - self.x
+        dy = target_wp.y - self.y
+        target_distance = max(math.hypot(dx, dy), 1.0e-3)
+        alpha = self._normalize_angle(math.atan2(dy, dx) - self.yaw)
+        steering = math.atan2(2.0 * self.wheelbase * math.sin(alpha), target_distance)
+        return self._clamp(steering, -self.max_steer, self.max_steer)
 
     def _compute_speed_cmd(self, target_speed):
         error = target_speed - self.speed
