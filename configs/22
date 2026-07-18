@@ -28,3 +28,13 @@ text = path.read_text()
 text = text.replace("print_payload_hex_bytes: 32", "print_payload_hex_bytes: 181")
 path.write_text(text)
 PY
+
+cd ~/AutoVehicle && \
+git pull && \
+rm -rf ~/morai_stanley_ws/src/yeoms_udp_bridge && \
+cp -r ~/AutoVehicle/ros_ws/src/yeoms_udp_bridge ~/morai_stanley_ws/src/ && \
+chmod +x ~/morai_stanley_ws/src/yeoms_udp_bridge/scripts/*.py && \
+source /opt/ros/noetic/setup.bash && \
+cd ~/morai_stanley_ws && \
+catkin_make && \
+source devel/setup.bash
