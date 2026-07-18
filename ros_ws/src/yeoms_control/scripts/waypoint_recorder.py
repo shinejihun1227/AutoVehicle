@@ -2,11 +2,13 @@
 import csv
 import math
 import os
+import re
 from datetime import datetime
 
 import rospy
 from geometry_msgs.msg import PoseStamped, TwistStamped
 from nav_msgs.msg import Path
+from std_msgs.msg import String
 
 
 class WaypointRecorder:
@@ -26,17 +28,20 @@ class WaypointRecorder:
         self.last_y = None
         self.last_time = None
         self.rows = []
+        self.origin_lat = None
+        self.origin_lon = None
 
         self.output_file = self._resolve_output_file(self.output_file)
         os.makedirs(os.path.dirname(self.output_file), exist_ok=True)
         self.fp = open(self.output_file, "w", newline="")
-        self.writer = csv.DictWriter(self.fp, fieldnames=["x", "y", "target_speed"])
+        self.writer = csv.DictWriter(self.fp, fieldnames=["x", "y", "target_speed", "lat", "lon"])
         self.writer.writeheader()
         self.fp.flush()
 
         self.path_pub = rospy.Publisher("/planning/recorded_path", Path, queue_size=1, latch=True)
         rospy.Subscriber(self.pose_topic, PoseStamped, self._pose_cb, queue_size=1)
         rospy.Subscriber(self.twist_topic, TwistStamped, self._twist_cb, queue_size=1)
+        rospy.Subscriber("/udp_bridge/gps_debug", String, self._gps_debug_cb, queue_size=1)
 
         rospy.on_shutdown(self._close)
         rospy.loginfo("Waypoint recorder writing to %s", self.output_file)
@@ -49,6 +54,17 @@ class WaypointRecorder:
 
     def _twist_cb(self, msg):
         self.speed = math.hypot(msg.twist.linear.x, msg.twist.linear.y)
+
+    def _gps_debug_cb(self, msg):
+        lat_match = re.search(r"lat=(-?\d+(?:\.\d+)?)", msg.data)
+        lon_match = re.search(r"lon=(-?\d+(?:\.\d+)?)", msg.data)
+        if lat_match and lon_match:
+            lat = float(lat_match.group(1))
+            lon = float(lon_match.group(1))
+            if self.origin_lat is None:
+                self.origin_lat = lat
+                self.origin_lon = lon
+                rospy.loginfo("record origin lat=%.8f lon=%.8f", self.origin_lat, self.origin_lon)
 
     def _pose_cb(self, msg):
         x = msg.pose.position.x
@@ -69,6 +85,8 @@ class WaypointRecorder:
             "x": "%.6f" % x,
             "y": "%.6f" % y,
             "target_speed": "%.3f" % target_speed,
+            "lat": "%.8f" % self.origin_lat if self.origin_lat is not None else "",
+            "lon": "%.8f" % self.origin_lon if self.origin_lon is not None else "",
         }
         self.writer.writerow(row)
         self.fp.flush()

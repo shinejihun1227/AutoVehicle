@@ -18,6 +18,8 @@ class UdpGpsToLocalization:
         self.port = int(rospy.get_param("/udp_bridge/gps_adapter/gps_port", 3001))
         self.frame_id = rospy.get_param("/udp_bridge/gps_adapter/frame_id", "map")
         self.auto_origin = bool(rospy.get_param("/udp_bridge/gps_adapter/auto_origin", True))
+        self.fixed_origin_lat = float(rospy.get_param("/udp_bridge/gps_adapter/origin_lat", 0.0))
+        self.fixed_origin_lon = float(rospy.get_param("/udp_bridge/gps_adapter/origin_lon", 0.0))
         self.min_course_speed_mps = float(rospy.get_param("/udp_bridge/gps_adapter/min_course_speed_mps", 0.2))
         self.motion_source = rospy.get_param("/udp_bridge/gps_adapter/motion_source", "position")
         self.min_position_delta_m = float(rospy.get_param("/udp_bridge/gps_adapter/min_position_delta_m", 0.03))
@@ -57,6 +59,10 @@ class UdpGpsToLocalization:
         self.sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
         self.sock.bind((self.bind_ip, self.port))
         self.sock.settimeout(0.5)
+        if self.fixed_origin_lat != 0.0 or self.fixed_origin_lon != 0.0:
+            self.origin_lat = self.fixed_origin_lat
+            self.origin_lon = self.fixed_origin_lon
+            rospy.loginfo("GPS fixed origin loaded lat=%.8f lon=%.8f", self.origin_lat, self.origin_lon)
         rospy.loginfo("GPS UDP localization listening on %s:%s", self.bind_ip, self.port)
 
     def run(self):

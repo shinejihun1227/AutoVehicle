@@ -92,6 +92,8 @@ class StanleyController:
         with open(expanded, newline="") as fp:
             reader = csv.DictReader(fp)
             for row in reader:
+                if not row.get("x") or not row.get("y"):
+                    continue
                 waypoints.append(
                     Waypoint(
                         x=float(row["x"]),
