@@ -12,18 +12,18 @@ stanley:
   # map.x=East, map.y=North, yaw positive counter-clockwise, steering positive=left.
   control_rate_hz: 20.0
   wheelbase_m: 3.0
-  max_steer_rad: 0.38
-  stanley_gain: 0.22
-  softening_gain: 3.0
-  heading_error_gain: 1.0
-  crosstrack_error_gain: 0.55
-  pure_pursuit_weight: 0.3
-  pure_pursuit_lookahead_m: 4.0
-  min_pure_pursuit_lookahead_m: 3.0
-  max_pure_pursuit_lookahead_m: 7.0
-  pure_pursuit_lookahead_speed_gain: 0.5
-  steering_filter_alpha: 0.25
-  max_steer_rate_radps: 0.4
+  max_steer_rad: 0.32
+  stanley_gain: 0.16
+  softening_gain: 4.5
+  heading_error_gain: 0.75
+  crosstrack_error_gain: 0.35
+  pure_pursuit_weight: 0.25
+  pure_pursuit_lookahead_m: 6.0
+  min_pure_pursuit_lookahead_m: 5.0
+  max_pure_pursuit_lookahead_m: 10.0
+  pure_pursuit_lookahead_speed_gain: 0.8
+  steering_filter_alpha: 0.18
+  max_steer_rate_radps: 0.28
 
   # Stable replay speed for the current GPS-only yaw estimate.
   # Set target_speed_override_mps to -1.0 if you want to use each CSV row's
@@ -49,9 +49,9 @@ stanley:
   stop_at_final_waypoint: true
   cross_track_deadband_m: 0.05
   path_yaw_lookahead_m: 5.0
-  curve_slowdown_heading_rad: 0.35
-  min_curve_speed_mps: 0.8
-  cte_speed_reduction_gain: 0.25
+  curve_slowdown_heading_rad: 0.7
+  min_curve_speed_mps: 1.2
+  cte_speed_reduction_gain: 0.05
   allow_target_backtrack: false
   waypoint_smoothing_window: 9
   min_waypoint_spacing_m: 0.2

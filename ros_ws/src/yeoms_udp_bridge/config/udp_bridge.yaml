@@ -90,5 +90,5 @@ udp_bridge:
     long_cmd_type: 2
     max_speed_mps: 1.5
     max_steer_rad: 0.45
-    invert_steering: false
+    invert_steering: true
     send_rate_limit_hz: 20.0
