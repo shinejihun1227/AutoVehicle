@@ -5,7 +5,6 @@ import socket
 import rospy
 import tf.transformations
 from geometry_msgs.msg import PoseStamped, TwistStamped
-from sensor_msgs.msg import Imu
 from std_msgs.msg import String
 
 
@@ -32,18 +31,6 @@ class UdpGpsToLocalization:
         self.zero_speed_threshold_mps = float(rospy.get_param("/udp_bridge/gps_adapter/zero_speed_threshold_mps", 0.08))
         self.min_yaw_update_speed_mps = float(rospy.get_param("/udp_bridge/gps_adapter/min_yaw_update_speed_mps", 0.35))
         self.max_yaw_jump_rad = float(rospy.get_param("/udp_bridge/gps_adapter/max_yaw_jump_rad", 0.85))
-        self.yaw_filter_alpha = float(rospy.get_param("/udp_bridge/gps_adapter/yaw_filter_alpha", 0.12))
-        self.max_yaw_rate_radps = float(rospy.get_param("/udp_bridge/gps_adapter/max_yaw_rate_radps", 0.35))
-        self.yaw_consistency_count = int(rospy.get_param("/udp_bridge/gps_adapter/yaw_consistency_count", 3))
-        self.use_imu_yaw = bool(rospy.get_param("/udp_bridge/gps_adapter/use_imu_yaw", True))
-        self.imu_topic = rospy.get_param("/udp_bridge/gps_adapter/imu_topic", "/udp_bridge/imu")
-        self.imu_timeout_s = float(rospy.get_param("/udp_bridge/gps_adapter/imu_timeout_s", 0.5))
-        self.imu_yaw_offset = float(rospy.get_param("/udp_bridge/gps_adapter/imu_yaw_offset_rad", 0.0))
-        self.auto_align_imu_yaw = bool(rospy.get_param("/udp_bridge/gps_adapter/auto_align_imu_yaw", True))
-        self.imu_yaw_filter_alpha = float(rospy.get_param("/udp_bridge/gps_adapter/imu_yaw_filter_alpha", 0.65))
-        self.imu_yaw_alignment_alpha = float(rospy.get_param("/udp_bridge/gps_adapter/imu_yaw_alignment_alpha", 0.02))
-        self.imu_align_min_speed_mps = float(rospy.get_param("/udp_bridge/gps_adapter/imu_align_min_speed_mps", 1.0))
-        self.imu_yaw_sign = float(rospy.get_param("/udp_bridge/gps_adapter/imu_yaw_sign", 1.0))
 
         self.pose_pub = rospy.Publisher(
             rospy.get_param("/udp_bridge/gps_adapter/pose_topic", "/localization/ego_pose"),
@@ -69,14 +56,6 @@ class UdpGpsToLocalization:
         self.last_speed = 0.0
         self.last_motion_yaw = None
         self.consistent_motion_count = 0
-        self.last_yaw_update_time = None
-        self.yaw_initialized = False
-        self.latest_imu_yaw = None
-        self.latest_imu_time = None
-        self.imu_yaw_offset_initialized = not self.auto_align_imu_yaw
-
-        if self.use_imu_yaw:
-            rospy.Subscriber(self.imu_topic, Imu, self._imu_cb, queue_size=1)
 
         self.sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
         self.sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
@@ -136,7 +115,7 @@ class UdpGpsToLocalization:
             self._publish_state(x, y, z, yaw, speed, now)
             self.debug_pub.publish(
                 String(
-                    "lat=%.8f lon=%.8f alt=%.3f raw_x=%.3f raw_y=%.3f z=%.3f x=%.3f y=%.3f speed=%.3f yaw=%.3f source=%s gprmc_speed=%.3f gprmc_course=%.3f yaw_initialized=%s imu_yaw=%s imu_offset=%.3f imu_aligned=%s"
+                    "lat=%.8f lon=%.8f alt=%.3f raw_x=%.3f raw_y=%.3f z=%.3f x=%.3f y=%.3f speed=%.3f yaw=%.3f source=%s gprmc_speed=%.3f gprmc_course=%.3f"
                     % (
                         gps["lat"],
                         gps["lon"],
@@ -151,10 +130,6 @@ class UdpGpsToLocalization:
                         motion_source,
                         gps["speed_mps"],
                         gps["course_deg"],
-                        self.yaw_initialized,
-                        "%.3f" % self.latest_imu_yaw if self.latest_imu_yaw is not None else "none",
-                        self.imu_yaw_offset,
-                        self.imu_yaw_offset_initialized,
                     )
                 )
             )
@@ -244,20 +219,10 @@ class UdpGpsToLocalization:
         self.filtered_y = alpha * raw_y + (1.0 - alpha) * self.filtered_y
         return self.filtered_x, self.filtered_y
 
-    def _imu_cb(self, msg):
-        q = msg.orientation
-        norm = math.sqrt(q.x * q.x + q.y * q.y + q.z * q.z + q.w * q.w)
-        if norm < 1.0e-6:
-            return
-        _, _, yaw = tf.transformations.euler_from_quaternion([q.x, q.y, q.z, q.w])
-        self.latest_imu_yaw = self._normalize_angle(self.imu_yaw_sign * yaw)
-        self.latest_imu_time = msg.header.stamp if msg.header.stamp != rospy.Time(0) else rospy.Time.now()
-
     def _estimate_motion(self, x, y, now, gprmc_speed_mps, gprmc_course_deg):
         if self.motion_source == "gprmc":
             yaw = self._course_to_ros_yaw(gprmc_course_deg, gprmc_speed_mps)
-            imu_source = self._apply_imu_yaw_if_available(now, gprmc_speed_mps)
-            return gprmc_speed_mps, self.last_yaw, "gprmc" + (("+" + imu_source) if imu_source else "")
+            return gprmc_speed_mps, yaw, "gprmc"
 
         if self.last_time is None:
             self.last_x = x
@@ -282,16 +247,15 @@ class UdpGpsToLocalization:
             return self._decay_speed(), self.last_yaw, "position:rejected"
 
         measured_yaw = math.atan2(dy, dx)
-        yaw_source = self._update_yaw_if_consistent(measured_yaw, measured_speed, now)
+        yaw_source = self._update_yaw_if_consistent(measured_yaw, measured_speed)
         alpha = self._clamp(self.speed_filter_alpha, 0.0, 1.0)
         self.last_speed = alpha * measured_speed + (1.0 - alpha) * self.last_speed
-        imu_source = self._apply_imu_yaw_if_available(now, self.last_speed)
         self.last_x = x
         self.last_y = y
         self.last_time = now
-        return self.last_speed, self.last_yaw, yaw_source + (("+" + imu_source) if imu_source else "")
+        return self.last_speed, self.last_yaw, yaw_source
 
-    def _update_yaw_if_consistent(self, measured_yaw, measured_speed, now):
+    def _update_yaw_if_consistent(self, measured_yaw, measured_speed):
         if measured_speed < self.min_yaw_update_speed_mps:
             return "position:yaw_hold"
 
@@ -309,79 +273,10 @@ class UdpGpsToLocalization:
             self.last_motion_yaw = measured_yaw
             return "position:yaw_jump_hold"
 
-        if self.consistent_motion_count >= max(1, self.yaw_consistency_count):
-            return self._apply_filtered_yaw(measured_yaw, now)
-        return "position:yaw_warmup"
-
-    def _apply_filtered_yaw(self, measured_yaw, now):
-        if not self.yaw_initialized:
+        if self.consistent_motion_count >= 2:
             self.last_yaw = measured_yaw
-            self.last_yaw_update_time = now
-            self.yaw_initialized = True
-            return "position:yaw_init"
-
-        yaw_error = self._normalize_angle(measured_yaw - self.last_yaw)
-        alpha = self._clamp(self.yaw_filter_alpha, 0.0, 1.0)
-        filtered_delta = alpha * yaw_error
-
-        if self.last_yaw_update_time is None:
-            dt = 1.0
-        else:
-            dt = max((now - self.last_yaw_update_time).to_sec(), 1.0e-3)
-        self.last_yaw_update_time = now
-
-        if self.max_yaw_rate_radps > 0.0:
-            max_delta = self.max_yaw_rate_radps * dt
-            filtered_delta = self._clamp(filtered_delta, -max_delta, max_delta)
-
-        self.last_yaw = self._normalize_angle(self.last_yaw + filtered_delta)
-        return "position:yaw_filtered"
-
-    def _apply_imu_yaw_if_available(self, now, speed_mps):
-        if not self.use_imu_yaw or self.latest_imu_yaw is None or self.latest_imu_time is None:
-            return None
-
-        if (now - self.latest_imu_time).to_sec() > self.imu_timeout_s:
-            return "imu:stale"
-
-        if self.auto_align_imu_yaw:
-            if self.yaw_initialized and speed_mps >= self.imu_align_min_speed_mps:
-                target_offset = self._normalize_angle(self.last_yaw - self.latest_imu_yaw)
-                if not self.imu_yaw_offset_initialized:
-                    self.imu_yaw_offset = target_offset
-                    self.imu_yaw_offset_initialized = True
-                    return "imu:aligned"
-
-                alpha = self._clamp(self.imu_yaw_alignment_alpha, 0.0, 1.0)
-                offset_error = self._normalize_angle(target_offset - self.imu_yaw_offset)
-                self.imu_yaw_offset = self._normalize_angle(self.imu_yaw_offset + alpha * offset_error)
-
-        if not self.imu_yaw_offset_initialized:
-            return "imu:wait_align"
-
-        imu_map_yaw = self._normalize_angle(self.latest_imu_yaw + self.imu_yaw_offset)
-        if not self.yaw_initialized:
-            self.last_yaw = imu_map_yaw
-            self.yaw_initialized = True
-            self.last_yaw_update_time = now
-            return "imu:yaw_init"
-
-        yaw_error = self._normalize_angle(imu_map_yaw - self.last_yaw)
-        alpha = self._clamp(self.imu_yaw_filter_alpha, 0.0, 1.0)
-        filtered_delta = alpha * yaw_error
-
-        if self.last_yaw_update_time is None:
-            dt = 1.0
-        else:
-            dt = max((now - self.last_yaw_update_time).to_sec(), 1.0e-3)
-        self.last_yaw_update_time = now
-
-        if self.max_yaw_rate_radps > 0.0:
-            max_delta = self.max_yaw_rate_radps * dt
-            filtered_delta = self._clamp(filtered_delta, -max_delta, max_delta)
-
-        self.last_yaw = self._normalize_angle(self.last_yaw + filtered_delta)
-        return "imu:yaw"
+            return "position"
+        return "position:yaw_warmup"
 
     def _decay_speed(self):
         self.last_speed *= self._clamp(self.stationary_speed_decay, 0.0, 1.0)

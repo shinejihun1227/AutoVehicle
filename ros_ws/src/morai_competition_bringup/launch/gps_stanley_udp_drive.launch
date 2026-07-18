@@ -7,18 +7,12 @@
   <arg name="origin_alt" default="0.0" />
   <arg name="target_speed_override_mps" default="1.3" />
   <arg name="max_target_speed_mps" default="1.3" />
-  <arg name="include_imu" default="false" />
-  <arg name="use_imu_yaw" default="false" />
-
-  <!-- Optional IMU parser. Keep this disabled until IMU yaw sign/offset is verified. -->
-  <include if="$(arg include_imu)" file="$(find yeoms_udp_bridge)/launch/udp_imu.launch" />
 
   <!-- UDP GPS -> /localization/ego_pose, /localization/ego_twist -->
   <include file="$(find yeoms_udp_bridge)/launch/udp_gps_localization.launch">
     <arg name="origin_lat" value="$(arg origin_lat)" />
     <arg name="origin_lon" value="$(arg origin_lon)" />
     <arg name="origin_alt" value="$(arg origin_alt)" />
-    <arg name="use_imu_yaw" value="$(arg use_imu_yaw)" />
   </include>
 
   <!-- Stanley -> /control/ctrl_cmd -->
