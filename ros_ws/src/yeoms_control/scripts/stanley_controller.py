@@ -112,6 +112,12 @@ class StanleyController:
                 rospy.get_param(f"/{ns}/startup_direction_guard_lookahead_m", 5.0),
             )
         )
+        self.startup_curve_sign_override = float(
+            rospy.get_param(
+                "~startup_curve_sign_override",
+                rospy.get_param(f"/{ns}/startup_curve_sign_override", 0.0),
+            )
+        )
         self.search_window = int(rospy.get_param("~target_search_window", rospy.get_param(f"/{ns}/target_search_window", 50)))
         self.reached_radius = float(rospy.get_param("~waypoint_reached_radius_m", rospy.get_param(f"/{ns}/waypoint_reached_radius_m", 2.0)))
         self.stop_at_final = bool(rospy.get_param("~stop_at_final_waypoint", rospy.get_param(f"/{ns}/stop_at_final_waypoint", True)))
@@ -165,10 +171,13 @@ class StanleyController:
         self.cte_term_pub = rospy.Publisher("/control/stanley_crosstrack_term_rad", Float32, queue_size=1)
         self.pure_pursuit_steer_pub = rospy.Publisher("/control/pure_pursuit_steering_rad", Float32, queue_size=1)
         self.hybrid_steer_pub = rospy.Publisher("/control/hybrid_steering_rad", Float32, queue_size=1)
+        self.startup_curve_sign_pub = rospy.Publisher("/control/startup_curve_sign", Float32, queue_size=1, latch=True)
+        self.startup_guarded_steer_pub = rospy.Publisher("/control/startup_guarded_steering_rad", Float32, queue_size=1)
 
         self.waypoints = self._preprocess_waypoints(self.waypoints)
-        self.startup_curve_sign = self._initial_curve_sign()
+        self.startup_curve_sign = self._startup_curve_sign()
         self._publish_path()
+        self.startup_curve_sign_pub.publish(Float32(self.startup_curve_sign))
         rospy.loginfo("Stanley controller ready: %d waypoints, command_type=%s", len(self.waypoints), self.command_type)
 
     def _load_waypoints(self, path):
@@ -290,6 +299,7 @@ class StanleyController:
                 hybrid_steering,
             ) = self._compute_control()
             steering, target_speed = self._apply_startup_ramp(steering, target_speed)
+            self.startup_guarded_steer_pub.publish(Float32(steering))
             steering = self._filter_steering(steering)
             accel, brake = self._compute_speed_cmd(target_speed)
             self._publish_command(steering, target_speed, accel, brake)
@@ -505,7 +515,10 @@ class StanleyController:
             return 0.0
         return steering
 
-    def _initial_curve_sign(self):
+    def _startup_curve_sign(self):
+        if abs(self.startup_curve_sign_override) > 0.0:
+            return math.copysign(1.0, self.startup_curve_sign_override)
+
         if len(self.waypoints) < 3:
             return 0.0
 
