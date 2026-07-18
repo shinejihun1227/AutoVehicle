@@ -1,13 +1,14 @@
-mkdir -p ~/roi_stanley_ws/src && \
-cd ~/roi_stanley_ws/src && \
-git clone -b dev/stanley --single-branch https://github.com/hyunho0429/ROI.git && \
+cd ~/AutoVehicle && \
+git pull && \
+rm -rf ~/morai_stanley_ws/src/yeoms_udp_bridge ~/morai_stanley_ws/src/yeoms_control ~/morai_stanley_ws/src/morai_competition_bringup && \
+cp -r ~/AutoVehicle/ros_ws/src/yeoms_udp_bridge ~/morai_stanley_ws/src/ && \
+cp -r ~/AutoVehicle/ros_ws/src/yeoms_control ~/morai_stanley_ws/src/ && \
+cp -r ~/AutoVehicle/ros_ws/src/morai_competition_bringup ~/morai_stanley_ws/src/ && \
+chmod +x ~/morai_stanley_ws/src/yeoms_udp_bridge/scripts/*.py ~/morai_stanley_ws/src/yeoms_control/scripts/*.py && \
 source /opt/ros/noetic/setup.bash && \
-cd ~/roi_stanley_ws && \
-rosdep install --from-paths src --ignore-src -r -y && \
+cd ~/morai_stanley_ws && \
 catkin_make && \
 source devel/setup.bash
 
-find ~/roi_stanley_ws/src/ROI -name "*.launch"
-
-source ~/roi_stanley_ws/devel/setup.bash
-roslaunch some_package stanley.launch
+source ~/morai_stanley_ws/devel/setup.bash
+roslaunch morai_competition_bringup gps_stanley_dry_run.launch
