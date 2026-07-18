@@ -8,6 +8,7 @@ from datetime import datetime
 import rospy
 from geometry_msgs.msg import PoseStamped, TwistStamped
 from nav_msgs.msg import Path
+from sensor_msgs.msg import Imu
 from std_msgs.msg import String
 
 
@@ -30,11 +31,40 @@ class WaypointRecorder:
         self.rows = []
         self.origin_lat = None
         self.origin_lon = None
+        self.origin_alt = None
+        self.latest_lat = None
+        self.latest_lon = None
+        self.latest_alt = None
+        self.latest_imu = None
 
         self.output_file = self._resolve_output_file(self.output_file)
         os.makedirs(os.path.dirname(self.output_file), exist_ok=True)
         self.fp = open(self.output_file, "w", newline="")
-        self.writer = csv.DictWriter(self.fp, fieldnames=["x", "y", "target_speed", "lat", "lon"])
+        self.writer = csv.DictWriter(
+            self.fp,
+            fieldnames=[
+                "x",
+                "y",
+                "z",
+                "target_speed",
+                "lat",
+                "lon",
+                "alt",
+                "origin_lat",
+                "origin_lon",
+                "origin_alt",
+                "imu_qx",
+                "imu_qy",
+                "imu_qz",
+                "imu_qw",
+                "imu_angular_velocity_x",
+                "imu_angular_velocity_y",
+                "imu_angular_velocity_z",
+                "imu_linear_acceleration_x",
+                "imu_linear_acceleration_y",
+                "imu_linear_acceleration_z",
+            ],
+        )
         self.writer.writeheader()
         self.fp.flush()
 
@@ -42,6 +72,7 @@ class WaypointRecorder:
         rospy.Subscriber(self.pose_topic, PoseStamped, self._pose_cb, queue_size=1)
         rospy.Subscriber(self.twist_topic, TwistStamped, self._twist_cb, queue_size=1)
         rospy.Subscriber("/udp_bridge/gps_debug", String, self._gps_debug_cb, queue_size=1)
+        rospy.Subscriber("/udp_bridge/imu", Imu, self._imu_cb, queue_size=1)
 
         rospy.on_shutdown(self._close)
         rospy.loginfo("Waypoint recorder writing to %s", self.output_file)
@@ -58,17 +89,32 @@ class WaypointRecorder:
     def _gps_debug_cb(self, msg):
         lat_match = re.search(r"lat=(-?\d+(?:\.\d+)?)", msg.data)
         lon_match = re.search(r"lon=(-?\d+(?:\.\d+)?)", msg.data)
+        alt_match = re.search(r"alt=(-?\d+(?:\.\d+)?)", msg.data)
         if lat_match and lon_match:
             lat = float(lat_match.group(1))
             lon = float(lon_match.group(1))
+            self.latest_lat = lat
+            self.latest_lon = lon
+            if alt_match:
+                self.latest_alt = float(alt_match.group(1))
             if self.origin_lat is None:
                 self.origin_lat = lat
                 self.origin_lon = lon
-                rospy.loginfo("record origin lat=%.8f lon=%.8f", self.origin_lat, self.origin_lon)
+                self.origin_alt = self.latest_alt if self.latest_alt is not None else 0.0
+                rospy.loginfo(
+                    "record origin lat=%.8f lon=%.8f alt=%.3f",
+                    self.origin_lat,
+                    self.origin_lon,
+                    self.origin_alt,
+                )
+
+    def _imu_cb(self, msg):
+        self.latest_imu = msg
 
     def _pose_cb(self, msg):
         x = msg.pose.position.x
         y = msg.pose.position.y
+        z = msg.pose.position.z
         now = msg.header.stamp if msg.header.stamp != rospy.Time(0) else rospy.Time.now()
 
         if self.speed < self.min_record_speed_mps and self.rows:
@@ -84,10 +130,16 @@ class WaypointRecorder:
         row = {
             "x": "%.6f" % x,
             "y": "%.6f" % y,
+            "z": "%.6f" % z,
             "target_speed": "%.3f" % target_speed,
-            "lat": "%.8f" % self.origin_lat if self.origin_lat is not None else "",
-            "lon": "%.8f" % self.origin_lon if self.origin_lon is not None else "",
+            "lat": "%.8f" % self.latest_lat if self.latest_lat is not None else "",
+            "lon": "%.8f" % self.latest_lon if self.latest_lon is not None else "",
+            "alt": "%.3f" % self.latest_alt if self.latest_alt is not None else "",
+            "origin_lat": "%.8f" % self.origin_lat if self.origin_lat is not None else "",
+            "origin_lon": "%.8f" % self.origin_lon if self.origin_lon is not None else "",
+            "origin_alt": "%.3f" % self.origin_alt if self.origin_alt is not None else "",
         }
+        row.update(self._imu_columns())
         self.writer.writerow(row)
         self.fp.flush()
         self.rows.append((x, y, target_speed))
@@ -96,6 +148,39 @@ class WaypointRecorder:
         self.last_time = now
         self._publish_path(msg.header)
         rospy.loginfo_throttle(1.0, "recorded waypoints=%d file=%s", len(self.rows), self.output_file)
+
+    def _imu_columns(self):
+        columns = {
+            "imu_qx": "",
+            "imu_qy": "",
+            "imu_qz": "",
+            "imu_qw": "",
+            "imu_angular_velocity_x": "",
+            "imu_angular_velocity_y": "",
+            "imu_angular_velocity_z": "",
+            "imu_linear_acceleration_x": "",
+            "imu_linear_acceleration_y": "",
+            "imu_linear_acceleration_z": "",
+        }
+        if self.latest_imu is None:
+            return columns
+
+        imu = self.latest_imu
+        columns.update(
+            {
+                "imu_qx": "%.8f" % imu.orientation.x,
+                "imu_qy": "%.8f" % imu.orientation.y,
+                "imu_qz": "%.8f" % imu.orientation.z,
+                "imu_qw": "%.8f" % imu.orientation.w,
+                "imu_angular_velocity_x": "%.8f" % imu.angular_velocity.x,
+                "imu_angular_velocity_y": "%.8f" % imu.angular_velocity.y,
+                "imu_angular_velocity_z": "%.8f" % imu.angular_velocity.z,
+                "imu_linear_acceleration_x": "%.8f" % imu.linear_acceleration.x,
+                "imu_linear_acceleration_y": "%.8f" % imu.linear_acceleration.y,
+                "imu_linear_acceleration_z": "%.8f" % imu.linear_acceleration.z,
+            }
+        )
+        return columns
 
     def _should_record(self, x, y, now):
         if self.last_x is None:

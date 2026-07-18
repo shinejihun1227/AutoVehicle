@@ -7,6 +7,9 @@
   <!-- UDP GPS -> /localization/ego_pose, /localization/ego_twist -->
   <include file="$(find yeoms_udp_bridge)/launch/udp_gps_localization.launch" />
 
+  <!-- UDP IMU -> /udp_bridge/imu, /udp_bridge/imu_debug -->
+  <include file="$(find yeoms_udp_bridge)/launch/udp_imu.launch" />
+
   <!-- Record the driven localization path as a Stanley-compatible CSV. -->
   <include file="$(find yeoms_control)/launch/record_waypoints.launch">
     <arg name="output_file" value="$(arg output_file)" />

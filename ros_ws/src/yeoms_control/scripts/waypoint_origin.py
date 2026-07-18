@@ -18,9 +18,10 @@ def main():
         print("origin_lat:=0.0 origin_lon:=0.0")
         return 0
 
-    lat = first.get("lat") or "0.0"
-    lon = first.get("lon") or "0.0"
-    print(f"origin_lat:={lat} origin_lon:={lon}")
+    lat = first.get("origin_lat") or first.get("lat") or "0.0"
+    lon = first.get("origin_lon") or first.get("lon") or "0.0"
+    alt = first.get("origin_alt") or first.get("alt") or "0.0"
+    print(f"origin_lat:={lat} origin_lon:={lon} origin_alt:={alt}")
     return 0
 
 

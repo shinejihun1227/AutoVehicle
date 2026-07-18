@@ -4,11 +4,13 @@
   <arg name="record_bag" default="false" />
   <arg name="origin_lat" default="0.0" />
   <arg name="origin_lon" default="0.0" />
+  <arg name="origin_alt" default="0.0" />
 
   <!-- UDP GPS -> /localization/ego_pose, /localization/ego_twist -->
   <include file="$(find yeoms_udp_bridge)/launch/udp_gps_localization.launch">
     <arg name="origin_lat" value="$(arg origin_lat)" />
     <arg name="origin_lon" value="$(arg origin_lon)" />
+    <arg name="origin_alt" value="$(arg origin_alt)" />
   </include>
 
   <!-- Stanley -> /control/ctrl_cmd -->

@@ -162,13 +162,15 @@ roslaunch morai_competition_bringup gps_stanley_udp_drive.launch \
 Recorded CSV format:
 
 ```csv
-x,y,target_speed,lat,lon
-0.000000,0.000000,1.000,37.24097500,126.77435000
-0.502100,0.010500,1.000,37.24097500,126.77435000
+x,y,z,target_speed,lat,lon,alt,origin_lat,origin_lon,origin_alt,imu_qx,imu_qy,imu_qz,imu_qw,imu_angular_velocity_x,imu_angular_velocity_y,imu_angular_velocity_z,imu_linear_acceleration_x,imu_linear_acceleration_y,imu_linear_acceleration_z
+0.000000,0.000000,0.000000,1.000,37.24097500,126.77435000,0.000,37.24097500,126.77435000,0.000,0.00000000,0.00000000,0.00000000,1.00000000,0.00000000,0.00000000,0.00000000,0.00000000,0.00000000,9.81000000
 ```
 
-The `lat/lon` columns store the GPS origin used during recording. When replaying
-the path, pass the same origin to the localization node:
+The `origin_lat/origin_lon` columns store the GPS origin used during recording.
+`z/alt` are populated when MORAI sends GPS altitude data. IMU columns are filled
+from `/udp_bridge/imu` when IMU UDP packets are available.
+
+When replaying the path, pass the same origin to the localization node:
 
 ```bash
 rosrun yeoms_control waypoint_origin.py $HOME/morai_recorded_paths/kcity_test_01.csv
@@ -177,7 +179,7 @@ rosrun yeoms_control waypoint_origin.py $HOME/morai_recorded_paths/kcity_test_01
 Example output:
 
 ```text
-origin_lat:=37.24097500 origin_lon:=126.77435000
+origin_lat:=37.24097500 origin_lon:=126.77435000 origin_alt:=0.000
 ```
 
 Then replay:
@@ -186,7 +188,8 @@ Then replay:
 roslaunch morai_competition_bringup gps_stanley_udp_drive.launch \
   waypoint_file:=$HOME/morai_recorded_paths/kcity_test_01.csv \
   origin_lat:=37.24097500 \
-  origin_lon:=126.77435000
+  origin_lon:=126.77435000 \
+  origin_alt:=0.000
 ```
 
 Older CSV files without `lat/lon` should be recorded again, or replayed from the

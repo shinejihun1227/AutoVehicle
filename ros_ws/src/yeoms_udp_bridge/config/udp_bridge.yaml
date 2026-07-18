@@ -46,6 +46,7 @@ udp_bridge:
     auto_origin: true
     origin_lat: 0.0
     origin_lon: 0.0
+    origin_alt: 0.0
     # MORAI GPRMC speed/course can stay zero in some UDP setups, so use x/y
     # displacement as the default motion estimate.
     motion_source: "position"
@@ -58,6 +59,12 @@ udp_bridge:
     zero_speed_threshold_mps: 0.08
     min_yaw_update_speed_mps: 0.35
     max_yaw_jump_rad: 0.85
+
+  imu_adapter:
+    imu_port: 4001
+    topic: "/udp_bridge/imu"
+    debug_topic: "/udp_bridge/imu_debug"
+    frame_id: "imu_link"
 
   ctrl_sender:
     subscribe_topic: "/control/ctrl_cmd"

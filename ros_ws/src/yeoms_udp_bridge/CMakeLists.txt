@@ -4,6 +4,7 @@ project(yeoms_udp_bridge)
 find_package(catkin REQUIRED COMPONENTS
   geometry_msgs
   rospy
+  sensor_msgs
   std_msgs
   tf
 )
@@ -14,6 +15,7 @@ catkin_install_python(PROGRAMS
   scripts/udp_packet_monitor.py
   scripts/udp_status_to_localization.py
   scripts/udp_gps_to_localization.py
+  scripts/udp_imu_to_topic.py
   scripts/udp_ctrl_cmd_sender.py
   DESTINATION ${CATKIN_PACKAGE_BIN_DESTINATION}
 )

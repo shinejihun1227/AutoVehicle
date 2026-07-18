@@ -20,6 +20,7 @@ class UdpGpsToLocalization:
         self.auto_origin = bool(rospy.get_param("/udp_bridge/gps_adapter/auto_origin", True))
         self.fixed_origin_lat = float(rospy.get_param("/udp_bridge/gps_adapter/origin_lat", 0.0))
         self.fixed_origin_lon = float(rospy.get_param("/udp_bridge/gps_adapter/origin_lon", 0.0))
+        self.fixed_origin_alt = float(rospy.get_param("/udp_bridge/gps_adapter/origin_alt", 0.0))
         self.min_course_speed_mps = float(rospy.get_param("/udp_bridge/gps_adapter/min_course_speed_mps", 0.2))
         self.motion_source = rospy.get_param("/udp_bridge/gps_adapter/motion_source", "position")
         self.min_position_delta_m = float(rospy.get_param("/udp_bridge/gps_adapter/min_position_delta_m", 0.03))
@@ -45,6 +46,7 @@ class UdpGpsToLocalization:
 
         self.origin_lat = None
         self.origin_lon = None
+        self.origin_alt = None
         self.last_yaw = 0.0
         self.last_x = None
         self.last_y = None
@@ -62,7 +64,13 @@ class UdpGpsToLocalization:
         if self.fixed_origin_lat != 0.0 or self.fixed_origin_lon != 0.0:
             self.origin_lat = self.fixed_origin_lat
             self.origin_lon = self.fixed_origin_lon
-            rospy.loginfo("GPS fixed origin loaded lat=%.8f lon=%.8f", self.origin_lat, self.origin_lon)
+            self.origin_alt = self.fixed_origin_alt
+            rospy.loginfo(
+                "GPS fixed origin loaded lat=%.8f lon=%.8f alt=%.3f",
+                self.origin_lat,
+                self.origin_lon,
+                self.origin_alt,
+            )
         rospy.loginfo("GPS UDP localization listening on %s:%s", self.bind_ip, self.port)
 
     def run(self):
@@ -73,15 +81,17 @@ class UdpGpsToLocalization:
                 rospy.logwarn_throttle(2.0, "waiting for GPS UDP packets on port %s", self.port)
                 continue
 
-            sentence = self._extract_gprmc(payload)
-            if not sentence:
+            sentences = self._extract_nmea_sentences(payload)
+            if "GPRMC" not in sentences:
                 self.debug_pub.publish(String("from=%s no GPRMC payload=%s" % (addr[0], payload[:32].hex(" "))))
                 continue
 
             try:
-                gps = self._parse_gprmc(sentence)
+                gps = self._parse_gprmc(sentences["GPRMC"])
+                if "GPGGA" in sentences:
+                    gps.update(self._parse_gpgga(sentences["GPGGA"]))
             except ValueError as exc:
-                rospy.logwarn_throttle(1.0, "invalid GPRMC packet: %s sentence=%s", exc, sentence)
+                rospy.logwarn_throttle(1.0, "invalid GPS packet: %s sentences=%s", exc, sentences)
                 continue
 
             if self.origin_lat is None:
@@ -90,21 +100,29 @@ class UdpGpsToLocalization:
                     continue
                 self.origin_lat = gps["lat"]
                 self.origin_lon = gps["lon"]
-                rospy.loginfo("GPS origin set lat=%.8f lon=%.8f", self.origin_lat, self.origin_lon)
+                self.origin_alt = gps["alt"]
+                rospy.loginfo(
+                    "GPS origin set lat=%.8f lon=%.8f alt=%.3f",
+                    self.origin_lat,
+                    self.origin_lon,
+                    self.origin_alt,
+                )
 
             now = rospy.Time.now()
-            raw_x, raw_y = self._latlon_to_local_xy(gps["lat"], gps["lon"])
+            raw_x, raw_y, z = self._latlonalt_to_local_xyz(gps["lat"], gps["lon"], gps["alt"])
             x, y = self._filter_position(raw_x, raw_y)
             speed, yaw, motion_source = self._estimate_motion(x, y, now, gps["speed_mps"], gps["course_deg"])
-            self._publish_state(x, y, yaw, speed, now)
+            self._publish_state(x, y, z, yaw, speed, now)
             self.debug_pub.publish(
                 String(
-                    "lat=%.8f lon=%.8f raw_x=%.3f raw_y=%.3f x=%.3f y=%.3f speed=%.3f yaw=%.3f source=%s gprmc_speed=%.3f gprmc_course=%.3f"
+                    "lat=%.8f lon=%.8f alt=%.3f raw_x=%.3f raw_y=%.3f z=%.3f x=%.3f y=%.3f speed=%.3f yaw=%.3f source=%s gprmc_speed=%.3f gprmc_course=%.3f"
                     % (
                         gps["lat"],
                         gps["lon"],
+                        gps["alt"],
                         raw_x,
                         raw_y,
+                        z,
                         x,
                         y,
                         speed,
@@ -116,15 +134,20 @@ class UdpGpsToLocalization:
                 )
             )
 
-    def _extract_gprmc(self, payload):
+    def _extract_nmea_sentences(self, payload):
         text = payload.decode("ascii", errors="ignore")
-        start = text.find("$GPRMC")
-        if start < 0:
-            return None
-        end = text.find("\n", start)
-        if end < 0:
-            end = len(text)
-        return text[start:end].strip().strip("\x00")
+        sentences = {}
+        for sentence_type in ("GPRMC", "GPGGA"):
+            start = text.find("$" + sentence_type)
+            if start < 0:
+                continue
+            end = text.find("\n", start)
+            if end < 0:
+                end = text.find("\r", start)
+            if end < 0:
+                end = len(text)
+            sentences[sentence_type] = text[start:end].strip().strip("\x00")
+        return sentences
 
     def _parse_gprmc(self, sentence):
         main = sentence.split("*", 1)[0]
@@ -141,8 +164,20 @@ class UdpGpsToLocalization:
         return {
             "lat": lat,
             "lon": lon,
+            "alt": 0.0,
             "speed_mps": speed_knots * KNOT_TO_MPS,
             "course_deg": course_deg,
+        }
+
+    def _parse_gpgga(self, sentence):
+        main = sentence.split("*", 1)[0]
+        fields = main.split(",")
+        if len(fields) < 10:
+            raise ValueError("not enough GPGGA fields")
+        return {
+            "lat": self._nmea_coord_to_deg(fields[2], fields[3]),
+            "lon": self._nmea_coord_to_deg(fields[4], fields[5]),
+            "alt": float(fields[9] or 0.0),
         }
 
     def _nmea_coord_to_deg(self, value, hemisphere):
@@ -156,13 +191,14 @@ class UdpGpsToLocalization:
             decimal *= -1.0
         return decimal
 
-    def _latlon_to_local_xy(self, lat, lon):
+    def _latlonalt_to_local_xyz(self, lat, lon, alt):
         lat0 = math.radians(self.origin_lat)
         d_lat = math.radians(lat - self.origin_lat)
         d_lon = math.radians(lon - self.origin_lon)
         x_east = EARTH_RADIUS_M * d_lon * math.cos(lat0)
         y_north = EARTH_RADIUS_M * d_lat
-        return x_east, y_north
+        z_up = alt - self.origin_alt if self.origin_alt is not None else 0.0
+        return x_east, y_north, z_up
 
     def _course_to_ros_yaw(self, course_deg, speed_mps):
         if speed_mps < self.min_course_speed_mps:
@@ -248,14 +284,14 @@ class UdpGpsToLocalization:
             self.last_speed = 0.0
         return self.last_speed
 
-    def _publish_state(self, x, y, yaw, speed_mps, now):
+    def _publish_state(self, x, y, z, yaw, speed_mps, now):
 
         pose = PoseStamped()
         pose.header.stamp = now
         pose.header.frame_id = self.frame_id
         pose.pose.position.x = x
         pose.pose.position.y = y
-        pose.pose.position.z = 0.0
+        pose.pose.position.z = z
         quat = tf.transformations.quaternion_from_euler(0.0, 0.0, yaw)
         pose.pose.orientation.x = quat[0]
         pose.pose.orientation.y = quat[1]
