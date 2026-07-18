@@ -17,3 +17,6 @@ grep "competition_vehicle_status" ~/udp_monitor.log | tail -n 5 > ~/vehicle_stat
 grep "competition_vehicle_status" ~/vehicle_status_moving_samples.txt | tail -n 1 | sed 's/.*hex=//' | fold -w 48
 
 sudo bash -c "export ROS_MASTER_URI=http://localhost:11311 && source /opt/ros/noetic/setup.bash && source /home/$(whoami)/morai_stanley_ws/devel/setup.bash && roslaunch yeoms_udp_bridge udp_monitor.launch" | tee ~/udp_monitor.log
+
+
+grep -n "print_payload_hex_bytes" ~/morai_stanley_ws/src/yeoms_udp_bridge/config/udp_bridge.yaml
