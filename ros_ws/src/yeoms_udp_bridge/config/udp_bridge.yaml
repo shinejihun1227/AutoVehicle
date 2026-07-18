@@ -51,14 +51,17 @@ udp_bridge:
     # displacement as the default motion estimate.
     motion_source: "position"
     min_course_speed_mps: 0.2
-    min_position_delta_m: 0.35
+    min_position_delta_m: 0.8
     max_reasonable_speed_mps: 50.0
-    speed_filter_alpha: 0.2
-    position_filter_alpha: 0.35
-    stationary_speed_decay: 0.4
+    speed_filter_alpha: 0.12
+    position_filter_alpha: 0.25
+    stationary_speed_decay: 0.35
     zero_speed_threshold_mps: 0.08
-    min_yaw_update_speed_mps: 0.6
-    max_yaw_jump_rad: 0.5
+    min_yaw_update_speed_mps: 0.9
+    max_yaw_jump_rad: 0.35
+    yaw_filter_alpha: 0.12
+    max_yaw_rate_radps: 0.35
+    yaw_consistency_count: 3
 
   imu_adapter:
     imu_port: 4001

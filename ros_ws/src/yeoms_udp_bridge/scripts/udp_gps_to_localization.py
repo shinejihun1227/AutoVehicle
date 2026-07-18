@@ -31,6 +31,9 @@ class UdpGpsToLocalization:
         self.zero_speed_threshold_mps = float(rospy.get_param("/udp_bridge/gps_adapter/zero_speed_threshold_mps", 0.08))
         self.min_yaw_update_speed_mps = float(rospy.get_param("/udp_bridge/gps_adapter/min_yaw_update_speed_mps", 0.35))
         self.max_yaw_jump_rad = float(rospy.get_param("/udp_bridge/gps_adapter/max_yaw_jump_rad", 0.85))
+        self.yaw_filter_alpha = float(rospy.get_param("/udp_bridge/gps_adapter/yaw_filter_alpha", 0.12))
+        self.max_yaw_rate_radps = float(rospy.get_param("/udp_bridge/gps_adapter/max_yaw_rate_radps", 0.35))
+        self.yaw_consistency_count = int(rospy.get_param("/udp_bridge/gps_adapter/yaw_consistency_count", 3))
 
         self.pose_pub = rospy.Publisher(
             rospy.get_param("/udp_bridge/gps_adapter/pose_topic", "/localization/ego_pose"),
@@ -56,6 +59,8 @@ class UdpGpsToLocalization:
         self.last_speed = 0.0
         self.last_motion_yaw = None
         self.consistent_motion_count = 0
+        self.last_yaw_update_time = None
+        self.yaw_initialized = False
 
         self.sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
         self.sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
@@ -115,7 +120,7 @@ class UdpGpsToLocalization:
             self._publish_state(x, y, z, yaw, speed, now)
             self.debug_pub.publish(
                 String(
-                    "lat=%.8f lon=%.8f alt=%.3f raw_x=%.3f raw_y=%.3f z=%.3f x=%.3f y=%.3f speed=%.3f yaw=%.3f source=%s gprmc_speed=%.3f gprmc_course=%.3f"
+                    "lat=%.8f lon=%.8f alt=%.3f raw_x=%.3f raw_y=%.3f z=%.3f x=%.3f y=%.3f speed=%.3f yaw=%.3f source=%s gprmc_speed=%.3f gprmc_course=%.3f yaw_initialized=%s"
                     % (
                         gps["lat"],
                         gps["lon"],
@@ -130,6 +135,7 @@ class UdpGpsToLocalization:
                         motion_source,
                         gps["speed_mps"],
                         gps["course_deg"],
+                        self.yaw_initialized,
                     )
                 )
             )
@@ -247,7 +253,7 @@ class UdpGpsToLocalization:
             return self._decay_speed(), self.last_yaw, "position:rejected"
 
         measured_yaw = math.atan2(dy, dx)
-        yaw_source = self._update_yaw_if_consistent(measured_yaw, measured_speed)
+        yaw_source = self._update_yaw_if_consistent(measured_yaw, measured_speed, now)
         alpha = self._clamp(self.speed_filter_alpha, 0.0, 1.0)
         self.last_speed = alpha * measured_speed + (1.0 - alpha) * self.last_speed
         self.last_x = x
@@ -255,7 +261,7 @@ class UdpGpsToLocalization:
         self.last_time = now
         return self.last_speed, self.last_yaw, yaw_source
 
-    def _update_yaw_if_consistent(self, measured_yaw, measured_speed):
+    def _update_yaw_if_consistent(self, measured_yaw, measured_speed, now):
         if measured_speed < self.min_yaw_update_speed_mps:
             return "position:yaw_hold"
 
@@ -273,10 +279,33 @@ class UdpGpsToLocalization:
             self.last_motion_yaw = measured_yaw
             return "position:yaw_jump_hold"
 
-        if self.consistent_motion_count >= 2:
-            self.last_yaw = measured_yaw
-            return "position"
+        if self.consistent_motion_count >= max(1, self.yaw_consistency_count):
+            return self._apply_filtered_yaw(measured_yaw, now)
         return "position:yaw_warmup"
+
+    def _apply_filtered_yaw(self, measured_yaw, now):
+        if not self.yaw_initialized:
+            self.last_yaw = measured_yaw
+            self.last_yaw_update_time = now
+            self.yaw_initialized = True
+            return "position:yaw_init"
+
+        yaw_error = self._normalize_angle(measured_yaw - self.last_yaw)
+        alpha = self._clamp(self.yaw_filter_alpha, 0.0, 1.0)
+        filtered_delta = alpha * yaw_error
+
+        if self.last_yaw_update_time is None:
+            dt = 1.0
+        else:
+            dt = max((now - self.last_yaw_update_time).to_sec(), 1.0e-3)
+        self.last_yaw_update_time = now
+
+        if self.max_yaw_rate_radps > 0.0:
+            max_delta = self.max_yaw_rate_radps * dt
+            filtered_delta = self._clamp(filtered_delta, -max_delta, max_delta)
+
+        self.last_yaw = self._normalize_angle(self.last_yaw + filtered_delta)
+        return "position:yaw_filtered"
 
     def _decay_speed(self):
         self.last_speed *= self._clamp(self.stationary_speed_decay, 0.0, 1.0)
