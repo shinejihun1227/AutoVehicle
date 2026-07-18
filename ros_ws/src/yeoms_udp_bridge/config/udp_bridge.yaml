@@ -44,7 +44,12 @@ udp_bridge:
     twist_topic: "/localization/ego_twist"
     frame_id: "map"
     auto_origin: true
+    # MORAI GPRMC speed/course can stay zero in some UDP setups, so use x/y
+    # displacement as the default motion estimate.
+    motion_source: "position"
     min_course_speed_mps: 0.2
+    min_position_delta_m: 0.03
+    max_reasonable_speed_mps: 50.0
 
   ctrl_sender:
     subscribe_topic: "/control/ctrl_cmd"

@@ -55,8 +55,9 @@ rostopic echo /udp_bridge/gps_debug
 ```
 
 The GPS localization node sets the first received GPS position as `(0, 0)`.
-`x` is east, `y` is north, and yaw is estimated from the GPRMC course field while
-the vehicle is moving.
+`x` is east and `y` is north. Speed and yaw are estimated from GPS position
+changes by default because MORAI GPRMC speed/course fields may stay at zero in
+some UDP configurations.
 
 ## Vehicle Status Parser
 

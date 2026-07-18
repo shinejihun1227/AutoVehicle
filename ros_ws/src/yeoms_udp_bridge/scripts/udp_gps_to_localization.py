@@ -19,6 +19,9 @@ class UdpGpsToLocalization:
         self.frame_id = rospy.get_param("/udp_bridge/gps_adapter/frame_id", "map")
         self.auto_origin = bool(rospy.get_param("/udp_bridge/gps_adapter/auto_origin", True))
         self.min_course_speed_mps = float(rospy.get_param("/udp_bridge/gps_adapter/min_course_speed_mps", 0.2))
+        self.motion_source = rospy.get_param("/udp_bridge/gps_adapter/motion_source", "position")
+        self.min_position_delta_m = float(rospy.get_param("/udp_bridge/gps_adapter/min_position_delta_m", 0.03))
+        self.max_reasonable_speed_mps = float(rospy.get_param("/udp_bridge/gps_adapter/max_reasonable_speed_mps", 50.0))
 
         self.pose_pub = rospy.Publisher(
             rospy.get_param("/udp_bridge/gps_adapter/pose_topic", "/localization/ego_pose"),
@@ -35,6 +38,10 @@ class UdpGpsToLocalization:
         self.origin_lat = None
         self.origin_lon = None
         self.last_yaw = 0.0
+        self.last_x = None
+        self.last_y = None
+        self.last_time = None
+        self.last_speed = 0.0
 
         self.sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
         self.sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
@@ -69,13 +76,14 @@ class UdpGpsToLocalization:
                 self.origin_lon = gps["lon"]
                 rospy.loginfo("GPS origin set lat=%.8f lon=%.8f", self.origin_lat, self.origin_lon)
 
+            now = rospy.Time.now()
             x, y = self._latlon_to_local_xy(gps["lat"], gps["lon"])
-            yaw = self._course_to_ros_yaw(gps["course_deg"], gps["speed_mps"])
-            self._publish_state(x, y, yaw, gps["speed_mps"])
+            speed, yaw, motion_source = self._estimate_motion(x, y, now, gps["speed_mps"], gps["course_deg"])
+            self._publish_state(x, y, yaw, speed, now)
             self.debug_pub.publish(
                 String(
-                    "lat=%.8f lon=%.8f x=%.3f y=%.3f speed=%.3f course=%.3f yaw=%.3f"
-                    % (gps["lat"], gps["lon"], x, y, gps["speed_mps"], gps["course_deg"], yaw)
+                    "lat=%.8f lon=%.8f x=%.3f y=%.3f speed=%.3f yaw=%.3f source=%s gprmc_speed=%.3f gprmc_course=%.3f"
+                    % (gps["lat"], gps["lon"], x, y, speed, yaw, motion_source, gps["speed_mps"], gps["course_deg"])
                 )
             )
 
@@ -135,8 +143,40 @@ class UdpGpsToLocalization:
         self.last_yaw = yaw
         return yaw
 
-    def _publish_state(self, x, y, yaw, speed_mps):
-        now = rospy.Time.now()
+    def _estimate_motion(self, x, y, now, gprmc_speed_mps, gprmc_course_deg):
+        if self.motion_source == "gprmc":
+            yaw = self._course_to_ros_yaw(gprmc_course_deg, gprmc_speed_mps)
+            return gprmc_speed_mps, yaw, "gprmc"
+
+        if self.last_time is None:
+            self.last_x = x
+            self.last_y = y
+            self.last_time = now
+            return 0.0, self.last_yaw, "position:init"
+
+        dt = (now - self.last_time).to_sec()
+        dx = x - self.last_x
+        dy = y - self.last_y
+        distance = math.hypot(dx, dy)
+
+        self.last_x = x
+        self.last_y = y
+        self.last_time = now
+
+        if dt <= 0.0 or distance < self.min_position_delta_m:
+            return self.last_speed, self.last_yaw, "position:hold"
+
+        speed = distance / dt
+        if not math.isfinite(speed) or speed > self.max_reasonable_speed_mps:
+            rospy.logwarn_throttle(1.0, "GPS position speed rejected: %.3f m/s", speed)
+            return self.last_speed, self.last_yaw, "position:rejected"
+
+        yaw = math.atan2(dy, dx)
+        self.last_speed = speed
+        self.last_yaw = yaw
+        return speed, yaw, "position"
+
+    def _publish_state(self, x, y, yaw, speed_mps, now):
 
         pose = PoseStamped()
         pose.header.stamp = now
