@@ -64,8 +64,18 @@ class StanleyController:
         self.search_window = int(rospy.get_param("~target_search_window", rospy.get_param(f"/{ns}/target_search_window", 50)))
         self.reached_radius = float(rospy.get_param("~waypoint_reached_radius_m", rospy.get_param(f"/{ns}/waypoint_reached_radius_m", 2.0)))
         self.stop_at_final = bool(rospy.get_param("~stop_at_final_waypoint", rospy.get_param(f"/{ns}/stop_at_final_waypoint", True)))
+        self.cte_deadband = float(rospy.get_param("~cross_track_deadband_m", rospy.get_param(f"/{ns}/cross_track_deadband_m", 0.05)))
         self.path_yaw_lookahead_m = float(
             rospy.get_param("~path_yaw_lookahead_m", rospy.get_param(f"/{ns}/path_yaw_lookahead_m", 3.0))
+        )
+        self.curve_slowdown_heading = float(
+            rospy.get_param("~curve_slowdown_heading_rad", rospy.get_param(f"/{ns}/curve_slowdown_heading_rad", 0.35))
+        )
+        self.min_curve_speed = float(
+            rospy.get_param("~min_curve_speed_mps", rospy.get_param(f"/{ns}/min_curve_speed_mps", 0.8))
+        )
+        self.cte_speed_reduction_gain = float(
+            rospy.get_param("~cte_speed_reduction_gain", rospy.get_param(f"/{ns}/cte_speed_reduction_gain", 0.25))
         )
         self.allow_target_backtrack = bool(
             rospy.get_param("~allow_target_backtrack", rospy.get_param(f"/{ns}/allow_target_backtrack", False))
@@ -218,25 +228,30 @@ class StanleyController:
     def _compute_control(self):
         front_x = self.x + self.wheelbase * math.cos(self.yaw)
         front_y = self.y + self.wheelbase * math.sin(self.yaw)
-        target_idx = self._nearest_waypoint_index(front_x, front_y)
+        target_idx, proj_x, proj_y, segment_yaw = self._nearest_path_projection(front_x, front_y)
         self.target_idx = target_idx
 
         current_wp = self.waypoints[target_idx]
         yaw_idx = self._advance_index_by_distance(target_idx, self.path_yaw_lookahead_m)
         next_wp = self.waypoints[yaw_idx]
-        path_yaw = math.atan2(next_wp.y - current_wp.y, next_wp.x - current_wp.x)
+        if math.hypot(next_wp.x - proj_x, next_wp.y - proj_y) > 1.0e-6:
+            path_yaw = math.atan2(next_wp.y - proj_y, next_wp.x - proj_x)
+        else:
+            path_yaw = segment_yaw
+        path_heading_change = abs(self._normalize_angle(path_yaw - segment_yaw))
 
         heading_error = self._normalize_angle(path_yaw - self.yaw)
 
-        dx = front_x - current_wp.x
-        dy = front_y - current_wp.y
+        dx = front_x - proj_x
+        dy = front_y - proj_y
         # ROS ENU convention:
         #   map x=East, y=North, yaw positive counter-clockwise.
         #   steering > 0 means left turn.
         # If the vehicle is left of a path segment, steering should be negative
         # to return to the path. Therefore cte is positive when the path is left
         # of the vehicle, not when the vehicle is left of the path.
-        cte = dx * math.sin(path_yaw) - dy * math.cos(path_yaw)
+        cte = dx * math.sin(segment_yaw) - dy * math.cos(segment_yaw)
+        cte = self._apply_deadband(cte, self.cte_deadband)
 
         cte_term = math.atan2(self.k * cte, self.speed + self.softening_gain)
         steering = self.heading_error_gain * heading_error + self.crosstrack_error_gain * cte_term
@@ -247,9 +262,11 @@ class StanleyController:
             target_speed = self.target_speed_override
         if self.max_target_speed > 0.0:
             target_speed = min(target_speed, self.max_target_speed)
+        target_speed = self._apply_tracking_speed_limits(target_speed, path_heading_change, cte)
 
-        if self.stop_at_final and target_idx >= len(self.waypoints) - 1:
-            if math.hypot(self.x - current_wp.x, self.y - current_wp.y) <= self.reached_radius:
+        if self.stop_at_final and target_idx >= len(self.waypoints) - 2:
+            final_wp = self.waypoints[-1]
+            if math.hypot(self.x - final_wp.x, self.y - final_wp.y) <= self.reached_radius:
                 target_speed = 0.0
 
         return steering, target_speed, cte, target_idx, path_yaw, heading_error, cte_term
@@ -286,6 +303,42 @@ class StanleyController:
                 best_dist = dist
         return best_idx
 
+    def _nearest_path_projection(self, x, y):
+        start = max(0, self.target_idx - 5) if self.allow_target_backtrack else self.target_idx
+        end = min(len(self.waypoints) - 1, self.target_idx + self.search_window)
+        if end <= start:
+            start = max(0, len(self.waypoints) - 2)
+            end = len(self.waypoints) - 1
+
+        best_idx = start
+        best_x = self.waypoints[start].x
+        best_y = self.waypoints[start].y
+        best_yaw = 0.0
+        best_dist = float("inf")
+
+        for idx in range(start, end):
+            p0 = self.waypoints[idx]
+            p1 = self.waypoints[idx + 1]
+            seg_x = p1.x - p0.x
+            seg_y = p1.y - p0.y
+            seg_len_sq = seg_x * seg_x + seg_y * seg_y
+            if seg_len_sq <= 1.0e-9:
+                continue
+
+            t = self._clamp(((x - p0.x) * seg_x + (y - p0.y) * seg_y) / seg_len_sq, 0.0, 1.0)
+            proj_x = p0.x + t * seg_x
+            proj_y = p0.y + t * seg_y
+            dist = (x - proj_x) ** 2 + (y - proj_y) ** 2
+
+            if dist < best_dist:
+                best_idx = idx
+                best_x = proj_x
+                best_y = proj_y
+                best_yaw = math.atan2(seg_y, seg_x)
+                best_dist = dist
+
+        return best_idx, best_x, best_y, best_yaw
+
     def _advance_index_by_distance(self, start_idx, distance_m):
         if start_idx >= len(self.waypoints) - 1:
             return start_idx
@@ -307,6 +360,30 @@ class StanleyController:
         if error > 0:
             return self._clamp(self.speed_kp * error, 0.0, self.max_accel), 0.0
         return 0.0, self._clamp(-self.speed_kp * error, 0.0, self.max_brake)
+
+    def _apply_tracking_speed_limits(self, target_speed, path_heading_change, cte):
+        if target_speed <= 0.0:
+            return 0.0
+
+        limited_speed = target_speed
+        if self.curve_slowdown_heading > 0.0:
+            curve_ratio = self._clamp(path_heading_change / self.curve_slowdown_heading, 0.0, 1.0)
+            curve_speed = target_speed - curve_ratio * (target_speed - self.min_curve_speed)
+            limited_speed = min(limited_speed, curve_speed)
+
+        if self.cte_speed_reduction_gain > 0.0:
+            cte_limited_speed = target_speed / (1.0 + self.cte_speed_reduction_gain * abs(cte))
+            limited_speed = min(limited_speed, cte_limited_speed)
+
+        return self._clamp(limited_speed, 0.0, target_speed)
+
+    @staticmethod
+    def _apply_deadband(value, deadband):
+        if deadband <= 0.0:
+            return value
+        if abs(value) <= deadband:
+            return 0.0
+        return math.copysign(abs(value) - deadband, value)
 
     def _publish_command(self, steering, target_speed, accel, brake):
         if self.command_type == "morai":
