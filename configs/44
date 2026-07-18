@@ -1,3 +1,4 @@
+코드업로드
 cd ~/AutoVehicle
 git pull
 
@@ -17,12 +18,8 @@ roslaunch morai_competition_bringup gps_waypoint_record.launch \
   output_file:=$HOME/morai_recorded_paths/kcity_test_01.csv \
 
 
-실행
-roslaunch morai_competition_bringup gps_stanley_udp_drive.launch \
-  waypoint_file:=$HOME/morai_recorded_paths/kcity_test_01.csv
-
-
+실행(속도)
 roslaunch morai_competition_bringup gps_stanley_udp_drive.launch \
   waypoint_file:=$HOME/morai_recorded_paths/kcity_test_01.csv \
-  target_speed_override_mps:=1.8 \
-  max_target_speed_mps:=1.8
+  target_speed_override_mps:=6.0 \
+  max_target_speed_mps:=6.0
