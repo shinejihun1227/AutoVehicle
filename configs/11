@@ -1,0 +1,58 @@
+set -e
+
+# 1. GitHub 원본 준비/업데이트
+if [ ! -d "$HOME/AutoVehicle/.git" ]; then
+  cd "$HOME"
+  git clone https://github.com/shinejihun1227/AutoVehicle.git
+else
+  cd "$HOME/AutoVehicle"
+  git pull
+fi
+
+# 2. workspace 준비
+mkdir -p "$HOME/morai_stanley_ws/src"
+
+# 3. 기존 패키지 삭제 후 최신 패키지 복사
+rm -rf "$HOME/morai_stanley_ws/src/yeoms_control"
+rm -rf "$HOME/morai_stanley_ws/src/yeoms_udp_bridge"
+rm -rf "$HOME/morai_stanley_ws/src/morai_competition_bringup"
+
+cp -r "$HOME/AutoVehicle/ros_ws/src/yeoms_control" "$HOME/morai_stanley_ws/src/"
+cp -r "$HOME/AutoVehicle/ros_ws/src/yeoms_udp_bridge" "$HOME/morai_stanley_ws/src/"
+cp -r "$HOME/AutoVehicle/ros_ws/src/morai_competition_bringup" "$HOME/morai_stanley_ws/src/"
+
+# 4. UDP 포트 수정: 907/909 -> 1907/1909
+python3 - <<'PY'
+from pathlib import Path
+path = Path.home() / "morai_stanley_ws/src/yeoms_udp_bridge/config/udp_bridge.yaml"
+text = path.read_text()
+text = text.replace("collision_data: 907", "collision_data: 1907")
+text = text.replace("competition_vehicle_status: 909", "competition_vehicle_status: 1909")
+text = text.replace("vehicle_status_port: 909", "vehicle_status_port: 1909")
+path.write_text(text)
+PY
+
+# 5. 실행 권한 부여
+chmod +x "$HOME/morai_stanley_ws/src/yeoms_control/scripts/"*.py
+chmod +x "$HOME/morai_stanley_ws/src/yeoms_udp_bridge/scripts/"*.py
+
+# 6. 빌드 캐시 정리
+rm -rf "$HOME/morai_stanley_ws/build"
+rm -rf "$HOME/morai_stanley_ws/devel"
+
+# 7. 빌드
+source /opt/ros/noetic/setup.bash
+cd "$HOME/morai_stanley_ws"
+catkin_make
+
+# 8. 환경 적용 및 패키지 확인
+source "$HOME/morai_stanley_ws/devel/setup.bash"
+rospack profile
+rospack find yeoms_control
+rospack find yeoms_udp_bridge
+rospack find morai_competition_bringup
+
+echo "Setup complete."
+echo "Next terminal 1: roscore"
+echo "Next terminal 2: roslaunch yeoms_udp_bridge udp_monitor.launch"
+echo "Next terminal 3: rostopic echo /udp_bridge/packet_info"
