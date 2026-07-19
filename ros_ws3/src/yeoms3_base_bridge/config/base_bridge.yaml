@@ -1,0 +1,30 @@
+gps:
+  bind_ip: "0.0.0.0"
+  port: 3001
+  frame_id: "map"
+  pose_topic: "/localization/ego_pose"
+  twist_topic: "/localization/ego_twist"
+  debug_topic: "/localization/gps_debug"
+  auto_origin: true
+  origin_lat: 0.0
+  origin_lon: 0.0
+  origin_alt: 0.0
+  min_yaw_distance_m: 0.4
+  min_yaw_speed_mps: 0.4
+  speed_filter_alpha: 0.25
+
+ctrl_cmd:
+  subscribe_topic: "/control/ctrl_cmd"
+  debug_topic: "/control/udp_cmd_debug"
+  target_ip: "192.168.0.151"
+  target_port: 9093
+  local_port: 9094
+  ctrl_mode: 2
+  gear: 4
+  long_cmd_type: 2
+  max_speed_mps: 1.2
+  max_steer_rad: 0.35
+  invert_steering: false
+  # "radian" sends the steering angle directly. "normalized" sends steering/max_steer_rad.
+  steering_packet_mode: "radian"
+  send_rate_limit_hz: 20.0

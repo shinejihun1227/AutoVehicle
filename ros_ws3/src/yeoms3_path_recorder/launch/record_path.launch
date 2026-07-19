@@ -1,0 +1,14 @@
+<launch>
+  <arg name="output_file" default="$(env HOME)/morai_recorded_paths/01.csv" />
+  <arg name="target_speed_mps" default="1.0" />
+  <arg name="min_spacing_m" default="0.4" />
+
+  <node pkg="yeoms3_path_recorder"
+        type="path_recorder.py"
+        name="path_recorder"
+        output="screen">
+    <param name="output_file" value="$(arg output_file)" />
+    <param name="target_speed_mps" value="$(arg target_speed_mps)" />
+    <param name="min_spacing_m" value="$(arg min_spacing_m)" />
+  </node>
+</launch>

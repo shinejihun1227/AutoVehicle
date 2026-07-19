@@ -1,0 +1,24 @@
+<launch>
+  <arg name="config_file" default="$(find yeoms3_stanley)/config/stanley.yaml" />
+  <arg name="waypoint_file" default="$(env HOME)/morai_recorded_paths/01.csv" />
+  <arg name="target_speed_mps" default="1.0" />
+  <arg name="max_speed_mps" default="1.0" />
+  <arg name="use_csv_target_speed" default="false" />
+  <arg name="stanley_gain" default="0.35" />
+  <arg name="softening_gain" default="2.0" />
+  <arg name="min_curve_speed_mps" default="2.5" />
+
+  <rosparam command="load" file="$(arg config_file)" />
+  <param name="/stanley/waypoint_file" value="$(arg waypoint_file)" />
+  <param name="/stanley/target_speed_mps" value="$(arg target_speed_mps)" />
+  <param name="/stanley/max_speed_mps" value="$(arg max_speed_mps)" />
+  <param name="/stanley/use_csv_target_speed" value="$(arg use_csv_target_speed)" />
+  <param name="/stanley/stanley_gain" value="$(arg stanley_gain)" />
+  <param name="/stanley/softening_gain" value="$(arg softening_gain)" />
+  <param name="/stanley/min_curve_speed_mps" value="$(arg min_curve_speed_mps)" />
+
+  <node pkg="yeoms3_stanley"
+        type="stanley_controller.py"
+        name="stanley_controller"
+        output="screen" />
+</launch>

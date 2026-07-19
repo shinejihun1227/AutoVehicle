@@ -1,0 +1,30 @@
+stanley:
+  pose_topic: "/localization/ego_pose"
+  twist_topic: "/localization/ego_twist"
+  command_topic: "/control/ctrl_cmd"
+  frame_id: "map"
+  control_rate_hz: 20.0
+  wheelbase_m: 3.0
+
+  target_speed_mps: 1.0
+  max_speed_mps: 1.0
+  use_csv_target_speed: false
+  curve_slowdown_enabled: true
+  curve_heading_slowdown_rad: 0.45
+  min_curve_speed_mps: 2.5
+
+  stanley_gain: 0.35
+  softening_gain: 2.0
+  heading_error_gain: 0.8
+  crosstrack_error_gain: 0.7
+  cross_track_deadband_m: 0.05
+
+  max_steer_rad: 0.25
+  steering_filter_alpha: 0.18
+  max_steer_rate_radps: 0.35
+
+  target_search_back_window: 8
+  target_search_forward_window: 120
+  path_yaw_preview_m: 4.0
+  finish_radius_m: 2.0
+  stop_at_final_waypoint: true

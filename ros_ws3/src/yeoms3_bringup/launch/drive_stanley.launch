@@ -1,0 +1,25 @@
+<launch>
+  <arg name="waypoint_file" default="$(env HOME)/morai_recorded_paths/01.csv" />
+  <arg name="target_speed_mps" default="1.0" />
+  <arg name="max_speed_mps" default="1.0" />
+  <arg name="use_csv_target_speed" default="false" />
+  <arg name="stanley_gain" default="0.35" />
+  <arg name="softening_gain" default="2.0" />
+  <arg name="min_curve_speed_mps" default="2.5" />
+
+  <include file="$(find yeoms3_base_bridge)/launch/gps_localization.launch" />
+
+  <include file="$(find yeoms3_stanley)/launch/stanley.launch">
+    <arg name="waypoint_file" value="$(arg waypoint_file)" />
+    <arg name="target_speed_mps" value="$(arg target_speed_mps)" />
+    <arg name="max_speed_mps" value="$(arg max_speed_mps)" />
+    <arg name="use_csv_target_speed" value="$(arg use_csv_target_speed)" />
+    <arg name="stanley_gain" value="$(arg stanley_gain)" />
+    <arg name="softening_gain" value="$(arg softening_gain)" />
+    <arg name="min_curve_speed_mps" value="$(arg min_curve_speed_mps)" />
+  </include>
+
+  <include file="$(find yeoms3_base_bridge)/launch/ctrl_cmd_sender.launch">
+    <arg name="max_speed_mps" value="$(arg max_speed_mps)" />
+  </include>
+</launch>

@@ -6,6 +6,7 @@ This repository contains comparison ROS workspaces for MORAI + ROS Noetic autono
 
 - `ros_ws`: Pure Pursuit baseline.
 - `ros_ws2`: Adaptive Pure Pursuit comparison version.
+- `ros_ws3`: Stanley comparison version.
 
 ## `ros_ws` Baseline
 
@@ -38,3 +39,17 @@ Start with path recording, then Pure Pursuit. Add advanced controllers only afte
 - additional diagnostic topics for comparison.
 
 Use `ros_ws2/UBUNTU_COMMANDS.md` for the Ubuntu copy/build/run commands.
+
+## `ros_ws3` Stanley
+
+`ros_ws3` adds a Stanley controller workspace for comparison with Pure Pursuit methods.
+
+Stanley uses:
+
+- heading error between vehicle yaw and path yaw,
+- cross-track error from the front axle to the nearest path segment,
+- speed-dependent cross-track correction,
+- optional curve-aware speed limiting,
+- diagnostic topics for heading, cross-track, and steering terms.
+
+Use `ros_ws3/UBUNTU_COMMANDS.md` for the Ubuntu copy/build/run commands.
