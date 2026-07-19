@@ -1,0 +1,34 @@
+adaptive_pure_pursuit:
+  pose_topic: "/localization/ego_pose"
+  twist_topic: "/localization/ego_twist"
+  command_topic: "/control/ctrl_cmd"
+  frame_id: "map"
+  control_rate_hz: 20.0
+  wheelbase_m: 3.0
+
+  # Dynamic lookahead: high speed/straight -> longer, curve/error -> shorter.
+  base_lookahead_m: 7.0
+  min_lookahead_m: 3.0
+  max_lookahead_m: 14.0
+  lookahead_speed_gain: 0.8
+  heading_error_threshold_rad: 0.35
+  cross_track_threshold_m: 1.5
+  curvature_threshold_radpm: 0.12
+  curvature_preview_m: 12.0
+
+  target_speed_mps: 1.0
+  max_speed_mps: 1.0
+  min_curve_speed_mps: 2.5
+  use_csv_target_speed: false
+  curve_slowdown_enabled: true
+
+  max_steer_rad: 0.25
+  crosstrack_steer_gain: 0.25
+  max_crosstrack_steer_rad: 0.08
+  steering_filter_alpha: 0.18
+  max_steer_rate_radps: 0.35
+
+  target_search_back_window: 8
+  target_search_forward_window: 120
+  finish_radius_m: 2.0
+  stop_at_final_waypoint: true

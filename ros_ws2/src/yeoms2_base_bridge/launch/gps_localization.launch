@@ -1,0 +1,9 @@
+<launch>
+  <arg name="config_file" default="$(find yeoms2_base_bridge)/config/base_bridge.yaml" />
+  <rosparam command="load" file="$(arg config_file)" />
+
+  <node pkg="yeoms2_base_bridge"
+        type="gps_localizer.py"
+        name="gps_localizer"
+        output="screen" />
+</launch>

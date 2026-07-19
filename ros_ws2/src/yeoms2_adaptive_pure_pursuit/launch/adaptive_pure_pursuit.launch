@@ -1,0 +1,24 @@
+<launch>
+  <arg name="config_file" default="$(find yeoms2_adaptive_pure_pursuit)/config/adaptive_pure_pursuit.yaml" />
+  <arg name="waypoint_file" default="$(env HOME)/morai_recorded_paths/01.csv" />
+  <arg name="target_speed_mps" default="1.0" />
+  <arg name="max_speed_mps" default="1.0" />
+  <arg name="min_curve_speed_mps" default="2.5" />
+  <arg name="use_csv_target_speed" default="false" />
+  <arg name="min_lookahead_m" default="3.0" />
+  <arg name="max_lookahead_m" default="14.0" />
+
+  <rosparam command="load" file="$(arg config_file)" />
+  <param name="/adaptive_pure_pursuit/waypoint_file" value="$(arg waypoint_file)" />
+  <param name="/adaptive_pure_pursuit/target_speed_mps" value="$(arg target_speed_mps)" />
+  <param name="/adaptive_pure_pursuit/max_speed_mps" value="$(arg max_speed_mps)" />
+  <param name="/adaptive_pure_pursuit/min_curve_speed_mps" value="$(arg min_curve_speed_mps)" />
+  <param name="/adaptive_pure_pursuit/use_csv_target_speed" value="$(arg use_csv_target_speed)" />
+  <param name="/adaptive_pure_pursuit/min_lookahead_m" value="$(arg min_lookahead_m)" />
+  <param name="/adaptive_pure_pursuit/max_lookahead_m" value="$(arg max_lookahead_m)" />
+
+  <node pkg="yeoms2_adaptive_pure_pursuit"
+        type="pure_pursuit_controller.py"
+        name="adaptive_pure_pursuit_controller"
+        output="screen" />
+</launch>
