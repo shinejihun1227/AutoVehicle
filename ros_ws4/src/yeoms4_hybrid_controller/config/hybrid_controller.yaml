@@ -1,0 +1,44 @@
+hybrid_controller:
+  pose_topic: "/localization/ego_pose"
+  twist_topic: "/localization/ego_twist"
+  command_topic: "/control/ctrl_cmd"
+  frame_id: "map"
+  control_rate_hz: 20.0
+  wheelbase_m: 3.0
+
+  target_speed_mps: 1.0
+  max_speed_mps: 1.0
+  use_csv_target_speed: false
+  curve_slowdown_enabled: true
+  min_curve_speed_mps: 2.5
+
+  base_lookahead_m: 6.0
+  min_lookahead_m: 3.0
+  max_lookahead_m: 12.0
+  lookahead_speed_gain: 0.8
+  curvature_preview_m: 12.0
+  curvature_threshold_radpm: 0.12
+  heading_error_threshold_rad: 0.35
+  cross_track_threshold_m: 1.5
+
+  hybrid_stanley_weight: 0.45
+  adaptive_blend_enabled: true
+  min_stanley_weight: 0.30
+  max_stanley_weight: 0.75
+
+  stanley_gain: 0.35
+  softening_gain: 2.0
+  heading_error_gain: 0.8
+  crosstrack_error_gain: 0.7
+  cross_track_deadband_m: 0.05
+  pure_pursuit_gain: 1.0
+
+  max_steer_rad: 0.25
+  steering_filter_alpha: 0.18
+  max_steer_rate_radps: 0.35
+
+  target_search_back_window: 8
+  target_search_forward_window: 120
+  path_yaw_preview_m: 4.0
+  finish_radius_m: 2.0
+  stop_at_final_waypoint: true

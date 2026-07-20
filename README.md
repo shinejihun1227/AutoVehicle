@@ -7,6 +7,7 @@ This repository contains comparison ROS workspaces for MORAI + ROS Noetic autono
 - `ros_ws`: Pure Pursuit baseline.
 - `ros_ws2`: Adaptive Pure Pursuit comparison version.
 - `ros_ws3`: Stanley comparison version.
+- `ros_ws4`: Stanley + Pure Pursuit hybrid comparison version.
 
 ## `ros_ws` Baseline
 
@@ -53,3 +54,16 @@ Stanley uses:
 - diagnostic topics for heading, cross-track, and steering terms.
 
 Use `ros_ws3/UBUNTU_COMMANDS.md` for the Ubuntu copy/build/run commands.
+
+## `ros_ws4` Stanley + Pure Pursuit Hybrid
+
+`ros_ws4` computes Pure Pursuit steering and Stanley steering in the same controller, then blends them into one final command.
+
+Use it to compare:
+
+- Pure Pursuit target-point steering,
+- Stanley heading and cross-track correction,
+- blended steering behavior,
+- the effect of changing `hybrid_stanley_weight`.
+
+Use `ros_ws4/UBUNTU_COMMANDS.md` for the Ubuntu copy/build/run commands.
