@@ -14,18 +14,18 @@ JPEG_EOI = b"\xff\xd9"
 
 class CameraUdpReceiver:
     def __init__(self):
-        ns = "/camera_udp_receiver"
-        self.bind_ip = rospy.get_param(ns + "/bind_ip", "0.0.0.0")
-        self.camera_port = int(rospy.get_param(ns + "/camera_port", 1001))
-        self.image_topic = rospy.get_param(ns + "/image_topic", "/sensors/camera/front/compressed")
-        self.frame_info_topic = rospy.get_param(ns + "/frame_info_topic", "/perception/camera/frame_info")
-        self.frame_id = rospy.get_param(ns + "/frame_id", "front_camera")
-        self.rate_limit_hz = float(rospy.get_param(ns + "/publish_rate_limit_hz", 30.0))
-        self.socket_timeout = float(rospy.get_param(ns + "/socket_timeout_sec", 1.0))
-        self.max_frame_bytes = int(rospy.get_param(ns + "/max_frame_bytes", 2000000))
-        self.save_samples = bool(rospy.get_param(ns + "/save_samples", False))
-        self.sample_dir = os.path.expanduser(rospy.get_param(ns + "/sample_dir", "/tmp/morai_camera_samples"))
-        self.sample_every_n = max(1, int(rospy.get_param(ns + "/sample_every_n_frames", 30)))
+        self.camera_name = self._param("camera_name", "front")
+        self.bind_ip = self._param("bind_ip", "0.0.0.0")
+        self.camera_port = int(self._param("camera_port", 1001))
+        self.image_topic = self._param("image_topic", "/sensors/camera/front/compressed")
+        self.frame_info_topic = self._param("frame_info_topic", "/perception/camera/front/frame_info")
+        self.frame_id = self._param("frame_id", "front_camera")
+        self.rate_limit_hz = float(self._param("publish_rate_limit_hz", 30.0))
+        self.socket_timeout = float(self._param("socket_timeout_sec", 1.0))
+        self.max_frame_bytes = int(self._param("max_frame_bytes", 2000000))
+        self.save_samples = bool(self._param("save_samples", False))
+        self.sample_dir = os.path.expanduser(self._param("sample_dir", "/tmp/morai_camera_samples"))
+        self.sample_every_n = max(1, int(self._param("sample_every_n_frames", 30)))
 
         self.image_pub = rospy.Publisher(self.image_topic, CompressedImage, queue_size=1)
         self.info_pub = rospy.Publisher(self.frame_info_topic, String, queue_size=10)
@@ -41,7 +41,13 @@ class CameraUdpReceiver:
         self.sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
         self.sock.bind((self.bind_ip, self.camera_port))
         self.sock.settimeout(self.socket_timeout)
-        rospy.loginfo("Camera UDP receiver listening on %s:%d", self.bind_ip, self.camera_port)
+        rospy.loginfo(
+            "%s camera UDP receiver listening on %s:%d -> %s",
+            self.camera_name,
+            self.bind_ip,
+            self.camera_port,
+            self.image_topic,
+        )
 
     def run(self):
         while not rospy.is_shutdown():
@@ -117,9 +123,16 @@ class CameraUdpReceiver:
         rospy.loginfo_throttle(1.0, info)
 
         if self.save_samples and self.frame_count % self.sample_every_n == 0:
-            path = os.path.join(self.sample_dir, "front_camera_%06d.jpg" % self.frame_count)
+            path = os.path.join(self.sample_dir, "%s_camera_%06d.jpg" % (self.camera_name, self.frame_count))
             with open(path, "wb") as fp:
                 fp.write(jpeg_bytes)
+
+    @staticmethod
+    def _param(name, default):
+        private_name = "~" + name
+        if rospy.has_param(private_name):
+            return rospy.get_param(private_name)
+        return rospy.get_param("/camera_udp_receiver/" + name, default)
 
 
 if __name__ == "__main__":

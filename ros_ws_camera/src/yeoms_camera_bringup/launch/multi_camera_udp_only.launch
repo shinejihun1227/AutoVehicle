@@ -1,0 +1,17 @@
+<launch>
+  <arg name="front_port" default="1001" />
+  <arg name="left_port" default="1011" />
+  <arg name="right_port" default="1021" />
+  <arg name="aux_port" default="1031" />
+  <arg name="enable_aux_camera" default="false" />
+  <arg name="save_samples" default="false" />
+
+  <include file="$(find yeoms_camera_bridge)/launch/multi_camera_udp_receiver.launch">
+    <arg name="front_port" value="$(arg front_port)" />
+    <arg name="left_port" value="$(arg left_port)" />
+    <arg name="right_port" value="$(arg right_port)" />
+    <arg name="aux_port" value="$(arg aux_port)" />
+    <arg name="enable_aux_camera" value="$(arg enable_aux_camera)" />
+    <arg name="save_samples" value="$(arg save_samples)" />
+  </include>
+</launch>

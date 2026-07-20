@@ -2,7 +2,7 @@ camera_udp_receiver:
   bind_ip: "0.0.0.0"
   camera_port: 1001
   image_topic: "/sensors/camera/front/compressed"
-  frame_info_topic: "/perception/camera/frame_info"
+  frame_info_topic: "/perception/camera/front/frame_info"
   frame_id: "front_camera"
   publish_rate_limit_hz: 30.0
   socket_timeout_sec: 1.0

@@ -1,9 +1,9 @@
 camera_perception:
   image_topic: "/sensors/camera/front/compressed"
-  lane_offset_topic: "/perception/camera/lane_offset_px"
-  traffic_light_topic: "/perception/camera/traffic_light_state"
-  stop_line_topic: "/perception/camera/stop_line_detected"
-  debug_topic: "/perception/camera/debug/compressed"
+  lane_offset_topic: "/perception/camera/front/lane_offset_px"
+  traffic_light_topic: "/perception/camera/front/traffic_light_state"
+  stop_line_topic: "/perception/camera/front/stop_line_detected"
+  debug_topic: "/perception/camera/front/debug/compressed"
   publish_debug_image: true
   process_rate_hz: 15.0
   resize_width: 640

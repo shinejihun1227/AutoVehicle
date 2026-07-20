@@ -17,21 +17,21 @@ class CameraPerceptionNode:
         if cv2 is None:
             raise rospy.ROSInitException("python3-opencv is required: sudo apt install -y python3-opencv")
 
-        ns = "/camera_perception"
-        self.image_topic = rospy.get_param(ns + "/image_topic", "/sensors/camera/front/compressed")
-        self.lane_offset_topic = rospy.get_param(ns + "/lane_offset_topic", "/perception/camera/lane_offset_px")
-        self.traffic_light_topic = rospy.get_param(ns + "/traffic_light_topic", "/perception/camera/traffic_light_state")
-        self.stop_line_topic = rospy.get_param(ns + "/stop_line_topic", "/perception/camera/stop_line_detected")
-        self.debug_topic = rospy.get_param(ns + "/debug_topic", "/perception/camera/debug/compressed")
-        self.publish_debug = bool(rospy.get_param(ns + "/publish_debug_image", True))
-        self.process_rate_hz = float(rospy.get_param(ns + "/process_rate_hz", 15.0))
-        self.resize_width = int(rospy.get_param(ns + "/resize_width", 640))
-        self.lane_roi_y_start_ratio = float(rospy.get_param(ns + "/lane_roi_y_start_ratio", 0.55))
-        self.traffic_roi_y_end_ratio = float(rospy.get_param(ns + "/traffic_roi_y_end_ratio", 0.45))
-        self.stop_line_roi_y_start_ratio = float(rospy.get_param(ns + "/stop_line_roi_y_start_ratio", 0.65))
-        self.min_lane_pixels = int(rospy.get_param(ns + "/min_lane_pixels", 400))
-        self.min_traffic_pixels = int(rospy.get_param(ns + "/min_traffic_pixels", 60))
-        self.min_stop_line_pixels = int(rospy.get_param(ns + "/min_stop_line_pixels", 1500))
+        self.camera_name = self._param("camera_name", "front")
+        self.image_topic = self._param("image_topic", "/sensors/camera/front/compressed")
+        self.lane_offset_topic = self._param("lane_offset_topic", "/perception/camera/front/lane_offset_px")
+        self.traffic_light_topic = self._param("traffic_light_topic", "/perception/camera/front/traffic_light_state")
+        self.stop_line_topic = self._param("stop_line_topic", "/perception/camera/front/stop_line_detected")
+        self.debug_topic = self._param("debug_topic", "/perception/camera/front/debug/compressed")
+        self.publish_debug = bool(self._param("publish_debug_image", True))
+        self.process_rate_hz = float(self._param("process_rate_hz", 15.0))
+        self.resize_width = int(self._param("resize_width", 640))
+        self.lane_roi_y_start_ratio = float(self._param("lane_roi_y_start_ratio", 0.55))
+        self.traffic_roi_y_end_ratio = float(self._param("traffic_roi_y_end_ratio", 0.45))
+        self.stop_line_roi_y_start_ratio = float(self._param("stop_line_roi_y_start_ratio", 0.65))
+        self.min_lane_pixels = int(self._param("min_lane_pixels", 400))
+        self.min_traffic_pixels = int(self._param("min_traffic_pixels", 60))
+        self.min_stop_line_pixels = int(self._param("min_stop_line_pixels", 1500))
 
         self.last_process_time = 0.0
         self.lane_pub = rospy.Publisher(self.lane_offset_topic, Float32, queue_size=1)
@@ -39,7 +39,7 @@ class CameraPerceptionNode:
         self.stop_line_pub = rospy.Publisher(self.stop_line_topic, Bool, queue_size=1)
         self.debug_pub = rospy.Publisher(self.debug_topic, CompressedImage, queue_size=1)
         rospy.Subscriber(self.image_topic, CompressedImage, self._image_cb, queue_size=1)
-        rospy.loginfo("Camera perception subscribed to %s", self.image_topic)
+        rospy.loginfo("%s camera perception subscribed to %s", self.camera_name, self.image_topic)
 
     def _image_cb(self, msg):
         if not self._rate_limit_allows_process():
@@ -160,6 +160,13 @@ class CameraPerceptionNode:
             return False
         self.last_process_time = now
         return True
+
+    @staticmethod
+    def _param(name, default):
+        private_name = "~" + name
+        if rospy.has_param(private_name):
+            return rospy.get_param(private_name)
+        return rospy.get_param("/camera_perception/" + name, default)
 
 
 if __name__ == "__main__":

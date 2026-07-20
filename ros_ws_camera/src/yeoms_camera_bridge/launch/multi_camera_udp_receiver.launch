@@ -1,0 +1,44 @@
+<launch>
+  <arg name="front_port" default="1001" />
+  <arg name="left_port" default="1011" />
+  <arg name="right_port" default="1021" />
+  <arg name="aux_port" default="1031" />
+  <arg name="enable_aux_camera" default="false" />
+  <arg name="save_samples" default="false" />
+
+  <include file="$(find yeoms_camera_bridge)/launch/camera_udp_receiver.launch">
+    <arg name="camera_name" value="front" />
+    <arg name="camera_port" value="$(arg front_port)" />
+    <arg name="image_topic" value="/sensors/camera/front/compressed" />
+    <arg name="frame_info_topic" value="/perception/camera/front/frame_info" />
+    <arg name="frame_id" value="front_camera" />
+    <arg name="save_samples" value="$(arg save_samples)" />
+  </include>
+
+  <include file="$(find yeoms_camera_bridge)/launch/camera_udp_receiver.launch">
+    <arg name="camera_name" value="left" />
+    <arg name="camera_port" value="$(arg left_port)" />
+    <arg name="image_topic" value="/sensors/camera/left/compressed" />
+    <arg name="frame_info_topic" value="/perception/camera/left/frame_info" />
+    <arg name="frame_id" value="left_camera" />
+    <arg name="save_samples" value="$(arg save_samples)" />
+  </include>
+
+  <include file="$(find yeoms_camera_bridge)/launch/camera_udp_receiver.launch">
+    <arg name="camera_name" value="right" />
+    <arg name="camera_port" value="$(arg right_port)" />
+    <arg name="image_topic" value="/sensors/camera/right/compressed" />
+    <arg name="frame_info_topic" value="/perception/camera/right/frame_info" />
+    <arg name="frame_id" value="right_camera" />
+    <arg name="save_samples" value="$(arg save_samples)" />
+  </include>
+
+  <include if="$(arg enable_aux_camera)" file="$(find yeoms_camera_bridge)/launch/camera_udp_receiver.launch">
+    <arg name="camera_name" value="aux" />
+    <arg name="camera_port" value="$(arg aux_port)" />
+    <arg name="image_topic" value="/sensors/camera/aux/compressed" />
+    <arg name="frame_info_topic" value="/perception/camera/aux/frame_info" />
+    <arg name="frame_id" value="aux_camera" />
+    <arg name="save_samples" value="$(arg save_samples)" />
+  </include>
+</launch>

@@ -1,12 +1,30 @@
 <launch>
-  <arg name="config_file" default="$(find yeoms_camera_perception)/config/camera_perception.yaml" />
+  <arg name="camera_name" default="front" />
+  <arg name="image_topic" default="/sensors/camera/front/compressed" />
+  <arg name="lane_offset_topic" default="/perception/camera/front/lane_offset_px" />
+  <arg name="traffic_light_topic" default="/perception/camera/front/traffic_light_state" />
+  <arg name="stop_line_topic" default="/perception/camera/front/stop_line_detected" />
+  <arg name="debug_topic" default="/perception/camera/front/debug/compressed" />
   <arg name="publish_debug_image" default="true" />
-
-  <rosparam command="load" file="$(arg config_file)" />
-  <param name="/camera_perception/publish_debug_image" value="$(arg publish_debug_image)" />
 
   <node pkg="yeoms_camera_perception"
         type="camera_perception_node.py"
-        name="camera_perception"
-        output="screen" />
+        name="$(arg camera_name)_camera_perception"
+        output="screen">
+    <param name="camera_name" value="$(arg camera_name)" />
+    <param name="image_topic" value="$(arg image_topic)" />
+    <param name="lane_offset_topic" value="$(arg lane_offset_topic)" />
+    <param name="traffic_light_topic" value="$(arg traffic_light_topic)" />
+    <param name="stop_line_topic" value="$(arg stop_line_topic)" />
+    <param name="debug_topic" value="$(arg debug_topic)" />
+    <param name="publish_debug_image" value="$(arg publish_debug_image)" />
+    <param name="process_rate_hz" value="15.0" />
+    <param name="resize_width" value="640" />
+    <param name="lane_roi_y_start_ratio" value="0.55" />
+    <param name="traffic_roi_y_end_ratio" value="0.45" />
+    <param name="stop_line_roi_y_start_ratio" value="0.65" />
+    <param name="min_lane_pixels" value="400" />
+    <param name="min_traffic_pixels" value="60" />
+    <param name="min_stop_line_pixels" value="1500" />
+  </node>
 </launch>

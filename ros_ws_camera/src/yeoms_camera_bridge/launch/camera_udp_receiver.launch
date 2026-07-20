@@ -1,14 +1,26 @@
 <launch>
-  <arg name="config_file" default="$(find yeoms_camera_bridge)/config/camera_bridge.yaml" />
+  <arg name="camera_name" default="front" />
   <arg name="camera_port" default="1001" />
+  <arg name="image_topic" default="/sensors/camera/front/compressed" />
+  <arg name="frame_info_topic" default="/perception/camera/front/frame_info" />
+  <arg name="frame_id" default="front_camera" />
   <arg name="save_samples" default="false" />
-
-  <rosparam command="load" file="$(arg config_file)" />
-  <param name="/camera_udp_receiver/camera_port" value="$(arg camera_port)" />
-  <param name="/camera_udp_receiver/save_samples" value="$(arg save_samples)" />
 
   <node pkg="yeoms_camera_bridge"
         type="camera_udp_receiver.py"
-        name="camera_udp_receiver"
-        output="screen" />
+        name="$(arg camera_name)_camera_udp_receiver"
+        output="screen">
+    <param name="camera_name" value="$(arg camera_name)" />
+    <param name="camera_port" value="$(arg camera_port)" />
+    <param name="image_topic" value="$(arg image_topic)" />
+    <param name="frame_info_topic" value="$(arg frame_info_topic)" />
+    <param name="frame_id" value="$(arg frame_id)" />
+    <param name="save_samples" value="$(arg save_samples)" />
+    <param name="bind_ip" value="0.0.0.0" />
+    <param name="publish_rate_limit_hz" value="30.0" />
+    <param name="socket_timeout_sec" value="1.0" />
+    <param name="max_frame_bytes" value="2000000" />
+    <param name="sample_dir" value="/tmp/morai_camera_samples" />
+    <param name="sample_every_n_frames" value="30" />
+  </node>
 </launch>

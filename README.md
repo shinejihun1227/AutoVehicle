@@ -76,9 +76,11 @@ Use `ros_ws4/UBUNTU_COMMANDS.md` for the Ubuntu copy/build/run commands.
 Initial topics:
 
 - `/sensors/camera/front/compressed`
-- `/perception/camera/lane_offset_px`
-- `/perception/camera/traffic_light_state`
-- `/perception/camera/stop_line_detected`
-- `/perception/camera/debug/compressed`
+- `/sensors/camera/left/compressed`
+- `/sensors/camera/right/compressed`
+- `/perception/camera/front/lane_offset_px`
+- `/perception/camera/front/traffic_light_state`
+- `/perception/camera/front/stop_line_detected`
+- `/perception/camera/front/debug/compressed`
 
 Use `ros_ws_camera/UBUNTU_COMMANDS.md` for the Ubuntu copy/build/run commands.
