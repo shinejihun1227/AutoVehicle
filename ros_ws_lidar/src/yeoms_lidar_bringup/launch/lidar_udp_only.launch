@@ -1,0 +1,9 @@
+<launch>
+  <arg name="lidar_port" default="2001" />
+  <arg name="publish_packets_per_cloud" default="76" />
+
+  <include file="$(find yeoms_lidar_bridge)/launch/vlp16_udp_receiver.launch">
+    <arg name="lidar_port" value="$(arg lidar_port)" />
+    <arg name="publish_packets_per_cloud" value="$(arg publish_packets_per_cloud)" />
+  </include>
+</launch>

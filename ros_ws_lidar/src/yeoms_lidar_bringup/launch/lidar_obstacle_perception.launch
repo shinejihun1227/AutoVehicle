@@ -1,0 +1,18 @@
+<launch>
+  <arg name="lidar_port" default="2001" />
+  <arg name="publish_packets_per_cloud" default="76" />
+  <arg name="stop_distance_m" default="7.0" />
+  <arg name="x_max_m" default="30.0" />
+  <arg name="y_abs_max_m" default="3.0" />
+
+  <include file="$(find yeoms_lidar_bridge)/launch/vlp16_udp_receiver.launch">
+    <arg name="lidar_port" value="$(arg lidar_port)" />
+    <arg name="publish_packets_per_cloud" value="$(arg publish_packets_per_cloud)" />
+  </include>
+
+  <include file="$(find yeoms_lidar_perception)/launch/lidar_obstacle_detector.launch">
+    <arg name="stop_distance_m" value="$(arg stop_distance_m)" />
+    <arg name="x_max_m" value="$(arg x_max_m)" />
+    <arg name="y_abs_max_m" value="$(arg y_abs_max_m)" />
+  </include>
+</launch>

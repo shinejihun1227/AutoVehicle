@@ -9,6 +9,7 @@ This repository contains comparison ROS workspaces for MORAI + ROS Noetic autono
 - `ros_ws3`: Stanley comparison version.
 - `ros_ws4`: Stanley + Pure Pursuit hybrid comparison version.
 - `ros_ws_camera`: Camera UDP receiver and baseline camera perception.
+- `ros_ws_lidar`: VLP16 UDP receiver and baseline LiDAR obstacle perception.
 
 ## `ros_ws` Baseline
 
@@ -84,3 +85,17 @@ Initial topics:
 - `/perception/camera/front/debug/compressed`
 
 Use `ros_ws_camera/UBUNTU_COMMANDS.md` for the Ubuntu copy/build/run commands.
+
+## `ros_ws_lidar` LiDAR Perception
+
+`ros_ws_lidar` receives MORAI VLP16 UDP packets, publishes ROS `PointCloud2`, and runs a baseline front-ROI obstacle detector.
+
+Initial topics:
+
+- `/sensors/lidar/points`
+- `/perception/lidar/roi_points`
+- `/perception/lidar/nearest_obstacle_m`
+- `/perception/lidar/obstacle_stop_required`
+- `/perception/lidar/obstacle_summary`
+
+Use `ros_ws_lidar/UBUNTU_COMMANDS.md` for the Ubuntu copy/build/run commands.

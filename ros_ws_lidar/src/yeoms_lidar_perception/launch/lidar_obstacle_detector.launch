@@ -1,0 +1,27 @@
+<launch>
+  <arg name="input_topic" default="/sensors/lidar/points" />
+  <arg name="stop_distance_m" default="7.0" />
+  <arg name="x_max_m" default="30.0" />
+  <arg name="y_abs_max_m" default="3.0" />
+
+  <node pkg="yeoms_lidar_perception"
+        type="lidar_obstacle_detector.py"
+        name="lidar_obstacle_detector"
+        output="screen">
+    <param name="input_topic" value="$(arg input_topic)" />
+    <param name="roi_topic" value="/perception/lidar/roi_points" />
+    <param name="nearest_topic" value="/perception/lidar/nearest_obstacle_m" />
+    <param name="stop_required_topic" value="/perception/lidar/obstacle_stop_required" />
+    <param name="summary_topic" value="/perception/lidar/obstacle_summary" />
+    <param name="frame_id" value="velodyne" />
+    <param name="process_rate_hz" value="10.0" />
+    <param name="x_min_m" value="0.5" />
+    <param name="x_max_m" value="$(arg x_max_m)" />
+    <param name="y_abs_max_m" value="$(arg y_abs_max_m)" />
+    <param name="z_min_m" value="-1.5" />
+    <param name="z_max_m" value="2.0" />
+    <param name="stop_distance_m" value="$(arg stop_distance_m)" />
+    <param name="min_roi_points" value="5" />
+    <param name="publish_roi_points" value="true" />
+  </node>
+</launch>

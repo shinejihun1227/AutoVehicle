@@ -1,0 +1,16 @@
+lidar_obstacle_detector:
+  input_topic: "/sensors/lidar/points"
+  roi_topic: "/perception/lidar/roi_points"
+  nearest_topic: "/perception/lidar/nearest_obstacle_m"
+  stop_required_topic: "/perception/lidar/obstacle_stop_required"
+  summary_topic: "/perception/lidar/obstacle_summary"
+  frame_id: "velodyne"
+  process_rate_hz: 10.0
+  x_min_m: 0.5
+  x_max_m: 30.0
+  y_abs_max_m: 3.0
+  z_min_m: -1.5
+  z_max_m: 2.0
+  stop_distance_m: 7.0
+  min_roi_points: 5
+  publish_roi_points: true

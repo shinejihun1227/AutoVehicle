@@ -1,0 +1,14 @@
+vlp16_udp_receiver:
+  bind_ip: "0.0.0.0"
+  lidar_port: 2001
+  pointcloud_topic: "/sensors/lidar/points"
+  packet_info_topic: "/perception/lidar/packet_info"
+  frame_id: "velodyne"
+  socket_timeout_sec: 1.0
+  publish_packets_per_cloud: 76
+  min_distance_m: 0.2
+  max_distance_m: 120.0
+  max_points_per_cloud: 100000
+  azimuth_offset_deg: 0.0
+  invert_y: false
+  invert_z: false
