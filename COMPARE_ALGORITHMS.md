@@ -2,6 +2,8 @@
 
 This guide compares the four current ROS workspaces.
 
+Use `EXPERIMENT_LOG.md` for human-readable notes and `experiment_results_template.csv` for spreadsheet-style comparison.
+
 ## Common Setup
 
 Use the same recorded path for every algorithm:

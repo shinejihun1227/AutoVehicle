@@ -1,0 +1,5 @@
+date,time,algorithm,workspace,waypoint_file,target_speed_mps,max_speed_mps,test_section,success,straight_oscillation,curve_entry,curve_exit,max_abs_steer_rad,max_abs_cross_track_error_m,avg_speed_kmh,initial_wrong_turn,end_stop,notes,next_action
+2026-07-20,14:00,pure_pursuit_baseline,ros_ws,$HOME/morai_recorded_paths/01.csv,4.0,4.0,full_course,unknown,unknown,unknown,unknown,,,,unknown,unknown,,
+2026-07-20,14:20,adaptive_pure_pursuit,ros_ws2,$HOME/morai_recorded_paths/01.csv,4.0,4.0,full_course,unknown,unknown,unknown,unknown,,,,unknown,unknown,,
+2026-07-20,14:40,stanley,ros_ws3,$HOME/morai_recorded_paths/01.csv,4.0,4.0,full_course,unknown,unknown,unknown,unknown,,,,unknown,unknown,,
+2026-07-20,15:00,hybrid_stanley_pure_pursuit,ros_ws4,$HOME/morai_recorded_paths/01.csv,4.0,4.0,full_course,unknown,unknown,unknown,unknown,,,,unknown,unknown,,
