@@ -1,0 +1,15 @@
+camera_perception:
+  image_topic: "/sensors/camera/front/compressed"
+  lane_offset_topic: "/perception/camera/lane_offset_px"
+  traffic_light_topic: "/perception/camera/traffic_light_state"
+  stop_line_topic: "/perception/camera/stop_line_detected"
+  debug_topic: "/perception/camera/debug/compressed"
+  publish_debug_image: true
+  process_rate_hz: 15.0
+  resize_width: 640
+  lane_roi_y_start_ratio: 0.55
+  traffic_roi_y_end_ratio: 0.45
+  stop_line_roi_y_start_ratio: 0.65
+  min_lane_pixels: 400
+  min_traffic_pixels: 60
+  min_stop_line_pixels: 1500

@@ -1,0 +1,14 @@
+<launch>
+  <arg name="camera_port" default="1001" />
+  <arg name="save_samples" default="false" />
+  <arg name="publish_debug_image" default="true" />
+
+  <include file="$(find yeoms_camera_bridge)/launch/camera_udp_receiver.launch">
+    <arg name="camera_port" value="$(arg camera_port)" />
+    <arg name="save_samples" value="$(arg save_samples)" />
+  </include>
+
+  <include file="$(find yeoms_camera_perception)/launch/camera_perception.launch">
+    <arg name="publish_debug_image" value="$(arg publish_debug_image)" />
+  </include>
+</launch>

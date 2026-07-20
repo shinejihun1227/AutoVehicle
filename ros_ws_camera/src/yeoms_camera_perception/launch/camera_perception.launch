@@ -1,0 +1,12 @@
+<launch>
+  <arg name="config_file" default="$(find yeoms_camera_perception)/config/camera_perception.yaml" />
+  <arg name="publish_debug_image" default="true" />
+
+  <rosparam command="load" file="$(arg config_file)" />
+  <param name="/camera_perception/publish_debug_image" value="$(arg publish_debug_image)" />
+
+  <node pkg="yeoms_camera_perception"
+        type="camera_perception_node.py"
+        name="camera_perception"
+        output="screen" />
+</launch>

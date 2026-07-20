@@ -8,6 +8,7 @@ This repository contains comparison ROS workspaces for MORAI + ROS Noetic autono
 - `ros_ws2`: Adaptive Pure Pursuit comparison version.
 - `ros_ws3`: Stanley comparison version.
 - `ros_ws4`: Stanley + Pure Pursuit hybrid comparison version.
+- `ros_ws_camera`: Camera UDP receiver and baseline camera perception.
 
 ## `ros_ws` Baseline
 
@@ -67,3 +68,17 @@ Use it to compare:
 - the effect of changing `hybrid_stanley_weight`.
 
 Use `ros_ws4/UBUNTU_COMMANDS.md` for the Ubuntu copy/build/run commands.
+
+## `ros_ws_camera` Camera Perception
+
+`ros_ws_camera` receives MORAI camera UDP packets, publishes ROS compressed images, and runs a baseline camera perception node.
+
+Initial topics:
+
+- `/sensors/camera/front/compressed`
+- `/perception/camera/lane_offset_px`
+- `/perception/camera/traffic_light_state`
+- `/perception/camera/stop_line_detected`
+- `/perception/camera/debug/compressed`
+
+Use `ros_ws_camera/UBUNTU_COMMANDS.md` for the Ubuntu copy/build/run commands.

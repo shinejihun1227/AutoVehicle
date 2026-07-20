@@ -1,0 +1,9 @@
+<launch>
+  <arg name="camera_port" default="1001" />
+  <arg name="save_samples" default="false" />
+
+  <include file="$(find yeoms_camera_bridge)/launch/camera_udp_receiver.launch">
+    <arg name="camera_port" value="$(arg camera_port)" />
+    <arg name="save_samples" value="$(arg save_samples)" />
+  </include>
+</launch>

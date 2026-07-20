@@ -1,0 +1,14 @@
+<launch>
+  <arg name="config_file" default="$(find yeoms_camera_bridge)/config/camera_bridge.yaml" />
+  <arg name="camera_port" default="1001" />
+  <arg name="save_samples" default="false" />
+
+  <rosparam command="load" file="$(arg config_file)" />
+  <param name="/camera_udp_receiver/camera_port" value="$(arg camera_port)" />
+  <param name="/camera_udp_receiver/save_samples" value="$(arg save_samples)" />
+
+  <node pkg="yeoms_camera_bridge"
+        type="camera_udp_receiver.py"
+        name="camera_udp_receiver"
+        output="screen" />
+</launch>
