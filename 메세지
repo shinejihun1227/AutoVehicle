@@ -9,3 +9,61 @@ source devel/setup.bash
 rosmsg show morai_msgs/CtrlCmd
 rosmsg show morai_msgs/EgoVehicleStatus
 rosmsg show morai_msgs/GPSMessage
+
+
+터미널 1: roscore
+source /opt/ros/noetic/setup.bash
+export ROS_MASTER_URI=http://localhost:11311
+export ROS_IP=192.168.0.200
+roscore
+이미 roscore가 떠 있으면 새로 켜지 말고 그대로 두세요.
+터미널 2: 주행 launch
+source /opt/ros/noetic/setup.bash
+source ~/morai_stanley_ws/devel/setup.bash
+export ROS_MASTER_URI=http://localhost:11311
+export ROS_IP=192.168.0.200
+
+roslaunch yeoms_bringup drive_pure_pursuit.launch \
+  waypoint_file:=$HOME/morai_recorded_paths/2026_molit_comp_global_path.txt \
+  target_speed_mps:=3.0 \
+  max_speed_mps:=3.0 \
+  align_path_to_ego_start:=true \
+  rotate_path_to_ego_yaw:=false
+이 터미널에서 반드시 아래 같은 노드가 started로 떠야 합니다.
+gps_localizer
+pure_pursuit_controller
+ctrl_cmd_sender
+터미널 3: 확인
+source /opt/ros/noetic/setup.bash
+source ~/morai_stanley_ws/devel/setup.bash
+export ROS_MASTER_URI=http://localhost:11311
+export ROS_IP=192.168.0.200
+
+rostopic list
+rosnode list
+여기서 확인:
+rostopic list | grep -E "control|localization|udp"
+rosnode list | grep -E "pure|ctrl|gps"
+정상이라면 대략 이런 게 있어야 합니다.
+/control/ctrl_cmd
+/control/udp_cmd_debug
+/control/target_index
+/control/pure_pursuit_steering_rad
+/localization/ego_pose
+/localization/ego_twist
+/localization/gps_debug
+안 보이면 다음 중 하나입니다.
+1. source ~/morai_stanley_ws/devel/setup.bash 안 됨
+2. roslaunch가 실패했는데 터미널 에러를 놓침
+3. roscore와 rostopic 터미널의 ROS_MASTER_URI가 다름
+4. yeoms_bringup 패키지가 workspace에 없음
+5. catkin_make 이후 setup.bash를 다시 source 안 함
+바로 확인할 명령은 이겁니다.
+rospack find yeoms_bringup
+roslaunch yeoms_bringup drive_pure_pursuit.launch --screen
+rospack find yeoms_bringup이 경로를 못 찾으면 패키지 복사/build/source 문제입니다.
+roslaunch는 실행되는데 /control/ctrl_cmd가 없으면 launch 터미널에 pure_pursuit_controller나 ctrl_cmd_sender가 죽은 에러가 있을 겁니다.
+지금은 rostopic echo가 아니라 먼저 이 결과가 필요합니다.
+rostopic list | grep -E "control|localization|udp"
+rosnode list
+rospack find yeoms_bringup
