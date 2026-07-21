@@ -59,6 +59,7 @@ class StanleyController:
         self.yaw = None
         self.speed = 0.0
         self.target_idx = 0
+        self.localized_on_path = False
         self.last_steer = 0.0
         self.last_time = None
         self.finished = False
@@ -83,6 +84,16 @@ class StanleyController:
         if not path or not os.path.exists(path):
             raise rospy.ROSInitException("waypoint file not found: %s" % path)
 
+        if path.lower().endswith(".csv"):
+            points = self._load_csv_waypoints(path)
+        else:
+            points = self._load_xyz_waypoints(path)
+
+        if len(points) < 2:
+            raise rospy.ROSInitException("at least two waypoint rows are required")
+        return points
+
+    def _load_csv_waypoints(self, path):
         points = []
         with open(path, newline="") as fp:
             reader = csv.DictReader(fp)
@@ -91,9 +102,19 @@ class StanleyController:
                     continue
                 speed = float(row.get("target_speed") or self.target_speed)
                 points.append(Waypoint(float(row["x"]), float(row["y"]), speed))
+        return points
 
-        if len(points) < 2:
-            raise rospy.ROSInitException("at least two waypoint rows are required")
+    def _load_xyz_waypoints(self, path):
+        points = []
+        with open(path) as fp:
+            for line in fp:
+                stripped = line.strip()
+                if not stripped or stripped.startswith("#"):
+                    continue
+                cols = stripped.replace(",", " ").split()
+                if len(cols) < 2:
+                    continue
+                points.append(Waypoint(float(cols[0]), float(cols[1]), self.target_speed))
         return points
 
     def _pose_cb(self, msg):
@@ -135,6 +156,7 @@ class StanleyController:
         front_x = self.x + self.wheelbase * math.cos(self.yaw)
         front_y = self.y + self.wheelbase * math.sin(self.yaw)
         target_idx, proj_x, proj_y, segment_yaw = self._nearest_path_projection(front_x, front_y)
+        self.localized_on_path = True
         self.target_idx = max(self.target_idx, target_idx)
 
         yaw_idx = self._advance_index(target_idx, self.path_yaw_preview)
@@ -169,8 +191,12 @@ class StanleyController:
         return self._result(raw_steer, speed, target_idx, heading_error, cte, cte_term, path_yaw, speed_limit)
 
     def _nearest_path_projection(self, x, y):
-        start = max(0, self.target_idx - self.search_back_window)
-        end = min(len(self.waypoints) - 1, self.target_idx + self.search_forward_window)
+        if not self.localized_on_path:
+            start = 0
+            end = len(self.waypoints) - 1
+        else:
+            start = max(0, self.target_idx - self.search_back_window)
+            end = min(len(self.waypoints) - 1, self.target_idx + self.search_forward_window)
         if end <= start:
             start = max(0, len(self.waypoints) - 2)
             end = len(self.waypoints) - 1

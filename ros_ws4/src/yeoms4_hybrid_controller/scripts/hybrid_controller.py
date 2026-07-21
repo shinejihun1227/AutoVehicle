@@ -73,6 +73,7 @@ class HybridController:
         self.yaw = None
         self.speed = 0.0
         self.target_idx = 0
+        self.localized_on_path = False
         self.last_steer = 0.0
         self.last_time = None
         self.finished = False
@@ -100,6 +101,16 @@ class HybridController:
         if not path or not os.path.exists(path):
             raise rospy.ROSInitException("waypoint file not found: %s" % path)
 
+        if path.lower().endswith(".csv"):
+            points = self._load_csv_waypoints(path)
+        else:
+            points = self._load_xyz_waypoints(path)
+
+        if len(points) < 2:
+            raise rospy.ROSInitException("at least two waypoint rows are required")
+        return points
+
+    def _load_csv_waypoints(self, path):
         points = []
         with open(path, newline="") as fp:
             reader = csv.DictReader(fp)
@@ -108,9 +119,19 @@ class HybridController:
                     continue
                 speed = float(row.get("target_speed") or self.target_speed)
                 points.append(Waypoint(float(row["x"]), float(row["y"]), speed))
+        return points
 
-        if len(points) < 2:
-            raise rospy.ROSInitException("at least two waypoint rows are required")
+    def _load_xyz_waypoints(self, path):
+        points = []
+        with open(path) as fp:
+            for line in fp:
+                stripped = line.strip()
+                if not stripped or stripped.startswith("#"):
+                    continue
+                cols = stripped.replace(",", " ").split()
+                if len(cols) < 2:
+                    continue
+                points.append(Waypoint(float(cols[0]), float(cols[1]), self.target_speed))
         return points
 
     def _pose_cb(self, msg):
@@ -143,6 +164,7 @@ class HybridController:
 
     def _compute_control(self):
         nearest_idx, proj_x, proj_y, segment_yaw = self._nearest_path_projection(self.x, self.y)
+        self.localized_on_path = True
         self.target_idx = max(self.target_idx, nearest_idx)
         curvature = self._estimate_path_curvature(nearest_idx, self.curvature_preview)
 
@@ -191,8 +213,12 @@ class HybridController:
         return self._clamp(steer, -self.max_steer, self.max_steer)
 
     def _nearest_path_projection(self, x, y):
-        start = max(0, self.target_idx - self.search_back_window)
-        end = min(len(self.waypoints) - 1, self.target_idx + self.search_forward_window)
+        if not self.localized_on_path:
+            start = 0
+            end = len(self.waypoints) - 1
+        else:
+            start = max(0, self.target_idx - self.search_back_window)
+            end = min(len(self.waypoints) - 1, self.target_idx + self.search_forward_window)
         if end <= start:
             start = max(0, len(self.waypoints) - 2)
             end = len(self.waypoints) - 1

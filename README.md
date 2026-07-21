@@ -2,6 +2,8 @@
 
 This repository contains comparison ROS workspaces for MORAI + ROS Noetic autonomous driving experiments.
 
+For the confirmed competition global path, see `GLOBAL_PATH_USAGE.md`.
+
 ## Workspaces
 
 - `ros_ws`: Pure Pursuit baseline.
