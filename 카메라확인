@@ -1,0 +1,22 @@
+cd ~/AutoVehicle
+git pull
+
+cd ~/morai_stanley_ws
+
+rm -rf src/yeoms_camera_bridge
+rm -rf src/yeoms_camera_perception
+rm -rf src/yeoms_camera_bringup
+
+cp -r ~/AutoVehicle/ros_ws_camera/src/yeoms_camera_bridge src/
+cp -r ~/AutoVehicle/ros_ws_camera/src/yeoms_camera_perception src/
+cp -r ~/AutoVehicle/ros_ws_camera/src/yeoms_camera_bringup src/
+
+chmod +x src/yeoms_camera_bridge/scripts/*.py
+chmod +x src/yeoms_camera_perception/scripts/*.py
+
+source /opt/ros/noetic/setup.bash
+catkin_make
+source devel/setup.bash
+rospack profile
+
+roslaunch yeoms_camera_bringup camera_udp_only.launch camera_port:=1001
