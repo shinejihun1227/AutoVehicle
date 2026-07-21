@@ -1,0 +1,11 @@
+cd ~/morai_stanley_ws/src
+git clone -b beta_drive https://github.com/MORAI-Autonomous/MORAI-ROS_morai_msgs.git morai_msgs
+
+cd ~/morai_stanley_ws
+source /opt/ros/noetic/setup.bash
+catkin_make
+source devel/setup.bash
+
+rosmsg show morai_msgs/CtrlCmd
+rosmsg show morai_msgs/EgoVehicleStatus
+rosmsg show morai_msgs/GPSMessage
