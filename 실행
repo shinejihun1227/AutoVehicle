@@ -184,3 +184,29 @@ rostopic echo /perception/lidar/packet_info
 rostopic echo /perception/lidar/nearest_obstacle_m
 rostopic echo /perception/lidar/obstacle_stop_required
 rostopic echo /perception/lidar/obstacle_summary
+
+
+
+
+mmmmm
+
+cd ~/AutoVehicle
+git pull
+
+rm -rf ~/morai_stanley_ws/src/*
+cp -r ~/AutoVehicle/ros_ws/src/* ~/morai_stanley_ws/src/
+cp -r ~/AutoVehicle/ros_ws_lidar/src/* ~/morai_stanley_ws/src/
+
+find ~/morai_stanley_ws/src -path "*/scripts/*.py" -exec chmod +x {} \;
+
+source /opt/ros/noetic/setup.bash
+cd ~/morai_stanley_ws
+catkin_make
+source devel/setup.bash
+우선 Pure Pursuit만 낮은 속도로 다시 실행하세요:
+roslaunch yeoms_bringup drive_pure_pursuit.launch \
+  waypoint_file:=$HOME/morai_recorded_paths/2026_molit_comp_global_path.txt \
+  target_speed_mps:=3.0 \
+  max_speed_mps:=3.0 \
+  align_path_to_ego_start:=true \
+  rotate_path_to_ego_yaw:=false
