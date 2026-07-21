@@ -7,6 +7,7 @@
   <arg name="min_lookahead_m" default="3.0" />
   <arg name="max_lookahead_m" default="14.0" />
   <arg name="start_from_first_waypoint" default="true" />
+  <arg name="align_path_to_ego_start" default="true" />
   <arg name="require_start_pose" default="false" />
   <arg name="start_position_tolerance_m" default="3.0" />
   <arg name="start_yaw_tolerance_rad" default="0.7" />
@@ -22,6 +23,7 @@
     <arg name="min_lookahead_m" value="$(arg min_lookahead_m)" />
     <arg name="max_lookahead_m" value="$(arg max_lookahead_m)" />
     <arg name="start_from_first_waypoint" value="$(arg start_from_first_waypoint)" />
+    <arg name="align_path_to_ego_start" value="$(arg align_path_to_ego_start)" />
     <arg name="require_start_pose" value="$(arg require_start_pose)" />
     <arg name="start_position_tolerance_m" value="$(arg start_position_tolerance_m)" />
     <arg name="start_yaw_tolerance_rad" value="$(arg start_yaw_tolerance_rad)" />

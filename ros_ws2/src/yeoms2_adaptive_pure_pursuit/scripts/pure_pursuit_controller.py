@@ -59,6 +59,7 @@ class AdaptivePurePursuitController:
         self.start_yaw_tolerance = float(rospy.get_param(ns + "/start_yaw_tolerance_rad", 0.7))
 
         waypoint_file = os.path.expanduser(rospy.get_param(ns + "/waypoint_file", ""))
+        self.align_path_to_ego_start = bool(rospy.get_param(ns + "/align_path_to_ego_start", True))
         self.waypoints = self._load_waypoints(waypoint_file)
         self.start_yaw = self._path_start_yaw()
 
@@ -71,6 +72,7 @@ class AdaptivePurePursuitController:
         self.last_steer = 0.0
         self.last_time = None
         self.finished = False
+        self.path_aligned = False
 
         rospy.Subscriber(self.pose_topic, PoseStamped, self._pose_cb, queue_size=1)
         rospy.Subscriber(self.twist_topic, TwistStamped, self._twist_cb, queue_size=1)
@@ -143,6 +145,8 @@ class AdaptivePurePursuitController:
                 rospy.logwarn_throttle(2.0, "waiting for localization")
                 rate.sleep()
                 continue
+
+            self._align_path_to_ego_start_if_needed()
 
             if self.require_start_pose and not self._start_pose_ready():
                 self._publish_cmd(0.0, 0.0)
@@ -249,6 +253,39 @@ class AdaptivePurePursuitController:
             if math.hypot(wp.x - first.x, wp.y - first.y) > 1.0e-6:
                 return math.atan2(wp.y - first.y, wp.x - first.x)
         return 0.0
+
+    def _align_path_to_ego_start_if_needed(self):
+        if self.path_aligned or not self.align_path_to_ego_start:
+            return
+
+        origin = self.waypoints[0]
+        origin_x = origin.x
+        origin_y = origin.y
+        original_start_yaw = self.start_yaw
+        yaw_delta = self._normalize_angle(self.yaw - original_start_yaw)
+        cos_yaw = math.cos(yaw_delta)
+        sin_yaw = math.sin(yaw_delta)
+
+        for wp in self.waypoints:
+            dx = wp.x - origin_x
+            dy = wp.y - origin_y
+            wp.x = self.x + cos_yaw * dx - sin_yaw * dy
+            wp.y = self.y + sin_yaw * dx + cos_yaw * dy
+
+        self.start_yaw = self.yaw
+        self.target_idx = 0
+        self.localized_on_path = True
+        self.path_aligned = True
+        self._publish_path()
+        rospy.logwarn(
+            "Aligned path to ego start pose: original_start=(%.3f, %.3f, %.1f deg), ego_start=(%.3f, %.3f, %.1f deg)",
+            origin_x,
+            origin_y,
+            math.degrees(original_start_yaw),
+            self.x,
+            self.y,
+            math.degrees(self.yaw),
+        )
 
     def _start_pose_ready(self):
         pos_err, yaw_err = self._start_pose_error()

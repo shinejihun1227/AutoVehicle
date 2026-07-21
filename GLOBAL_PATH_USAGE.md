@@ -24,13 +24,33 @@ start_from_first_waypoint:=true
 
 This prevents the controller from starting at an arbitrary nearest point on a closed or loop-like course.
 
+The controllers also align the loaded path to the first received ego pose by default:
+
+```text
+align_path_to_ego_start:=true
+```
+
+This is important for the confirmed competition TXT path. The TXT file stores MORAI/K-City map-like `x y z` coordinates, while the current GPS localizer publishes an ENU frame using the first GPS packet as `(0, 0)`. Without alignment, the controller can see the path and the vehicle in different coordinate frames, which often appears as an immediate wrong-side turn at launch.
+
+With `align_path_to_ego_start:=true`, the controller translates and rotates the entire path once at startup:
+
+- TXT or CSV first waypoint becomes the current ego position.
+- Path first-segment heading becomes the current ego yaw.
+- After that one-time transform, the controller tracks the path normally in the same local frame as `/localization/ego_pose`.
+
+If you intentionally set MORAI ego pose to the absolute map path coordinates and use a localization source that already publishes the same map frame, turn this off:
+
+```text
+align_path_to_ego_start:=false
+```
+
 Important limitation:
 
 ```text
 ROS CtrlCmd cannot teleport or rotate the MORAI ego vehicle.
 ```
 
-The controller can force the tracking target to begin at the first waypoint, but the MORAI ego vehicle's actual start position and yaw must still be set in MORAI or in the scenario start setting.
+The controller can force the tracking target to begin at the first waypoint and can transform the path into the ego local frame, but it cannot physically move the MORAI ego vehicle.
 
 When each controller starts, it prints the required start pose:
 
@@ -75,7 +95,8 @@ roslaunch yeoms_bringup drive_pure_pursuit.launch \
   waypoint_file:=$HOME/morai_recorded_paths/2026_molit_comp_global_path.txt \
   target_speed_mps:=3.0 \
   max_speed_mps:=3.0 \
-  start_from_first_waypoint:=true
+  start_from_first_waypoint:=true \
+  align_path_to_ego_start:=true
 ```
 
 Then compare the other controllers using the same file.
@@ -90,7 +111,8 @@ roslaunch yeoms2_bringup drive_adaptive_pure_pursuit.launch \
   min_curve_speed_mps:=2.0 \
   min_lookahead_m:=3.0 \
   max_lookahead_m:=14.0 \
-  start_from_first_waypoint:=true
+  start_from_first_waypoint:=true \
+  align_path_to_ego_start:=true
 ```
 
 Stanley:
@@ -103,7 +125,8 @@ roslaunch yeoms3_bringup drive_stanley.launch \
   stanley_gain:=0.30 \
   softening_gain:=2.5 \
   min_curve_speed_mps:=2.0 \
-  start_from_first_waypoint:=true
+  start_from_first_waypoint:=true \
+  align_path_to_ego_start:=true
 ```
 
 Hybrid:
@@ -119,7 +142,8 @@ roslaunch yeoms4_bringup drive_hybrid.launch \
   min_curve_speed_mps:=2.0 \
   min_lookahead_m:=3.0 \
   max_lookahead_m:=12.0 \
-  start_from_first_waypoint:=true
+  start_from_first_waypoint:=true \
+  align_path_to_ego_start:=true
 ```
 
 ## What Changed In Code
@@ -148,7 +172,7 @@ Use the topic that matches the controller you are running.
 
 If the vehicle immediately drives backward, turns toward the wrong side, or targets the end of the path, check:
 
-- whether MORAI start position matches the path direction,
+- whether `align_path_to_ego_start:=true` is enabled when using the competition TXT path with GPS-origin localization,
 - whether the path file is copied correctly,
 - whether GPS localization uses the same map coordinate convention,
 - whether `invert_steering` is still correct in the UDP CtrlCmd sender config.

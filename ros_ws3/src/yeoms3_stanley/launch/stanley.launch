@@ -8,6 +8,7 @@
   <arg name="softening_gain" default="2.0" />
   <arg name="min_curve_speed_mps" default="2.5" />
   <arg name="start_from_first_waypoint" default="true" />
+  <arg name="align_path_to_ego_start" default="true" />
   <arg name="require_start_pose" default="false" />
   <arg name="start_position_tolerance_m" default="3.0" />
   <arg name="start_yaw_tolerance_rad" default="0.7" />
@@ -21,6 +22,7 @@
   <param name="/stanley/softening_gain" value="$(arg softening_gain)" />
   <param name="/stanley/min_curve_speed_mps" value="$(arg min_curve_speed_mps)" />
   <param name="/stanley/start_from_first_waypoint" value="$(arg start_from_first_waypoint)" />
+  <param name="/stanley/align_path_to_ego_start" value="$(arg align_path_to_ego_start)" />
   <param name="/stanley/require_start_pose" value="$(arg require_start_pose)" />
   <param name="/stanley/start_position_tolerance_m" value="$(arg start_position_tolerance_m)" />
   <param name="/stanley/start_yaw_tolerance_rad" value="$(arg start_yaw_tolerance_rad)" />

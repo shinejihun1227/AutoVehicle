@@ -10,6 +10,7 @@
   <arg name="curve_lookahead_heading_rad" default="0.35" />
   <arg name="curve_min_lookahead_m" default="3.0" />
   <arg name="start_from_first_waypoint" default="true" />
+  <arg name="align_path_to_ego_start" default="true" />
   <arg name="require_start_pose" default="false" />
   <arg name="start_position_tolerance_m" default="3.0" />
   <arg name="start_yaw_tolerance_rad" default="0.7" />
@@ -24,6 +25,7 @@
   <param name="/pure_pursuit/curve_lookahead_heading_rad" value="$(arg curve_lookahead_heading_rad)" />
   <param name="/pure_pursuit/curve_min_lookahead_m" value="$(arg curve_min_lookahead_m)" />
   <param name="/pure_pursuit/start_from_first_waypoint" value="$(arg start_from_first_waypoint)" />
+  <param name="/pure_pursuit/align_path_to_ego_start" value="$(arg align_path_to_ego_start)" />
   <param name="/pure_pursuit/require_start_pose" value="$(arg require_start_pose)" />
   <param name="/pure_pursuit/start_position_tolerance_m" value="$(arg start_position_tolerance_m)" />
   <param name="/pure_pursuit/start_yaw_tolerance_rad" value="$(arg start_yaw_tolerance_rad)" />
