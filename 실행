@@ -1,3 +1,20 @@
+1. 전체 최신화
+cd ~/AutoVehicle
+git pull
+
+
+2. 대회 경로 파일 위치
+대회 경로 파일은 여기에 두세요.
+mkdir -p ~/morai_recorded_paths
+cp ~/Downloads/2026_molit_comp_global_path.txt ~/morai_recorded_paths/
+
+이후 실행할 때 공통으로 이 경로를 씁니다.
+$HOME/morai_recorded_paths/2026_molit_comp_global_path.txt
+
+
+3. ros_ws: Pure Pursuit
+
+
 cd ~/morai_stanley_ws
 
 rm -rf src/yeoms_base_bridge src/yeoms_bringup src/yeoms_path_recorder src/yeoms_pure_pursuit
@@ -15,8 +32,155 @@ source /opt/ros/noetic/setup.bash
 catkin_make
 source devel/setup.bash
 rospack profile
-
+실행:
 roslaunch yeoms_bringup drive_pure_pursuit.launch \
   waypoint_file:=$HOME/morai_recorded_paths/2026_molit_comp_global_path.txt \
   target_speed_mps:=3.0 \
   max_speed_mps:=3.0
+
+
+
+4. ros_ws2: Adaptive Pure Pursuit
+
+
+cd ~/morai_stanley_ws
+
+rm -rf src/yeoms2_base_bridge src/yeoms2_bringup src/yeoms2_path_recorder src/yeoms2_adaptive_pure_pursuit
+
+cp -r ~/AutoVehicle/ros_ws2/src/yeoms2_base_bridge src/
+cp -r ~/AutoVehicle/ros_ws2/src/yeoms2_bringup src/
+cp -r ~/AutoVehicle/ros_ws2/src/yeoms2_path_recorder src/
+cp -r ~/AutoVehicle/ros_ws2/src/yeoms2_adaptive_pure_pursuit src/
+
+chmod +x src/yeoms2_base_bridge/scripts/*.py
+chmod +x src/yeoms2_path_recorder/scripts/*.py
+chmod +x src/yeoms2_adaptive_pure_pursuit/scripts/*.py
+
+source /opt/ros/noetic/setup.bash
+catkin_make
+source devel/setup.bash
+rospack profile
+실행:
+roslaunch yeoms2_bringup drive_adaptive_pure_pursuit.launch \
+  waypoint_file:=$HOME/morai_recorded_paths/2026_molit_comp_global_path.txt \
+  target_speed_mps:=3.0 \
+  max_speed_mps:=3.0 \
+  min_curve_speed_mps:=2.0 \
+  min_lookahead_m:=3.0 \
+  max_lookahead_m:=14.0
+
+
+5. ros_ws3: Stanley
+
+
+cd ~/morai_stanley_ws
+
+rm -rf src/yeoms3_base_bridge src/yeoms3_bringup src/yeoms3_path_recorder src/yeoms3_stanley
+
+cp -r ~/AutoVehicle/ros_ws3/src/yeoms3_base_bridge src/
+cp -r ~/AutoVehicle/ros_ws3/src/yeoms3_bringup src/
+cp -r ~/AutoVehicle/ros_ws3/src/yeoms3_path_recorder src/
+cp -r ~/AutoVehicle/ros_ws3/src/yeoms3_stanley src/
+
+chmod +x src/yeoms3_base_bridge/scripts/*.py
+chmod +x src/yeoms3_path_recorder/scripts/*.py
+chmod +x src/yeoms3_stanley/scripts/*.py
+
+source /opt/ros/noetic/setup.bash
+catkin_make
+source devel/setup.bash
+rospack profile
+실행:
+roslaunch yeoms3_bringup drive_stanley.launch \
+  waypoint_file:=$HOME/morai_recorded_paths/2026_molit_comp_global_path.txt \
+  target_speed_mps:=3.0 \
+  max_speed_mps:=3.0 \
+  stanley_gain:=0.30 \
+  softening_gain:=2.5 \
+  min_curve_speed_mps:=2.0
+6. ros_ws4: Stanley + Pure Pursuit Hybrid
+cd ~/morai_stanley_ws
+
+rm -rf src/yeoms4_base_bridge src/yeoms4_bringup src/yeoms4_path_recorder src/yeoms4_hybrid_controller
+
+cp -r ~/AutoVehicle/ros_ws4/src/yeoms4_base_bridge src/
+cp -r ~/AutoVehicle/ros_ws4/src/yeoms4_bringup src/
+cp -r ~/AutoVehicle/ros_ws4/src/yeoms4_path_recorder src/
+cp -r ~/AutoVehicle/ros_ws4/src/yeoms4_hybrid_controller src/
+
+chmod +x src/yeoms4_base_bridge/scripts/*.py
+chmod +x src/yeoms4_path_recorder/scripts/*.py
+chmod +x src/yeoms4_hybrid_controller/scripts/*.py
+
+source /opt/ros/noetic/setup.bash
+catkin_make
+source devel/setup.bash
+rospack profile
+실행:
+roslaunch yeoms4_bringup drive_hybrid.launch \
+  waypoint_file:=$HOME/morai_recorded_paths/2026_molit_comp_global_path.txt \
+  target_speed_mps:=3.0 \
+  max_speed_mps:=3.0 \
+  hybrid_stanley_weight:=0.40 \
+  stanley_gain:=0.30 \
+  softening_gain:=2.5 \
+  min_curve_speed_mps:=2.0 \
+  min_lookahead_m:=3.0 \
+  max_lookahead_m:=12.0
+7. Camera 실습
+cd ~/morai_stanley_ws
+
+rm -rf src/yeoms_camera_bridge src/yeoms_camera_perception src/yeoms_camera_bringup
+
+cp -r ~/AutoVehicle/ros_ws_camera/src/yeoms_camera_bridge src/
+cp -r ~/AutoVehicle/ros_ws_camera/src/yeoms_camera_perception src/
+cp -r ~/AutoVehicle/ros_ws_camera/src/yeoms_camera_bringup src/
+
+chmod +x src/yeoms_camera_bridge/scripts/*.py
+chmod +x src/yeoms_camera_perception/scripts/*.py
+
+source /opt/ros/noetic/setup.bash
+catkin_make
+source devel/setup.bash
+rospack profile
+카메라 3대 수신:
+roslaunch yeoms_camera_bringup multi_camera_udp_only.launch \
+  front_port:=1001 \
+  left_port:=1011 \
+  right_port:=1021
+Front perception:
+roslaunch yeoms_camera_bringup camera_perception.launch camera_port:=1001
+확인:
+rostopic hz /sensors/camera/front/compressed
+rostopic hz /sensors/camera/left/compressed
+rostopic hz /sensors/camera/right/compressed
+rostopic echo /perception/camera/front/lane_offset_px
+rostopic echo /perception/camera/front/traffic_light_state
+rostopic echo /perception/camera/front/stop_line_detected
+
+8. LiDAR 실습
+cd ~/morai_stanley_ws
+
+rm -rf src/yeoms_lidar_bridge src/yeoms_lidar_perception src/yeoms_lidar_bringup
+
+cp -r ~/AutoVehicle/ros_ws_lidar/src/yeoms_lidar_bridge src/
+cp -r ~/AutoVehicle/ros_ws_lidar/src/yeoms_lidar_perception src/
+cp -r ~/AutoVehicle/ros_ws_lidar/src/yeoms_lidar_bringup src/
+
+chmod +x src/yeoms_lidar_bridge/scripts/*.py
+chmod +x src/yeoms_lidar_perception/scripts/*.py
+
+source /opt/ros/noetic/setup.bash
+catkin_make
+source devel/setup.bash
+rospack profile
+LiDAR 수신:
+roslaunch yeoms_lidar_bringup lidar_udp_only.launch lidar_port:=2001
+LiDAR 장애물 판단:
+roslaunch yeoms_lidar_bringup lidar_obstacle_perception.launch lidar_port:=2001
+확인:
+rostopic hz /sensors/lidar/points
+rostopic echo /perception/lidar/packet_info
+rostopic echo /perception/lidar/nearest_obstacle_m
+rostopic echo /perception/lidar/obstacle_stop_required
+rostopic echo /perception/lidar/obstacle_summary
