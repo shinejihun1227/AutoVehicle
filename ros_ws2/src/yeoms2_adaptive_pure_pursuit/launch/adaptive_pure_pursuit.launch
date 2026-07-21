@@ -9,6 +9,7 @@
   <arg name="max_lookahead_m" default="14.0" />
   <arg name="start_from_first_waypoint" default="true" />
   <arg name="align_path_to_ego_start" default="true" />
+  <arg name="rotate_path_to_ego_yaw" default="false" />
   <arg name="require_start_pose" default="false" />
   <arg name="start_position_tolerance_m" default="3.0" />
   <arg name="start_yaw_tolerance_rad" default="0.7" />
@@ -23,6 +24,7 @@
   <param name="/adaptive_pure_pursuit/max_lookahead_m" value="$(arg max_lookahead_m)" />
   <param name="/adaptive_pure_pursuit/start_from_first_waypoint" value="$(arg start_from_first_waypoint)" />
   <param name="/adaptive_pure_pursuit/align_path_to_ego_start" value="$(arg align_path_to_ego_start)" />
+  <param name="/adaptive_pure_pursuit/rotate_path_to_ego_yaw" value="$(arg rotate_path_to_ego_yaw)" />
   <param name="/adaptive_pure_pursuit/require_start_pose" value="$(arg require_start_pose)" />
   <param name="/adaptive_pure_pursuit/start_position_tolerance_m" value="$(arg start_position_tolerance_m)" />
   <param name="/adaptive_pure_pursuit/start_yaw_tolerance_rad" value="$(arg start_yaw_tolerance_rad)" />

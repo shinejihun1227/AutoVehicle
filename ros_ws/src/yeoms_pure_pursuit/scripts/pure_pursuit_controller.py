@@ -53,6 +53,7 @@ class PurePursuitController:
 
         waypoint_file = os.path.expanduser(rospy.get_param(ns + "/waypoint_file", ""))
         self.align_path_to_ego_start = bool(rospy.get_param(ns + "/align_path_to_ego_start", True))
+        self.rotate_path_to_ego_yaw = bool(rospy.get_param(ns + "/rotate_path_to_ego_yaw", False))
         self.waypoints = self._load_waypoints(waypoint_file)
         self.start_yaw = self._path_start_yaw()
 
@@ -243,7 +244,7 @@ class PurePursuitController:
         origin_x = origin.x
         origin_y = origin.y
         original_start_yaw = self.start_yaw
-        yaw_delta = self._normalize_angle(self.yaw - original_start_yaw)
+        yaw_delta = self._normalize_angle(self.yaw - original_start_yaw) if self.rotate_path_to_ego_yaw else 0.0
         cos_yaw = math.cos(yaw_delta)
         sin_yaw = math.sin(yaw_delta)
 
@@ -259,13 +260,14 @@ class PurePursuitController:
         self.path_aligned = True
         self._publish_path()
         rospy.logwarn(
-            "Aligned path to ego start pose: original_start=(%.3f, %.3f, %.1f deg), ego_start=(%.3f, %.3f, %.1f deg)",
+            "Aligned path to ego start pose: original_start=(%.3f, %.3f, %.1f deg), ego_start=(%.3f, %.3f, %.1f deg), rotate=%s",
             origin_x,
             origin_y,
             math.degrees(original_start_yaw),
             self.x,
             self.y,
             math.degrees(self.yaw),
+            self.rotate_path_to_ego_yaw,
         )
 
     def _start_pose_ready(self):

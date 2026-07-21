@@ -44,7 +44,8 @@ Initial launch:
 
 - Check whether the vehicle immediately turns in the wrong direction.
 - If this happens in every algorithm, suspect coordinate-frame mismatch, yaw convention, steering sign, or route direction before tuning controller gains.
-- For the competition TXT path with GPS-origin localization, keep `align_path_to_ego_start:=true` so the path is rotated and translated into the same local frame as `/localization/ego_pose`.
+- For the competition TXT path with GPS-origin localization, keep `align_path_to_ego_start:=true` so the path is translated into the same local frame as `/localization/ego_pose`.
+- Keep `rotate_path_to_ego_yaw:=false` unless the initial localization yaw is verified. GPS yaw is often unreliable before the vehicle moves.
 - If this happens only in Stanley or Hybrid, reduce Stanley gain or Stanley blend weight.
 
 Left and right turns:

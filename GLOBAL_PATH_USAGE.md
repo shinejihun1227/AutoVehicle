@@ -32,11 +32,24 @@ align_path_to_ego_start:=true
 
 This is important for the confirmed competition TXT path. The TXT file stores MORAI/K-City map-like `x y z` coordinates, while the current GPS localizer publishes an ENU frame using the first GPS packet as `(0, 0)`. Without alignment, the controller can see the path and the vehicle in different coordinate frames, which often appears as an immediate wrong-side turn at launch.
 
-With `align_path_to_ego_start:=true`, the controller translates and rotates the entire path once at startup:
+With `align_path_to_ego_start:=true`, the controller translates the entire path once at startup:
 
 - TXT or CSV first waypoint becomes the current ego position.
-- Path first-segment heading becomes the current ego yaw.
 - After that one-time transform, the controller tracks the path normally in the same local frame as `/localization/ego_pose`.
+
+The controller does not rotate the path by default:
+
+```text
+rotate_path_to_ego_yaw:=false
+```
+
+This is intentional because GPS-derived yaw is unreliable while the vehicle is stopped or moving very slowly. If you rotate the path using an unstable initial yaw, the whole route can be pointed in the wrong direction and the vehicle may fail to follow it.
+
+Only use this option after confirming the initial `/localization/ego_pose` yaw is correct:
+
+```text
+rotate_path_to_ego_yaw:=true
+```
 
 If you intentionally set MORAI ego pose to the absolute map path coordinates and use a localization source that already publishes the same map frame, turn this off:
 
@@ -96,7 +109,8 @@ roslaunch yeoms_bringup drive_pure_pursuit.launch \
   target_speed_mps:=3.0 \
   max_speed_mps:=3.0 \
   start_from_first_waypoint:=true \
-  align_path_to_ego_start:=true
+  align_path_to_ego_start:=true \
+  rotate_path_to_ego_yaw:=false
 ```
 
 Then compare the other controllers using the same file.
@@ -112,7 +126,8 @@ roslaunch yeoms2_bringup drive_adaptive_pure_pursuit.launch \
   min_lookahead_m:=3.0 \
   max_lookahead_m:=14.0 \
   start_from_first_waypoint:=true \
-  align_path_to_ego_start:=true
+  align_path_to_ego_start:=true \
+  rotate_path_to_ego_yaw:=false
 ```
 
 Stanley:
@@ -126,7 +141,8 @@ roslaunch yeoms3_bringup drive_stanley.launch \
   softening_gain:=2.5 \
   min_curve_speed_mps:=2.0 \
   start_from_first_waypoint:=true \
-  align_path_to_ego_start:=true
+  align_path_to_ego_start:=true \
+  rotate_path_to_ego_yaw:=false
 ```
 
 Hybrid:
@@ -143,7 +159,8 @@ roslaunch yeoms4_bringup drive_hybrid.launch \
   min_lookahead_m:=3.0 \
   max_lookahead_m:=12.0 \
   start_from_first_waypoint:=true \
-  align_path_to_ego_start:=true
+  align_path_to_ego_start:=true \
+  rotate_path_to_ego_yaw:=false
 ```
 
 ## What Changed In Code
