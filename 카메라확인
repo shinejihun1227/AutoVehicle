@@ -1,3 +1,12 @@
+ros_ws_camera/
+  src/
+    yeoms_camera_bridge/
+      MORAI Camera UDP -> ROS CompressedImage 변환
+    yeoms_camera_perception/
+      차선 오프셋, 신호등 색상 후보, 정지선 후보 처리
+    yeoms_camera_bringup/
+      실행 launch 파일
+Ubuntu 적용 명령어는 아래입니다.
 cd ~/AutoVehicle
 git pull
 
@@ -18,5 +27,17 @@ source /opt/ros/noetic/setup.bash
 catkin_make
 source devel/setup.bash
 rospack profile
-
+실행은 우선 카메라 수신만 먼저 확인하세요.
 roslaunch yeoms_camera_bringup camera_udp_only.launch camera_port:=1001
+수신 확인:
+rostopic hz /sensors/camera/front/compressed
+rostopic echo /perception/camera/frame_info
+그다음 perception까지 실행합니다.
+roslaunch yeoms_camera_bringup camera_perception.launch camera_port:=1001
+확인 토픽:
+rostopic echo /perception/camera/lane_offset_px
+rostopic echo /perception/camera/traffic_light_state
+rostopic echo /perception/camera/stop_line_detected
+만약 cv2 오류가 뜨면 Ubuntu에서 한 번만 설치하면 됩니다.
+sudo apt update
+sudo apt install -y python3-opencv
