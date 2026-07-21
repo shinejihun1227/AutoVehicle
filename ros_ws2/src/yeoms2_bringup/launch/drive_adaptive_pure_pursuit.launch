@@ -6,6 +6,10 @@
   <arg name="use_csv_target_speed" default="false" />
   <arg name="min_lookahead_m" default="3.0" />
   <arg name="max_lookahead_m" default="14.0" />
+  <arg name="start_from_first_waypoint" default="true" />
+  <arg name="require_start_pose" default="false" />
+  <arg name="start_position_tolerance_m" default="3.0" />
+  <arg name="start_yaw_tolerance_rad" default="0.7" />
 
   <include file="$(find yeoms2_base_bridge)/launch/gps_localization.launch" />
 
@@ -17,6 +21,10 @@
     <arg name="use_csv_target_speed" value="$(arg use_csv_target_speed)" />
     <arg name="min_lookahead_m" value="$(arg min_lookahead_m)" />
     <arg name="max_lookahead_m" value="$(arg max_lookahead_m)" />
+    <arg name="start_from_first_waypoint" value="$(arg start_from_first_waypoint)" />
+    <arg name="require_start_pose" value="$(arg require_start_pose)" />
+    <arg name="start_position_tolerance_m" value="$(arg start_position_tolerance_m)" />
+    <arg name="start_yaw_tolerance_rad" value="$(arg start_yaw_tolerance_rad)" />
   </include>
 
   <include file="$(find yeoms2_base_bridge)/launch/ctrl_cmd_sender.launch">

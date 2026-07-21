@@ -6,6 +6,10 @@
   <arg name="stanley_gain" default="0.35" />
   <arg name="softening_gain" default="2.0" />
   <arg name="min_curve_speed_mps" default="2.5" />
+  <arg name="start_from_first_waypoint" default="true" />
+  <arg name="require_start_pose" default="false" />
+  <arg name="start_position_tolerance_m" default="3.0" />
+  <arg name="start_yaw_tolerance_rad" default="0.7" />
 
   <include file="$(find yeoms3_base_bridge)/launch/gps_localization.launch" />
 
@@ -17,6 +21,10 @@
     <arg name="stanley_gain" value="$(arg stanley_gain)" />
     <arg name="softening_gain" value="$(arg softening_gain)" />
     <arg name="min_curve_speed_mps" value="$(arg min_curve_speed_mps)" />
+    <arg name="start_from_first_waypoint" value="$(arg start_from_first_waypoint)" />
+    <arg name="require_start_pose" value="$(arg require_start_pose)" />
+    <arg name="start_position_tolerance_m" value="$(arg start_position_tolerance_m)" />
+    <arg name="start_yaw_tolerance_rad" value="$(arg start_yaw_tolerance_rad)" />
   </include>
 
   <include file="$(find yeoms3_base_bridge)/launch/ctrl_cmd_sender.launch">

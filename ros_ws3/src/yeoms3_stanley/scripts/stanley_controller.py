@@ -50,16 +50,21 @@ class StanleyController:
         self.path_yaw_preview = float(rospy.get_param(ns + "/path_yaw_preview_m", 4.0))
         self.finish_radius = float(rospy.get_param(ns + "/finish_radius_m", 2.0))
         self.stop_at_final = bool(rospy.get_param(ns + "/stop_at_final_waypoint", True))
+        self.start_from_first_waypoint = bool(rospy.get_param(ns + "/start_from_first_waypoint", True))
+        self.require_start_pose = bool(rospy.get_param(ns + "/require_start_pose", False))
+        self.start_position_tolerance = float(rospy.get_param(ns + "/start_position_tolerance_m", 3.0))
+        self.start_yaw_tolerance = float(rospy.get_param(ns + "/start_yaw_tolerance_rad", 0.7))
 
         waypoint_file = os.path.expanduser(rospy.get_param(ns + "/waypoint_file", ""))
         self.waypoints = self._load_waypoints(waypoint_file)
+        self.start_yaw = self._path_start_yaw()
 
         self.x = None
         self.y = None
         self.yaw = None
         self.speed = 0.0
         self.target_idx = 0
-        self.localized_on_path = False
+        self.localized_on_path = self.start_from_first_waypoint
         self.last_steer = 0.0
         self.last_time = None
         self.finished = False
@@ -79,6 +84,7 @@ class StanleyController:
 
         self._publish_path()
         rospy.loginfo("Stanley controller ready: %d waypoints from %s", len(self.waypoints), waypoint_file)
+        self._log_required_start_pose()
 
     def _load_waypoints(self, path):
         if not path or not os.path.exists(path):
@@ -131,6 +137,12 @@ class StanleyController:
         while not rospy.is_shutdown():
             if self.x is None or self.y is None or self.yaw is None:
                 rospy.logwarn_throttle(2.0, "waiting for localization")
+                rate.sleep()
+                continue
+
+            if self.require_start_pose and not self._start_pose_ready():
+                self._publish_cmd(0.0, 0.0)
+                self._warn_start_pose()
                 rate.sleep()
                 continue
 
@@ -228,6 +240,47 @@ class StanleyController:
                 best_dist = dist
 
         return best_idx, best_x, best_y, best_yaw
+
+    def _path_start_yaw(self):
+        first = self.waypoints[0]
+        for idx in range(1, len(self.waypoints)):
+            wp = self.waypoints[idx]
+            if math.hypot(wp.x - first.x, wp.y - first.y) > 1.0e-6:
+                return math.atan2(wp.y - first.y, wp.x - first.x)
+        return 0.0
+
+    def _start_pose_ready(self):
+        pos_err, yaw_err = self._start_pose_error()
+        return pos_err <= self.start_position_tolerance and yaw_err <= self.start_yaw_tolerance
+
+    def _start_pose_error(self):
+        first = self.waypoints[0]
+        pos_err = math.hypot(self.x - first.x, self.y - first.y)
+        yaw_err = abs(self._normalize_angle(self.start_yaw - self.yaw))
+        return pos_err, yaw_err
+
+    def _log_required_start_pose(self):
+        first = self.waypoints[0]
+        rospy.loginfo(
+            "Required MORAI start pose: x=%.3f y=%.3f yaw=%.3f rad %.1f deg",
+            first.x,
+            first.y,
+            self.start_yaw,
+            math.degrees(self.start_yaw),
+        )
+
+    def _warn_start_pose(self):
+        first = self.waypoints[0]
+        pos_err, yaw_err = self._start_pose_error()
+        rospy.logwarn_throttle(
+            2.0,
+            "holding: set MORAI ego near x=%.3f y=%.3f yaw=%.1f deg; current pos_err=%.2f yaw_err=%.1f deg",
+            first.x,
+            first.y,
+            math.degrees(self.start_yaw),
+            pos_err,
+            math.degrees(yaw_err),
+        )
 
     def _advance_index(self, start_idx, distance_m):
         traveled = 0.0

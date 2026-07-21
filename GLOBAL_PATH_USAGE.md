@@ -14,6 +14,43 @@ The path-following controllers in `ros_ws`, `ros_ws2`, `ros_ws3`, and `ros_ws4` 
 
 For TXT paths, `z` is loaded only as map elevation reference and the current lateral controllers use `x, y` for tracking. Speed still comes from the launch argument `target_speed_mps`.
 
+## Start Pose Policy
+
+All path-following controllers now start from waypoint index `0` by default:
+
+```text
+start_from_first_waypoint:=true
+```
+
+This prevents the controller from starting at an arbitrary nearest point on a closed or loop-like course.
+
+Important limitation:
+
+```text
+ROS CtrlCmd cannot teleport or rotate the MORAI ego vehicle.
+```
+
+The controller can force the tracking target to begin at the first waypoint, but the MORAI ego vehicle's actual start position and yaw must still be set in MORAI or in the scenario start setting.
+
+When each controller starts, it prints the required start pose:
+
+```text
+Required MORAI start pose: x=... y=... yaw=... rad ... deg
+```
+
+If you want the controller to wait until the vehicle is near that start pose, run with:
+
+```text
+require_start_pose:=true
+```
+
+Default tolerance:
+
+```text
+start_position_tolerance_m:=3.0
+start_yaw_tolerance_rad:=0.7
+```
+
 ## Ubuntu File Placement
 
 Copy the competition path into the Ubuntu workspace path directory:
@@ -37,7 +74,8 @@ Start with low speed. The path has thousands of points and should be tested with
 roslaunch yeoms_bringup drive_pure_pursuit.launch \
   waypoint_file:=$HOME/morai_recorded_paths/2026_molit_comp_global_path.txt \
   target_speed_mps:=3.0 \
-  max_speed_mps:=3.0
+  max_speed_mps:=3.0 \
+  start_from_first_waypoint:=true
 ```
 
 Then compare the other controllers using the same file.
@@ -51,7 +89,8 @@ roslaunch yeoms2_bringup drive_adaptive_pure_pursuit.launch \
   max_speed_mps:=3.0 \
   min_curve_speed_mps:=2.0 \
   min_lookahead_m:=3.0 \
-  max_lookahead_m:=14.0
+  max_lookahead_m:=14.0 \
+  start_from_first_waypoint:=true
 ```
 
 Stanley:
@@ -63,7 +102,8 @@ roslaunch yeoms3_bringup drive_stanley.launch \
   max_speed_mps:=3.0 \
   stanley_gain:=0.30 \
   softening_gain:=2.5 \
-  min_curve_speed_mps:=2.0
+  min_curve_speed_mps:=2.0 \
+  start_from_first_waypoint:=true
 ```
 
 Hybrid:
@@ -78,7 +118,8 @@ roslaunch yeoms4_bringup drive_hybrid.launch \
   softening_gain:=2.5 \
   min_curve_speed_mps:=2.0 \
   min_lookahead_m:=3.0 \
-  max_lookahead_m:=12.0
+  max_lookahead_m:=12.0 \
+  start_from_first_waypoint:=true
 ```
 
 ## What Changed In Code
