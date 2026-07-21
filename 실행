@@ -1,0 +1,22 @@
+cd ~/morai_stanley_ws
+
+rm -rf src/yeoms_base_bridge src/yeoms_bringup src/yeoms_path_recorder src/yeoms_pure_pursuit
+
+cp -r ~/AutoVehicle/ros_ws/src/yeoms_base_bridge src/
+cp -r ~/AutoVehicle/ros_ws/src/yeoms_bringup src/
+cp -r ~/AutoVehicle/ros_ws/src/yeoms_path_recorder src/
+cp -r ~/AutoVehicle/ros_ws/src/yeoms_pure_pursuit src/
+
+chmod +x src/yeoms_base_bridge/scripts/*.py
+chmod +x src/yeoms_path_recorder/scripts/*.py
+chmod +x src/yeoms_pure_pursuit/scripts/*.py
+
+source /opt/ros/noetic/setup.bash
+catkin_make
+source devel/setup.bash
+rospack profile
+
+roslaunch yeoms_bringup drive_pure_pursuit.launch \
+  waypoint_file:=$HOME/morai_recorded_paths/2026_molit_comp_global_path.txt \
+  target_speed_mps:=3.0 \
+  max_speed_mps:=3.0
