@@ -141,7 +141,8 @@ def main() -> None:
     scan_count = 0
     scan_points: List[Point] = []
     source = ("?", 0)
-    last_log = time.monotonic()
+    last_packet_length = 0
+    last_status_log = time.monotonic()
     print("VLP16 LiDAR monitor listening on {}:{}".format(args.bind_ip, args.port))
     print("No ROS topics or CtrlCmd are used. Press Ctrl+C to stop.")
 
@@ -150,16 +151,23 @@ def main() -> None:
             try:
                 payload, source = sock.recvfrom(2048)
             except socket.timeout:
-                if time.monotonic() - last_log >= 2.0:
-                    last_log = time.monotonic()
+                now = time.monotonic()
+                if now - last_status_log >= 2.0:
+                    last_status_log = now
                     print(
-                        "waiting for LiDAR packets: packets={} valid={}".format(
-                            packet_count, valid_packet_count
+                        "waiting for LiDAR packets: packets={} valid={} "
+                        "last_bytes={} source={}:{}".format(
+                            packet_count,
+                            valid_packet_count,
+                            last_packet_length,
+                            source[0],
+                            source[1],
                         )
                     )
                 continue
 
             packet_count += 1
+            last_packet_length = len(payload)
             points = parse_vlp16_packet(
                 payload,
                 args.min_distance_m,
@@ -171,6 +179,20 @@ def main() -> None:
             if points:
                 valid_packet_count += 1
                 scan_points.extend(points)
+
+            now = time.monotonic()
+            if now - last_status_log >= 2.0:
+                last_status_log = now
+                print(
+                    "LiDAR UDP status: packets={} valid={} last_bytes={} "
+                    "source={}:{}".format(
+                        packet_count,
+                        valid_packet_count,
+                        last_packet_length,
+                        source[0],
+                        source[1],
+                    )
+                )
 
             if packet_count % max(1, args.packets_per_scan) != 0:
                 continue
