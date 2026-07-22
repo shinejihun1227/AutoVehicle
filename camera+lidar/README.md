@@ -119,3 +119,23 @@ coordinates.
 
 Neither monitor opens UDP control port 9093/9094, so they are safe to run
 during manual driving.
+
+## One-command visual launch
+
+The RViz layout is stored in lidar_manual.rviz. To start the LiDAR ROS
+bridge and open RViz with the PointCloud2 topic already configured:
+
+~~~bash
+cd ~/AutoVehicle
+bash camera+lidar/run_lidar_rviz.sh
+~~~
+
+To open the camera OpenCV window and LiDAR RViz together:
+
+~~~bash
+cd ~/AutoVehicle
+bash camera+lidar/run_sensor_viewers.sh
+~~~
+
+Close RViz or press Ctrl+C to stop the bridge and camera monitor. The first
+run may build ros_ws_lidar automatically if its devel/setup.bash is missing.
