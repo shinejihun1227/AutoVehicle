@@ -1,0 +1,24 @@
+GitHub camera+lidar 폴더
+수동 주행 중 Ubuntu에서:
+cd ~/AutoVehicle
+git pull origin main
+sudo apt install -y python3-opencv python3-numpy
+카메라 터미널:
+python3 camera+lidar/camera_monitor.py \
+  --bind-ip 0.0.0.0 \
+  --port 1101 \
+  --save-dir /tmp/morai_front
+화면 표시가 가능하면:
+python3 camera+lidar/camera_monitor.py \
+  --port 1101 \
+  --display
+LiDAR 터미널:
+python3 camera+lidar/lidar_monitor.py \
+  --bind-ip 0.0.0.0 \
+  --port 2001 \
+  --save-dir /tmp/morai_lidar
+확인할 내용:
+카메라: frames, 해상도, traffic, stop_line
+LiDAR: packets, points, nearest_front
+카메라 JPEG는 /tmp/morai_front
+LiDAR CSV는 /tmp/morai_lidar
