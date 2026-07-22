@@ -22,3 +22,82 @@ python3 camera+lidar/lidar_monitor.py \
 LiDAR: packets, points, nearest_front
 카메라 JPEG는 /tmp/morai_front
 LiDAR CSV는 /tmp/morai_lidar
+
+
+cd ~/AutoVehicle
+
+python3 camera+lidar/camera_monitor.py \
+  --bind-ip 0.0.0.0 \
+  --port 1101 \
+  --display \
+  --save-dir /tmp/morai_front
+정상 수신되면 다음과 비슷한 출력이 나옵니다.
+frames=30 fragments=...
+resolution=1280x720
+traffic=unknown
+stop_line=False
+lane_offset_px=...
+카메라에서 현재 확인할 수 있는 기능은 다음과 같습니다.
+MORAI 카메라 UDP 패킷 재조립
+JPEG 정상 복호화
+해상도 확인
+적색·황색·녹색 신호 후보 감지
+정지선 후보 감지
+차선 중심 오프셋 계산
+JPEG 파일 저장
+--display 창이 실행되지 않는 VM 환경이면 저장된 영상을 확인하세요.
+ls -lh /tmp/morai_front
+카메라 패킷이 안 들어올 때
+다른 터미널에서 확인합니다.
+ss -ulnp | grep 1101
+실제 UDP 패킷이 오는지 확인하려면:
+sudo tcpdump -ni any udp port 1101
+MORAI에서 다음을 다시 확인하세요.
+Destination IP가 Ubuntu VM의 실제 IP인지
+Destination Port가 1101인지
+카메라가 활성화되어 있는지
+MORAI 시뮬레이션이 실행 중인지
+LiDAR 확인
+LiDAR는 별도 터미널에서 실행합니다.
+cd ~/AutoVehicle
+
+python3 camera+lidar/lidar_monitor.py \
+  --bind-ip 0.0.0.0 \
+  --port 2001 \
+  --save-dir /tmp/morai_lidar
+정상 수신 시:
+scan=1 packets=76 points=...
+front_roi_points=...
+nearest_front=... m
+LiDAR에서 현재 확인할 수 있는 기능은 다음과 같습니다.
+VLP16 UDP 패킷 파싱
+포인트 수와 패킷 수 확인
+전방 ROI 장애물 수 확인
+가장 가까운 전방 장애물 거리 계산
+포인트 클라우드 CSV 저장
+저장된 LiDAR 데이터:
+ls -lh /tmp/morai_lidar
+LiDAR 포인트를 직관적으로 3D로 보려면 기존 ROS LiDAR workspace를 사용할 수 있습니다.
+cd ~/AutoVehicle/ros_ws_lidar
+source /opt/ros/noetic/setup.bash
+catkin_make
+source devel/setup.bash
+
+roslaunch yeoms_lidar_bringup lidar_udp_only.launch lidar_port:=2001
+다른 터미널에서:
+source /opt/ros/noetic/setup.bash
+rviz
+RViz 설정:
+Fixed Frame: velodyne
+Add → PointCloud2
+Topic: /sensors/lidar/points
+Style: Points
+Size: 0.03 정도
+추천 테스트 순서
+카메라 모니터 실행
+MORAI에서 수동 주행
+카메라 프레임과 저장 JPEG 확인
+LiDAR 모니터 또는 RViz 실행
+전방 장애물 거리와 포인트 클라우드 확인
+이후 카메라와 LiDAR를 결합한 장애물 판단 구현
+마지막 단계에서만 주행 제어와 연결
