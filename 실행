@@ -1,3 +1,7 @@
+cd ~/AutoVehicle
+git pull origin main
+bash 'run+camera/run_camera.sh'
+
 1. 전체 최신화
 cd ~/AutoVehicle
 git pull
