@@ -1,3 +1,5 @@
+python3 -c 'import socket; s=socket.socket(socket.AF_INET,socket.SOCK_DGRAM); s.settimeout(5); s.bind(("0.0.0.0",1101)); d,a=s.recvfrom(65535); print("from=",a,"length=",len(d),"head=",d[:3],"head_hex=",d[:32].hex(),"tail=",d[-2:])'
+sudo tcpdump -ni any -c 3 -vv 'udp dst port 1101'
 Ubuntu에서 처음부터 다시 받는 방법입니다.
 1. 필수 패키지 설치
 sudo apt update
