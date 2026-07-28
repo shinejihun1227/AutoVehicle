@@ -93,6 +93,21 @@ sudo tcpdump -ni any \
   'udp and src host 192.168.0.151 and dst port 1101'
 ```
 
+If `datagrams` increases but `frames=0`, inspect the actual packet layout:
+
+```bash
+cd ~/AutoVehicle/running/roi_camera_integration
+python3 front_camera_packet_probe.py \
+  --bind-ip 0.0.0.0 \
+  --port 1101 \
+  --count 3
+```
+
+The probe prints the datagram length, little/big-endian metadata candidates,
+JPEG marker positions, and `AI`/`EI` marker positions. Stop the old debug
+receiver with `Ctrl+C` before starting the probe because both programs cannot
+bind the same UDP port at the same time.
+
 ## ROI control-loop integration
 
 The ROI runtime already uses `selectors.DefaultSelector`. Add the imports:
