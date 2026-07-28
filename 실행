@@ -1,216 +1,48 @@
-cd ~/AutoVehicle
-git pull origin main
-bash 'run+camera/run_camera.sh'
+Ubuntu에서 처음부터 다시 받는 방법입니다.
+1. 필수 패키지 설치
+sudo apt update
+sudo apt install -y git python3 python3-numpy python3-opencv
+OpenCV 확인:
+python3 -c "import cv2, numpy; print(cv2.__version__)"
+2. GitHub 저장소 다시 clone
+cd ~
 
-1. 전체 최신화
-cd ~/AutoVehicle
-git pull
-
-
-2. 대회 경로 파일 위치
-대회 경로 파일은 여기에 두세요.
-mkdir -p ~/morai_recorded_paths
-cp ~/Downloads/2026_molit_comp_global_path.txt ~/morai_recorded_paths/
-
-이후 실행할 때 공통으로 이 경로를 씁니다.
-$HOME/morai_recorded_paths/2026_molit_comp_global_path.txt
-
-
-3. ros_ws: Pure Pursuit
-
-
-cd ~/morai_stanley_ws
-
-rm -rf src/yeoms_base_bridge src/yeoms_bringup src/yeoms_path_recorder src/yeoms_pure_pursuit
-
-cp -r ~/AutoVehicle/ros_ws/src/yeoms_base_bridge src/
-cp -r ~/AutoVehicle/ros_ws/src/yeoms_bringup src/
-cp -r ~/AutoVehicle/ros_ws/src/yeoms_path_recorder src/
-cp -r ~/AutoVehicle/ros_ws/src/yeoms_pure_pursuit src/
-
-chmod +x src/yeoms_base_bridge/scripts/*.py
-chmod +x src/yeoms_path_recorder/scripts/*.py
-chmod +x src/yeoms_pure_pursuit/scripts/*.py
-
-source /opt/ros/noetic/setup.bash
-catkin_make
-source devel/setup.bash
-rospack profile
-실행:
-roslaunch yeoms_bringup drive_pure_pursuit.launch \
-  waypoint_file:=$HOME/morai_recorded_paths/2026_molit_comp_global_path.txt \
-  target_speed_mps:=3.0 \
-  max_speed_mps:=3.0
-
-
-
-4. ros_ws2: Adaptive Pure Pursuit
-
-
-cd ~/morai_stanley_ws
-
-rm -rf src/yeoms2_base_bridge src/yeoms2_bringup src/yeoms2_path_recorder src/yeoms2_adaptive_pure_pursuit
-
-cp -r ~/AutoVehicle/ros_ws2/src/yeoms2_base_bridge src/
-cp -r ~/AutoVehicle/ros_ws2/src/yeoms2_bringup src/
-cp -r ~/AutoVehicle/ros_ws2/src/yeoms2_path_recorder src/
-cp -r ~/AutoVehicle/ros_ws2/src/yeoms2_adaptive_pure_pursuit src/
-
-chmod +x src/yeoms2_base_bridge/scripts/*.py
-chmod +x src/yeoms2_path_recorder/scripts/*.py
-chmod +x src/yeoms2_adaptive_pure_pursuit/scripts/*.py
-
-source /opt/ros/noetic/setup.bash
-catkin_make
-source devel/setup.bash
-rospack profile
-실행:
-roslaunch yeoms2_bringup drive_adaptive_pure_pursuit.launch \
-  waypoint_file:=$HOME/morai_recorded_paths/2026_molit_comp_global_path.txt \
-  target_speed_mps:=3.0 \
-  max_speed_mps:=3.0 \
-  min_curve_speed_mps:=2.0 \
-  min_lookahead_m:=3.0 \
-  max_lookahead_m:=14.0
-
-
-5. ros_ws3: Stanley
-
-
-cd ~/morai_stanley_ws
-
-rm -rf src/yeoms3_base_bridge src/yeoms3_bringup src/yeoms3_path_recorder src/yeoms3_stanley
-
-cp -r ~/AutoVehicle/ros_ws3/src/yeoms3_base_bridge src/
-cp -r ~/AutoVehicle/ros_ws3/src/yeoms3_bringup src/
-cp -r ~/AutoVehicle/ros_ws3/src/yeoms3_path_recorder src/
-cp -r ~/AutoVehicle/ros_ws3/src/yeoms3_stanley src/
-
-chmod +x src/yeoms3_base_bridge/scripts/*.py
-chmod +x src/yeoms3_path_recorder/scripts/*.py
-chmod +x src/yeoms3_stanley/scripts/*.py
-
-source /opt/ros/noetic/setup.bash
-catkin_make
-source devel/setup.bash
-rospack profile
-실행:
-roslaunch yeoms3_bringup drive_stanley.launch \
-  waypoint_file:=$HOME/morai_recorded_paths/2026_molit_comp_global_path.txt \
-  target_speed_mps:=3.0 \
-  max_speed_mps:=3.0 \
-  stanley_gain:=0.30 \
-  softening_gain:=2.5 \
-  min_curve_speed_mps:=2.0
-6. ros_ws4: Stanley + Pure Pursuit Hybrid
-cd ~/morai_stanley_ws
-
-rm -rf src/yeoms4_base_bridge src/yeoms4_bringup src/yeoms4_path_recorder src/yeoms4_hybrid_controller
-
-cp -r ~/AutoVehicle/ros_ws4/src/yeoms4_base_bridge src/
-cp -r ~/AutoVehicle/ros_ws4/src/yeoms4_bringup src/
-cp -r ~/AutoVehicle/ros_ws4/src/yeoms4_path_recorder src/
-cp -r ~/AutoVehicle/ros_ws4/src/yeoms4_hybrid_controller src/
-
-chmod +x src/yeoms4_base_bridge/scripts/*.py
-chmod +x src/yeoms4_path_recorder/scripts/*.py
-chmod +x src/yeoms4_hybrid_controller/scripts/*.py
-
-source /opt/ros/noetic/setup.bash
-catkin_make
-source devel/setup.bash
-rospack profile
-실행:
-roslaunch yeoms4_bringup drive_hybrid.launch \
-  waypoint_file:=$HOME/morai_recorded_paths/2026_molit_comp_global_path.txt \
-  target_speed_mps:=3.0 \
-  max_speed_mps:=3.0 \
-  hybrid_stanley_weight:=0.40 \
-  stanley_gain:=0.30 \
-  softening_gain:=2.5 \
-  min_curve_speed_mps:=2.0 \
-  min_lookahead_m:=3.0 \
-  max_lookahead_m:=12.0
-7. Camera 실습
-cd ~/morai_stanley_ws
-
-rm -rf src/yeoms_camera_bridge src/yeoms_camera_perception src/yeoms_camera_bringup
-
-cp -r ~/AutoVehicle/ros_ws_camera/src/yeoms_camera_bridge src/
-cp -r ~/AutoVehicle/ros_ws_camera/src/yeoms_camera_perception src/
-cp -r ~/AutoVehicle/ros_ws_camera/src/yeoms_camera_bringup src/
-
-chmod +x src/yeoms_camera_bridge/scripts/*.py
-chmod +x src/yeoms_camera_perception/scripts/*.py
-
-source /opt/ros/noetic/setup.bash
-catkin_make
-source devel/setup.bash
-rospack profile
-카메라 3대 수신:
-roslaunch yeoms_camera_bringup multi_camera_udp_only.launch \
-  front_port:=1001 \
-  left_port:=1011 \
-  right_port:=1021
-Front perception:
-roslaunch yeoms_camera_bringup camera_perception.launch camera_port:=1001
-확인:
-rostopic hz /sensors/camera/front/compressed
-rostopic hz /sensors/camera/left/compressed
-rostopic hz /sensors/camera/right/compressed
-rostopic echo /perception/camera/front/lane_offset_px
-rostopic echo /perception/camera/front/traffic_light_state
-rostopic echo /perception/camera/front/stop_line_detected
-
-8. LiDAR 실습
-cd ~/morai_stanley_ws
-
-rm -rf src/yeoms_lidar_bridge src/yeoms_lidar_perception src/yeoms_lidar_bringup
-
-cp -r ~/AutoVehicle/ros_ws_lidar/src/yeoms_lidar_bridge src/
-cp -r ~/AutoVehicle/ros_ws_lidar/src/yeoms_lidar_perception src/
-cp -r ~/AutoVehicle/ros_ws_lidar/src/yeoms_lidar_bringup src/
-
-chmod +x src/yeoms_lidar_bridge/scripts/*.py
-chmod +x src/yeoms_lidar_perception/scripts/*.py
-
-source /opt/ros/noetic/setup.bash
-catkin_make
-source devel/setup.bash
-rospack profile
-LiDAR 수신:
-roslaunch yeoms_lidar_bringup lidar_udp_only.launch lidar_port:=2001
-LiDAR 장애물 판단:
-roslaunch yeoms_lidar_bringup lidar_obstacle_perception.launch lidar_port:=2001
-확인:
-rostopic hz /sensors/lidar/points
-rostopic echo /perception/lidar/packet_info
-rostopic echo /perception/lidar/nearest_obstacle_m
-rostopic echo /perception/lidar/obstacle_stop_required
-rostopic echo /perception/lidar/obstacle_summary
-
-
-
-
-mmmmm
+git clone https://github.com/shinejihun1227/AutoVehicle.git
 
 cd ~/AutoVehicle
-git pull
+파일이 있는지 확인합니다.
+find running/roi_camera_integration -maxdepth 2 -type f | sort
+다음 구조가 보여야 합니다.
+running/roi_camera_integration/
+├─ tests/
+├─ README.md
+├─ front_camera_udp.py
+├─ front_camera_perception.py
+├─ lane_fusion.py
+└─ ...
+3. 자동 테스트 실행
+중요한 점은 running 폴더에서 실행하는 것입니다.
+cd ~/AutoVehicle/running
 
-rm -rf ~/morai_stanley_ws/src/*
-cp -r ~/AutoVehicle/ros_ws/src/* ~/morai_stanley_ws/src/
-cp -r ~/AutoVehicle/ros_ws_lidar/src/* ~/morai_stanley_ws/src/
+python3 -m unittest discover \
+  -s roi_camera_integration/tests \
+  -p "test_*.py" \
+  -v
+정상이라면 테스트가 통과해야 합니다.
+4. MORAI 전방 카메라 수신 테스트
+아직 주행 제어는 실행하지 않고, 카메라 데이터만 확인합니다.
+cd ~/AutoVehicle/running/roi_camera_integration
 
-find ~/morai_stanley_ws/src -path "*/scripts/*.py" -exec chmod +x {} \;
-
-source /opt/ros/noetic/setup.bash
-cd ~/morai_stanley_ws
-catkin_make
-source devel/setup.bash
-우선 Pure Pursuit만 낮은 속도로 다시 실행하세요:
-roslaunch yeoms_bringup drive_pure_pursuit.launch \
-  waypoint_file:=$HOME/morai_recorded_paths/2026_molit_comp_global_path.txt \
-  target_speed_mps:=3.0 \
-  max_speed_mps:=3.0 \
-  align_path_to_ego_start:=true \
-  rotate_path_to_ego_yaw:=false
+python3 front_camera_debug.py \
+  --bind-ip 0.0.0.0 \
+  --port 1101 \
+  --save-dir /tmp/roi_front_camera
+정상 출력 예시는 다음과 같습니다.
+Front camera listening on 0.0.0.0:1101
+frames=... fragments=... resolution=...
+프레임이 수신되지 않으면 MORAI에서 다음을 확인하세요.
+Destination IP: Ubuntu 컴퓨터 IP
+Destination Port: 1101
+Ubuntu 방화벽 및 네트워크 설정
+수신 여부 확인:
+sudo tcpdump -ni any 'udp dst port 1101'
