@@ -1,7 +1,10 @@
 import struct
 import unittest
 
-from roi_camera_integration.front_camera_udp import MoraiCameraFrameAssembler
+from roi_camera_integration.front_camera_udp import (
+    FrontCameraUdpReceiver,
+    MoraiCameraFrameAssembler,
+)
 
 
 def _packet(sec, nsec, index, payload, tail):
@@ -56,6 +59,15 @@ class MoraiCameraFrameAssemblerTests(unittest.TestCase):
         assembler = MoraiCameraFrameAssembler()
         self.assertIsNone(assembler.feed(_packet(4, 0, 0, b"not-jpeg", b"EI"), 0.0))
         self.assertEqual(assembler.dropped_frame_count, 1)
+
+    def test_receiver_counts_datagrams_and_pending_frames(self):
+        receiver = FrontCameraUdpReceiver(port=0)
+        try:
+            receiver.feed_datagram(_packet(5, 0, 0, b"\xff\xd8a", b"AI"), now_monotonic=0.0)
+            self.assertEqual(receiver.received_datagram_count, 1)
+            self.assertEqual(receiver.assembler.pending_frame_count, 1)
+        finally:
+            receiver.close()
 
 
 if __name__ == "__main__":

@@ -67,6 +67,12 @@ class MoraiCameraFrameAssembler:
         self.invalid_packet_count = 0
         self.dropped_frame_count = 0
 
+    @property
+    def pending_frame_count(self) -> int:
+        """Number of frames currently waiting for one or more fragments."""
+
+        return len(self._frames)
+
     def feed(
         self, packet: bytes, now_monotonic: Optional[float] = None
     ) -> Optional[CameraFrame]:
@@ -181,6 +187,7 @@ class FrontCameraUdpReceiver:
         self.socket.bind((self.bind_ip, self.port))
         self.socket.setblocking(False)
         self.assembler = MoraiCameraFrameAssembler(frame_timeout_sec)
+        self.received_datagram_count = 0
         self.last_frame: Optional[CameraFrame] = None
         self.last_sender: Optional[Tuple[str, int]] = None
 
@@ -193,6 +200,7 @@ class FrontCameraUdpReceiver:
         sender: Optional[Tuple[str, int]] = None,
         now_monotonic: Optional[float] = None,
     ) -> Optional[CameraFrame]:
+        self.received_datagram_count += 1
         frame = self.assembler.feed(packet, now_monotonic)
         if frame is not None:
             self.last_frame = frame
@@ -215,4 +223,3 @@ class FrontCameraUdpReceiver:
 
     def close(self) -> None:
         self.socket.close()
-

@@ -22,6 +22,7 @@ def main() -> None:
     parser.add_argument("--save-dir", default="")
     parser.add_argument("--expected-width", type=int, default=1280)
     parser.add_argument("--expected-height", type=int, default=720)
+    parser.add_argument("--log-period", type=float, default=1.0)
     args = parser.parse_args()
 
     receiver = FrontCameraUdpReceiver(args.bind_ip, args.port)
@@ -31,6 +32,7 @@ def main() -> None:
 
     frame_count = 0
     last_log = time.monotonic()
+    last_observation = None
     print("Front camera listening on {}:{}".format(args.bind_ip, args.port))
     try:
         while True:
@@ -46,15 +48,37 @@ def main() -> None:
                     with open(path, "wb") as output:
                         output.write(frame.jpeg)
 
-                if observation is not None and time.monotonic() - last_log >= 1.0:
-                    last_log = time.monotonic()
+                if observation is not None:
+                    last_observation = (frame, observation)
+
+            now = time.monotonic()
+            if now - last_log >= max(0.1, args.log_period):
+                assembler = receiver.assembler
+                if last_observation is None:
+                    print(
+                        "datagrams={} frames={} invalid={} dropped={} "
+                        "pending={} waiting_for_complete_frame=true".format(
+                            receiver.received_datagram_count,
+                            frame_count,
+                            assembler.invalid_packet_count,
+                            assembler.dropped_frame_count,
+                            assembler.pending_frame_count,
+                        )
+                    )
+                else:
+                    frame, observation = last_observation
                     resolution = "{}x{}".format(observation.width, observation.height)
                     expected = "{}x{}".format(args.expected_width, args.expected_height)
                     print(
-                        "frames={} fragments={} resolution={} expected={} "
+                        "datagrams={} frames={} fragments={} invalid={} "
+                        "dropped={} pending={} resolution={} expected={} "
                         "traffic={}({}) stop_line={} lane_offset_px={}".format(
+                            receiver.received_datagram_count,
                             frame_count,
                             frame.fragment_count,
+                            assembler.invalid_packet_count,
+                            assembler.dropped_frame_count,
+                            assembler.pending_frame_count,
                             resolution,
                             expected,
                             observation.traffic_state,
@@ -63,6 +87,7 @@ def main() -> None:
                             observation.lane_offset_px,
                         )
                     )
+                last_log = now
             time.sleep(0.001)
     except KeyboardInterrupt:
         print("\nStopping Front camera receiver")
@@ -72,4 +97,3 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
-
