@@ -68,8 +68,12 @@ Expected output includes:
 
 ```text
 Front camera listening on 0.0.0.0:1101
-datagrams=... frames=... invalid=... dropped=... pending=... invalid_reasons=...
+datagrams=... frames=... invalid=... dropped=... pending=... source_resolution=1280x720 processing_resolution=640x360 expected=1280x720 ...
 ```
+
+The debug tool reports both resolutions. `source_resolution` is the original
+JPEG resolution from MORAI. `processing_resolution` is the smaller image used
+by the prototype lane/traffic detector; it does not change the received JPEG.
 
 The diagnostic counters distinguish the common failure modes:
 

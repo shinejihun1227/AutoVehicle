@@ -81,14 +81,21 @@ def main() -> None:
                     print(diagnostic + " waiting_for_complete_frame=true")
                 else:
                     frame, observation = last_observation
-                    resolution = "{}x{}".format(observation.width, observation.height)
+                    source_width = observation.source_width or observation.width
+                    source_height = observation.source_height or observation.height
+                    source_resolution = "{}x{}".format(source_width, source_height)
+                    processing_resolution = "{}x{}".format(
+                        observation.width, observation.height
+                    )
                     expected = "{}x{}".format(args.expected_width, args.expected_height)
                     print(
-                        "{} fragments={} resolution={} expected={} "
+                        "{} fragments={} source_resolution={} "
+                        "processing_resolution={} expected={} "
                         "traffic={}({}) stop_line={} lane_offset_px={}".format(
                             diagnostic,
                             frame.fragment_count,
-                            resolution,
+                            source_resolution,
+                            processing_resolution,
                             expected,
                             observation.traffic_state,
                             observation.traffic_score,

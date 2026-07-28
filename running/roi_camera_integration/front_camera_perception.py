@@ -29,6 +29,8 @@ class FrontCameraObservation:
     traffic_score: int
     stop_line_detected: bool
     lane_offset_px: Optional[float]
+    source_width: Optional[int] = None
+    source_height: Optional[int] = None
 
 
 class FrontCameraPerception:
@@ -64,6 +66,7 @@ class FrontCameraPerception:
         if image is None:
             return None
 
+        source_height, source_width = image.shape[:2]
         image = self._resize(image)
         height, width = image.shape[:2]
         traffic_state, traffic_score = self._traffic_light(image)
@@ -77,6 +80,8 @@ class FrontCameraPerception:
             traffic_score=traffic_score,
             stop_line_detected=stop_line,
             lane_offset_px=lane_offset,
+            source_width=source_width,
+            source_height=source_height,
         )
 
     def _resize(self, image):
@@ -134,4 +139,3 @@ class FrontCameraPerception:
         else:
             lane_center = float(np.median(xs))
         return lane_center - width * 0.5
-
