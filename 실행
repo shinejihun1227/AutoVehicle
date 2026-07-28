@@ -48,3 +48,11 @@ Destination Port: 1101
 Ubuntu 방화벽 및 네트워크 설정
 수신 여부 확인:
 sudo tcpdump -ni any 'udp dst port 1101'
+
+
+cd running/roi_camera_integration
+
+python3 front_camera_packet_probe.py \
+  --bind-ip 0.0.0.0 \
+  --port 1101 \
+  --count 3
