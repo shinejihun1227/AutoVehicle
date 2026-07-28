@@ -68,17 +68,22 @@ Expected output includes:
 
 ```text
 Front camera listening on 0.0.0.0:1101
-datagrams=... frames=... invalid=... dropped=... pending=...
+datagrams=... frames=... invalid=... dropped=... pending=... invalid_reasons=...
 ```
 
 The diagnostic counters distinguish the common failure modes:
 
 - `datagrams=0`: Ubuntu's socket is not receiving packets.
-- `datagrams>0, invalid>0`: the received packet header/layout is rejected.
+- `invalid_reasons=invalid_header=...`: the packet header is rejected.
+- `invalid_reasons=payload_size_exceeds_packet=...`: the packet size field
+  does not match the received UDP datagram.
+- `invalid_reasons=invalid_tail=...`: the packet tail is not `AI` or `EI`.
 - `pending>0, frames=0`: fragments are arriving but no complete JPEG has
   been assembled yet.
-- `dropped` increasing: an incomplete or non-JPEG frame expired or was
-  discarded.
+- `non_jpeg` increasing: a frame was assembled but did not start/end with
+  JPEG markers.
+- `timeouts` increasing: an incomplete frame expired before its fragments
+  arrived.
 
 If the resolution is not `1280x720`, check the MORAI sensor setting. If the
 frame count stays at zero, check the UDP IP/port and run:

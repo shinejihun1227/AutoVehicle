@@ -15,6 +15,28 @@ from front_camera_perception import FrontCameraPerception
 from front_camera_udp import FrontCameraUdpReceiver
 
 
+def _diagnostic_summary(receiver, frame_count: int) -> str:
+    assembler = receiver.assembler
+    reasons = ",".join(
+        "{}={}".format(name, count)
+        for name, count in sorted(assembler.invalid_reason_counts.items())
+    ) or "none"
+    return (
+        "datagrams={} frames={} invalid={} dropped={} pending={} "
+        "invalid_reasons={} non_jpeg={} timeouts={} last_error={}"
+    ).format(
+        receiver.received_datagram_count,
+        frame_count,
+        assembler.invalid_packet_count,
+        assembler.dropped_frame_count,
+        assembler.pending_frame_count,
+        reasons,
+        assembler.non_jpeg_frame_count,
+        assembler.expired_frame_count,
+        assembler.last_error_reason or "none",
+    )
+
+
 def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("--bind-ip", default="0.0.0.0")
@@ -54,31 +76,18 @@ def main() -> None:
             now = time.monotonic()
             if now - last_log >= max(0.1, args.log_period):
                 assembler = receiver.assembler
+                diagnostic = _diagnostic_summary(receiver, frame_count)
                 if last_observation is None:
-                    print(
-                        "datagrams={} frames={} invalid={} dropped={} "
-                        "pending={} waiting_for_complete_frame=true".format(
-                            receiver.received_datagram_count,
-                            frame_count,
-                            assembler.invalid_packet_count,
-                            assembler.dropped_frame_count,
-                            assembler.pending_frame_count,
-                        )
-                    )
+                    print(diagnostic + " waiting_for_complete_frame=true")
                 else:
                     frame, observation = last_observation
                     resolution = "{}x{}".format(observation.width, observation.height)
                     expected = "{}x{}".format(args.expected_width, args.expected_height)
                     print(
-                        "datagrams={} frames={} fragments={} invalid={} "
-                        "dropped={} pending={} resolution={} expected={} "
+                        "{} fragments={} resolution={} expected={} "
                         "traffic={}({}) stop_line={} lane_offset_px={}".format(
-                            receiver.received_datagram_count,
-                            frame_count,
+                            diagnostic,
                             frame.fragment_count,
-                            assembler.invalid_packet_count,
-                            assembler.dropped_frame_count,
-                            assembler.pending_frame_count,
                             resolution,
                             expected,
                             observation.traffic_state,

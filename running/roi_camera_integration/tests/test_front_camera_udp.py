@@ -49,16 +49,19 @@ class MoraiCameraFrameAssemblerTests(unittest.TestCase):
         # Any later packet triggers expiration of the incomplete frame.
         assembler.feed(b"bad", 0.3)
         self.assertEqual(assembler.dropped_frame_count, 1)
+        self.assertEqual(assembler.expired_frame_count, 1)
 
     def test_invalid_header_is_rejected(self):
         assembler = MoraiCameraFrameAssembler()
         self.assertIsNone(assembler.feed(b"BAD", 0.0))
         self.assertEqual(assembler.invalid_packet_count, 1)
+        self.assertEqual(assembler.invalid_reason_counts, {"short_packet": 1})
 
     def test_non_jpeg_payload_is_dropped(self):
         assembler = MoraiCameraFrameAssembler()
         self.assertIsNone(assembler.feed(_packet(4, 0, 0, b"not-jpeg", b"EI"), 0.0))
         self.assertEqual(assembler.dropped_frame_count, 1)
+        self.assertEqual(assembler.non_jpeg_frame_count, 1)
 
     def test_receiver_counts_datagrams_and_pending_frames(self):
         receiver = FrontCameraUdpReceiver(port=0)

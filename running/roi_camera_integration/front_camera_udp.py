@@ -66,6 +66,10 @@ class MoraiCameraFrameAssembler:
         self._frames: Dict[Tuple[int, int], _FrameAssembly] = {}
         self.invalid_packet_count = 0
         self.dropped_frame_count = 0
+        self.expired_frame_count = 0
+        self.non_jpeg_frame_count = 0
+        self.invalid_reason_counts: Dict[str, int] = {}
+        self.last_error_reason: Optional[str] = None
 
     @property
     def pending_frame_count(self) -> int:
@@ -84,11 +88,11 @@ class MoraiCameraFrameAssembler:
         try:
             sec, nsec, index, payload_size, payload, tail = self._parse_packet(packet)
         except MoraiCameraPacketError:
-            self.invalid_packet_count += 1
+            self._record_invalid(self._packet_error_reason(packet))
             return None
 
         if index < 0:
-            self.invalid_packet_count += 1
+            self._record_invalid("negative_index")
             return None
 
         key = (sec, nsec)
@@ -105,7 +109,7 @@ class MoraiCameraFrameAssembler:
         if tail == TAIL_END:
             assembly.last_index = index
         elif tail != TAIL_MORE:
-            self.invalid_packet_count += 1
+            self._record_invalid("invalid_tail")
             self._frames.pop(key, None)
             return None
 
@@ -122,6 +126,8 @@ class MoraiCameraFrameAssembler:
 
         if not jpeg.startswith(JPEG_SOI) or not jpeg.endswith(JPEG_EOI):
             self.dropped_frame_count += 1
+            self.non_jpeg_frame_count += 1
+            self.last_error_reason = "non_jpeg_frame"
             return None
 
         return CameraFrame(
@@ -167,6 +173,31 @@ class MoraiCameraFrameAssembler:
         for key in expired:
             self._frames.pop(key, None)
             self.dropped_frame_count += 1
+            self.expired_frame_count += 1
+            self.last_error_reason = "frame_timeout"
+
+    def _record_invalid(self, reason: str) -> None:
+        self.invalid_packet_count += 1
+        self.invalid_reason_counts[reason] = (
+            self.invalid_reason_counts.get(reason, 0) + 1
+        )
+        self.last_error_reason = reason
+
+    @staticmethod
+    def _packet_error_reason(packet: bytes) -> str:
+        if len(packet) < CAMERA_DATA_OFFSET + CAMERA_TAIL_SIZE:
+            return "short_packet"
+        if packet[:CAMERA_HEADER_SIZE] != MORAI_CAMERA_HEADER:
+            return "invalid_header"
+        try:
+            _sec, _nsec, _index, payload_size = struct.unpack_from("<4i", packet, 3)
+        except struct.error:
+            return "metadata_unpack"
+        if payload_size <= 0:
+            return "invalid_payload_size"
+        if CAMERA_DATA_OFFSET + payload_size + CAMERA_TAIL_SIZE > len(packet):
+            return "payload_size_exceeds_packet"
+        return "packet_error"
 
 
 class FrontCameraUdpReceiver:
