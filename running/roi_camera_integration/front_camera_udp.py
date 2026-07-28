@@ -156,12 +156,31 @@ class MoraiCameraFrameAssembler:
 
         data_start = CAMERA_DATA_OFFSET
         data_end = data_start + payload_size
-        tail_end = data_end + CAMERA_TAIL_SIZE
-        if tail_end > len(packet):
+        if data_end > len(packet):
             raise MoraiCameraPacketError("camera payload size exceeds datagram length")
 
-        payload = packet[data_start:data_end]
-        tail = packet[data_end:tail_end]
+        # MORAI releases have used both interpretations of Size: JPEG-only
+        # bytes and JPEG-plus-tail bytes. Prefer the documented position, but
+        # accept the two observed compatible layouts as well.
+        tail_candidates = (
+            (data_end, data_end + CAMERA_TAIL_SIZE),
+            (data_end - CAMERA_TAIL_SIZE, data_end),
+            (len(packet) - CAMERA_TAIL_SIZE, len(packet)),
+        )
+        payload_end = None
+        tail = None
+        for tail_start, tail_end in tail_candidates:
+            if tail_start < data_start or tail_end > len(packet):
+                continue
+            candidate = packet[tail_start:tail_end]
+            if candidate in (TAIL_MORE, TAIL_END):
+                payload_end = tail_start
+                tail = candidate
+                break
+        if payload_end is None or tail is None:
+            raise MoraiCameraPacketError("camera packet tail is not AI or EI")
+
+        payload = packet[data_start:payload_end]
         return sec, nsec, index, payload_size, payload, tail
 
     def _drop_expired(self, now_monotonic: float) -> None:
@@ -196,7 +215,22 @@ class MoraiCameraFrameAssembler:
         if payload_size <= 0:
             return "invalid_payload_size"
         if CAMERA_DATA_OFFSET + payload_size + CAMERA_TAIL_SIZE > len(packet):
-            return "payload_size_exceeds_packet"
+            if CAMERA_DATA_OFFSET + payload_size > len(packet):
+                return "payload_size_exceeds_packet"
+        data_end = CAMERA_DATA_OFFSET + payload_size
+        tail_bytes = (
+            packet[data_end:data_end + CAMERA_TAIL_SIZE]
+            if data_end + CAMERA_TAIL_SIZE <= len(packet)
+            else b""
+        )
+        tail_before = (
+            packet[data_end - CAMERA_TAIL_SIZE:data_end]
+            if data_end >= CAMERA_DATA_OFFSET + CAMERA_TAIL_SIZE
+            else b""
+        )
+        tail_at_end = packet[-CAMERA_TAIL_SIZE:]
+        if not any(tail in (TAIL_MORE, TAIL_END) for tail in (tail_bytes, tail_before, tail_at_end)):
+            return "invalid_tail"
         return "packet_error"
 
 

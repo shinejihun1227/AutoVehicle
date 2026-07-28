@@ -16,6 +16,15 @@ def _packet(sec, nsec, index, payload, tail):
     )
 
 
+def _packet_with_declared_size(sec, nsec, index, payload, tail, declared_size):
+    return (
+        b"MOR"
+        + struct.pack("<4i", sec, nsec, index, declared_size)
+        + payload
+        + tail
+    )
+
+
 class MoraiCameraFrameAssemblerTests(unittest.TestCase):
     def test_reassembles_single_packet_jpeg(self):
         assembler = MoraiCameraFrameAssembler()
@@ -40,6 +49,24 @@ class MoraiCameraFrameAssemblerTests(unittest.TestCase):
         self.assertIsNotNone(frame)
         self.assertEqual(frame.jpeg, b"\xff\xd8abcdefghi\xff\xd9")
         self.assertEqual(frame.fragment_count, 3)
+
+    def test_accepts_size_that_includes_tail_bytes(self):
+        assembler = MoraiCameraFrameAssembler()
+        payload = b"\xff\xd8jpeg\xff\xd9"
+        frame = assembler.feed(
+            _packet_with_declared_size(
+                2,
+                4,
+                0,
+                payload,
+                b"EI",
+                declared_size=len(payload) + 2,
+            ),
+            now_monotonic=2.0,
+        )
+
+        self.assertIsNotNone(frame)
+        self.assertEqual(frame.jpeg, payload)
 
     def test_missing_fragment_expires(self):
         assembler = MoraiCameraFrameAssembler(frame_timeout_sec=0.25)
