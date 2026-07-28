@@ -68,6 +68,27 @@ class MoraiCameraFrameAssemblerTests(unittest.TestCase):
         self.assertIsNotNone(frame)
         self.assertEqual(frame.jpeg, payload)
 
+    def test_uses_size_when_final_datagram_has_padding(self):
+        assembler = MoraiCameraFrameAssembler()
+        payload = b"\xff\xd8jpeg\xff\xd9"
+        padded_packet = (
+            _packet_with_declared_size(
+                2,
+                4,
+                0,
+                payload,
+                b"\x00\x00",
+                declared_size=len(payload),
+            )[:-2]
+            + (b"\x00" * 32)
+            + b"EI"
+        )
+
+        frame = assembler.feed(padded_packet, now_monotonic=2.0)
+
+        self.assertIsNotNone(frame)
+        self.assertEqual(frame.jpeg, payload)
+
     def test_missing_fragment_expires(self):
         assembler = MoraiCameraFrameAssembler(frame_timeout_sec=0.25)
         self.assertIsNone(assembler.feed(_packet(3, 0, 0, b"\xff\xd8a", b"AI"), 0.0))

@@ -160,21 +160,22 @@ class MoraiCameraFrameAssembler:
             raise MoraiCameraPacketError("camera payload size exceeds datagram length")
 
         # MORAI releases have used both interpretations of Size: JPEG-only
-        # bytes and JPEG-plus-tail bytes. Prefer the documented position, but
-        # accept the two observed compatible layouts as well.
+        # bytes and JPEG-plus-tail bytes. Some simulator/network combinations
+        # also pad the final datagram to 65000 bytes while leaving EI at the
+        # datagram end. Keep Size as the payload boundary in that case.
         tail_candidates = (
-            (data_end, data_end + CAMERA_TAIL_SIZE),
-            (data_end - CAMERA_TAIL_SIZE, data_end),
-            (len(packet) - CAMERA_TAIL_SIZE, len(packet)),
+            (data_end, data_end + CAMERA_TAIL_SIZE, data_end),
+            (data_end - CAMERA_TAIL_SIZE, data_end, data_end - CAMERA_TAIL_SIZE),
+            (len(packet) - CAMERA_TAIL_SIZE, len(packet), data_end),
         )
         payload_end = None
         tail = None
-        for tail_start, tail_end in tail_candidates:
+        for tail_start, tail_end, candidate_payload_end in tail_candidates:
             if tail_start < data_start or tail_end > len(packet):
                 continue
             candidate = packet[tail_start:tail_end]
             if candidate in (TAIL_MORE, TAIL_END):
-                payload_end = tail_start
+                payload_end = candidate_payload_end
                 tail = candidate
                 break
         if payload_end is None or tail is None:
