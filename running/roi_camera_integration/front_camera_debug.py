@@ -11,7 +11,7 @@ import argparse
 import os
 import time
 
-from front_camera_perception import FrontCameraPerception
+from front_camera_perception import FrontCameraPerception, cv2
 from front_camera_udp import FrontCameraUdpReceiver
 
 
@@ -45,7 +45,15 @@ def main() -> None:
     parser.add_argument("--expected-width", type=int, default=1280)
     parser.add_argument("--expected-height", type=int, default=720)
     parser.add_argument("--log-period", type=float, default=1.0)
+    parser.add_argument(
+        "--display",
+        action="store_true",
+        help="show a live OpenCV window with the lane mask and centers",
+    )
     args = parser.parse_args()
+
+    if args.display and cv2 is None:
+        raise RuntimeError("--display requires python3-opencv")
 
     receiver = FrontCameraUdpReceiver(args.bind_ip, args.port)
     perception = FrontCameraPerception(resize_width=640, process_rate_hz=15.0)
@@ -69,9 +77,22 @@ def main() -> None:
                     )
                     with open(path, "wb") as output:
                         output.write(frame.jpeg)
+                    if perception.last_debug_overlay is not None:
+                        overlay_path = os.path.join(
+                            os.path.expanduser(args.save_dir),
+                            "front_camera_overlay_{:06d}.jpg".format(frame_count),
+                        )
+                        cv2.imwrite(overlay_path, perception.last_debug_overlay)
 
                 if observation is not None:
                     last_observation = (frame, observation)
+                    if args.display and perception.last_debug_overlay is not None:
+                        cv2.imshow(
+                            "MORAI Front Camera Lane Debug",
+                            perception.last_debug_overlay,
+                        )
+                        if cv2.waitKey(1) & 0xFF == ord("q"):
+                            raise KeyboardInterrupt
 
             now = time.monotonic()
             if now - last_log >= max(0.1, args.log_period):
@@ -109,6 +130,8 @@ def main() -> None:
         print("\nStopping Front camera receiver")
     finally:
         receiver.close()
+        if args.display and cv2 is not None:
+            cv2.destroyAllWindows()
 
 
 if __name__ == "__main__":

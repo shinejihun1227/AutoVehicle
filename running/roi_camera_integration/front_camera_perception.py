@@ -50,6 +50,9 @@ class FrontCameraPerception:
         self.min_stop_line_pixels = int(min_stop_line_pixels)
         self.min_lane_pixels = int(min_lane_pixels)
         self._last_process_time = 0.0
+        self._last_lane_mask = None
+        self._last_lane_center_x = None
+        self.last_debug_overlay = None
 
     def process_jpeg(
         self, jpeg: bytes, monotonic_time: Optional[float] = None
@@ -72,6 +75,13 @@ class FrontCameraPerception:
         traffic_state, traffic_score = self._traffic_light(image)
         stop_line = self._stop_line(image)
         lane_offset = self._lane_offset(image)
+        self.last_debug_overlay = self._build_debug_overlay(
+            image,
+            traffic_state,
+            traffic_score,
+            stop_line,
+            lane_offset,
+        )
         return FrontCameraObservation(
             monotonic_time=now,
             width=width,
@@ -83,6 +93,76 @@ class FrontCameraPerception:
             source_width=source_width,
             source_height=source_height,
         )
+
+    def _build_debug_overlay(
+        self,
+        image,
+        traffic_state: str,
+        traffic_score: int,
+        stop_line: bool,
+        lane_offset: Optional[float],
+    ):
+        """Render the exact lane mask and centers used by the detector."""
+
+        overlay = image.copy()
+        if self._last_lane_mask is not None:
+            highlighted = np.zeros_like(image)
+            # BGR yellow highlights every pixel accepted by the lane mask.
+            highlighted[:, :, 1] = self._last_lane_mask
+            highlighted[:, :, 2] = self._last_lane_mask
+            overlay = cv2.addWeighted(overlay, 0.78, highlighted, 0.62, 0.0)
+
+        height, width = overlay.shape[:2]
+        lane_roi_y = int(height * 0.55)
+        cv2.line(overlay, (0, lane_roi_y), (width - 1, lane_roi_y), (255, 0, 255), 1)
+        center_x = width // 2
+        cv2.line(overlay, (center_x, 0), (center_x, height - 1), (0, 0, 255), 2)
+
+        if self._last_lane_center_x is None:
+            lane_text = "lane: NOT DETECTED"
+            lane_color = (0, 0, 255)
+        else:
+            lane_x = int(round(self._last_lane_center_x))
+            cv2.line(overlay, (lane_x, lane_roi_y), (lane_x, height - 1), (0, 255, 0), 3)
+            lane_text = "lane_x={} offset_px={:+.1f}".format(
+                lane_x,
+                0.0 if lane_offset is None else lane_offset,
+            )
+            lane_color = (0, 255, 0)
+
+        cv2.putText(
+            overlay,
+            lane_text,
+            (12, 28),
+            cv2.FONT_HERSHEY_SIMPLEX,
+            0.72,
+            lane_color,
+            2,
+            cv2.LINE_AA,
+        )
+        cv2.putText(
+            overlay,
+            "traffic={} score={} stop_line={}".format(
+                traffic_state, traffic_score, stop_line
+            ),
+            (12, 56),
+            cv2.FONT_HERSHEY_SIMPLEX,
+            0.62,
+            (255, 255, 255),
+            2,
+            cv2.LINE_AA,
+        )
+        cv2.putText(
+            overlay,
+            "yellow=lane pixels red=image center green=lane center",
+            (12, height - 14),
+            cv2.FONT_HERSHEY_SIMPLEX,
+            0.48,
+            (255, 255, 255),
+            1,
+            cv2.LINE_AA,
+        )
+        return overlay
 
     def _resize(self, image):
         if self.resize_width <= 0 or image.shape[1] == self.resize_width:
@@ -128,6 +208,8 @@ class FrontCameraPerception:
         yellow = cv2.inRange(hsv, np.array([15, 60, 80]), np.array([40, 255, 255]))
         mask = cv2.bitwise_or(white, yellow)
         mask = cv2.morphologyEx(mask, cv2.MORPH_OPEN, np.ones((3, 3), np.uint8))
+        self._last_lane_mask = mask
+        self._last_lane_center_x = None
         _ys, xs = np.where(mask > 0)
         if len(xs) < self.min_lane_pixels:
             return None
@@ -138,4 +220,5 @@ class FrontCameraPerception:
             lane_center = (float(np.median(left_x)) + float(np.median(right_x))) * 0.5
         else:
             lane_center = float(np.median(xs))
+        self._last_lane_center_x = lane_center
         return lane_center - width * 0.5

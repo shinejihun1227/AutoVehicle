@@ -75,6 +75,18 @@ The debug tool reports both resolutions. `source_resolution` is the original
 JPEG resolution from MORAI. `processing_resolution` is the smaller image used
 by the prototype lane/traffic detector; it does not change the received JPEG.
 
+When `--save-dir` is used, every 30th decoded frame is saved twice:
+
+```text
+front_camera_000030.jpg          # original decoded JPEG
+front_camera_overlay_000030.jpg # OpenCV lane-mask visualization
+```
+
+The overlay marks accepted lane pixels in yellow, the image center in red,
+and the detected lane center in green. For a live Ubuntu GUI window, add
+`--display` to the debug command. Press `q` in the OpenCV window or `Ctrl+C`
+in the terminal to stop.
+
 The diagnostic counters distinguish the common failure modes:
 
 - `datagrams=0`: Ubuntu's socket is not receiving packets.
