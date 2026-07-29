@@ -112,7 +112,8 @@ def main() -> None:
                     print(
                         "{} fragments={} source_resolution={} "
                         "processing_resolution={} expected={} "
-                        "traffic={}({}) stop_line={} lane_offset_px={}".format(
+                        "traffic={}({}) stop_line={} lane_offset_px={} "
+                        "lane_confidence={:.2f} left_x={} right_x={}".format(
                             diagnostic,
                             frame.fragment_count,
                             source_resolution,
@@ -122,6 +123,9 @@ def main() -> None:
                             observation.traffic_score,
                             observation.stop_line_detected,
                             observation.lane_offset_px,
+                            observation.lane_confidence,
+                            observation.left_lane_x,
+                            observation.right_lane_x,
                         )
                     )
                 last_log = now

@@ -82,10 +82,17 @@ front_camera_000030.jpg          # original decoded JPEG
 front_camera_overlay_000030.jpg # OpenCV lane-mask visualization
 ```
 
-The overlay marks accepted lane pixels in yellow, the image center in red,
-and the detected lane center in green. For a live Ubuntu GUI window, add
-`--display` to the debug command. Press `q` in the OpenCV window or `Ctrl+C`
-in the terminal to stop.
+The overlay marks accepted lane pixels in yellow, the fitted left boundary in
+blue, the fitted right boundary in orange, the image center in red, and the
+filtered lane center in green. The log also reports `lane_confidence`,
+`left_x`, and `right_x`. For a live Ubuntu GUI window, add `--display` to the
+debug command. Press `q` in the OpenCV window or `Ctrl+C` in the terminal to
+stop.
+
+The front-only detector now fits each visible lane boundary with a quadratic
+curve, checks the projected lane width, and smooths the lane offset over time.
+This changes only perception/diagnostics; lane steering remains disabled until
+the result is calibrated on the actual route.
 
 The diagnostic counters distinguish the common failure modes:
 

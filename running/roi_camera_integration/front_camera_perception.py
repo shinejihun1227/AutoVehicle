@@ -31,6 +31,9 @@ class FrontCameraObservation:
     lane_offset_px: Optional[float]
     source_width: Optional[int] = None
     source_height: Optional[int] = None
+    lane_confidence: float = 0.0
+    left_lane_x: Optional[float] = None
+    right_lane_x: Optional[float] = None
 
 
 class FrontCameraPerception:
@@ -43,15 +46,25 @@ class FrontCameraPerception:
         min_traffic_pixels: int = 60,
         min_stop_line_pixels: int = 1500,
         min_lane_pixels: int = 400,
+        min_lane_side_pixels: int = 80,
+        lane_smoothing_alpha: float = 0.25,
     ) -> None:
         self.resize_width = int(resize_width)
         self.process_period = 0.0 if process_rate_hz <= 0.0 else 1.0 / process_rate_hz
         self.min_traffic_pixels = int(min_traffic_pixels)
         self.min_stop_line_pixels = int(min_stop_line_pixels)
         self.min_lane_pixels = int(min_lane_pixels)
+        self.min_lane_side_pixels = int(min_lane_side_pixels)
+        self.lane_smoothing_alpha = max(0.0, min(1.0, float(lane_smoothing_alpha)))
         self._last_process_time = 0.0
         self._last_lane_mask = None
         self._last_lane_center_x = None
+        self._last_left_fit = None
+        self._last_right_fit = None
+        self._last_left_lane_x = None
+        self._last_right_lane_x = None
+        self._last_lane_confidence = 0.0
+        self._smoothed_lane_offset = None
         self.last_debug_overlay = None
 
     def process_jpeg(
@@ -92,6 +105,9 @@ class FrontCameraPerception:
             lane_offset_px=lane_offset,
             source_width=source_width,
             source_height=source_height,
+            lane_confidence=self._last_lane_confidence,
+            left_lane_x=self._last_left_lane_x,
+            right_lane_x=self._last_right_lane_x,
         )
 
     def _build_debug_overlay(
@@ -119,6 +135,8 @@ class FrontCameraPerception:
         cv2.line(overlay, (0, lane_roi_y), (width - 1, lane_roi_y), (255, 0, 255), 1)
         center_x = width // 2
         cv2.line(overlay, (center_x, 0), (center_x, height - 1), (0, 0, 255), 2)
+        self._draw_lane_fit(overlay, self._last_left_fit, (255, 0, 0))
+        self._draw_lane_fit(overlay, self._last_right_fit, (0, 165, 255))
 
         if self._last_lane_center_x is None:
             lane_text = "lane: NOT DETECTED"
@@ -131,6 +149,7 @@ class FrontCameraPerception:
                 0.0 if lane_offset is None else lane_offset,
             )
             lane_color = (0, 255, 0)
+        lane_text += " conf={:.2f}".format(self._last_lane_confidence)
 
         cv2.putText(
             overlay,
@@ -156,7 +175,7 @@ class FrontCameraPerception:
         )
         cv2.putText(
             overlay,
-            "yellow=lane pixels red=image center green=lane center",
+            "yellow=pixels blue=left orange=right red=center green=lane",
             (12, height - 14),
             cv2.FONT_HERSHEY_SIMPLEX,
             0.48,
@@ -165,6 +184,20 @@ class FrontCameraPerception:
             cv2.LINE_AA,
         )
         return overlay
+
+    def _draw_lane_fit(self, image, coefficients, color) -> None:
+        if coefficients is None:
+            return
+        height, _width = image.shape[:2]
+        roi_y = int(height * 0.55)
+        points = []
+        for normalized_y in np.linspace(0.0, 1.0, 24):
+            y = int(round(roi_y + normalized_y * (height - 1 - roi_y)))
+            x = int(round(np.polyval(coefficients, normalized_y)))
+            if 0 <= x < image.shape[1]:
+                points.append((x, y))
+        if len(points) >= 2:
+            cv2.polylines(image, [np.asarray(points, dtype=np.int32)], False, color, 3)
 
     def _resize(self, image):
         if self.resize_width <= 0 or image.shape[1] == self.resize_width:
@@ -212,15 +245,98 @@ class FrontCameraPerception:
         mask = cv2.morphologyEx(mask, cv2.MORPH_OPEN, np.ones((3, 3), np.uint8))
         self._last_lane_mask = mask
         self._last_lane_center_x = None
+        self._last_left_fit = None
+        self._last_right_fit = None
+        self._last_left_lane_x = None
+        self._last_right_lane_x = None
+        self._last_lane_confidence = 0.0
+
         _ys, xs = np.where(mask > 0)
         if len(xs) < self.min_lane_pixels:
             return None
 
-        left_x = xs[xs < width * 0.5]
-        right_x = xs[xs >= width * 0.5]
-        if len(left_x) >= self.min_lane_pixels * 0.25 and len(right_x) >= self.min_lane_pixels * 0.25:
-            lane_center = (float(np.median(left_x)) + float(np.median(right_x))) * 0.5
+        full_ys = _ys + int(height * 0.55)
+        left_points = xs < width * 0.5
+        right_points = ~left_points
+        left_fit = self._fit_lane_curve(
+            full_ys[left_points], xs[left_points], height, width
+        )
+        right_fit = self._fit_lane_curve(
+            full_ys[right_points], xs[right_points], height, width
+        )
+
+        if left_fit is not None:
+            self._last_left_fit, self._last_left_lane_x, left_quality = left_fit
+        else:
+            left_quality = 0.0
+        if right_fit is not None:
+            self._last_right_fit, self._last_right_lane_x, right_quality = right_fit
+        else:
+            right_quality = 0.0
+
+        lane_center = None
+        confidence = 0.0
+        if self._last_left_lane_x is not None and self._last_right_lane_x is not None:
+            lane_width = self._last_right_lane_x - self._last_left_lane_x
+            min_width = width * 0.20
+            max_width = width * 1.25
+            if min_width <= lane_width <= max_width:
+                lane_center = (self._last_left_lane_x + self._last_right_lane_x) * 0.5
+                confidence = min(left_quality, right_quality)
+            else:
+                # Keep the fitted lines visible, but do not report a strong
+                # lane estimate when their geometry is implausible.
+                confidence = 0.15
+        elif self._last_left_lane_x is not None or self._last_right_lane_x is not None:
+            # One boundary is still useful for diagnostics, but this fallback
+            # has low confidence because a lane width cannot be verified.
+            lane_center = float(np.median(xs))
+            confidence = 0.25 * max(left_quality, right_quality)
         else:
             lane_center = float(np.median(xs))
-        self._last_lane_center_x = lane_center
-        return lane_center - width * 0.5
+            confidence = 0.10
+
+        raw_offset = lane_center - width * 0.5
+        if self._smoothed_lane_offset is None:
+            self._smoothed_lane_offset = raw_offset
+        else:
+            alpha = self.lane_smoothing_alpha
+            self._smoothed_lane_offset = (
+                alpha * raw_offset + (1.0 - alpha) * self._smoothed_lane_offset
+            )
+        self._last_lane_confidence = max(0.0, min(1.0, confidence))
+        self._last_lane_center_x = width * 0.5 + self._smoothed_lane_offset
+        return self._smoothed_lane_offset
+
+    def _fit_lane_curve(self, ys, xs, height: int, width: int):
+        if len(xs) < self.min_lane_side_pixels:
+            return None
+        if np.ptp(ys) < height * 0.15:
+            return None
+
+        roi_y = height * 0.55
+        normalized_y = (ys.astype(np.float32) - roi_y) / max(1.0, height - roi_y)
+        coefficients = np.polyfit(normalized_y, xs.astype(np.float32), 2)
+
+        # Reject isolated bright objects and horizontal stop-line pixels with
+        # one robust residual pass before accepting the curve.
+        for _ in range(2):
+            predicted = np.polyval(coefficients, normalized_y)
+            residual = np.abs(xs - predicted)
+            threshold = max(6.0, min(24.0, float(np.percentile(residual, 75)) * 1.5))
+            inliers = residual <= threshold
+            if int(np.count_nonzero(inliers)) < self.min_lane_side_pixels:
+                return None
+            coefficients = np.polyfit(
+                normalized_y[inliers], xs[inliers].astype(np.float32), 2
+            )
+            normalized_y = normalized_y[inliers]
+            xs = xs[inliers]
+
+        residual = np.abs(xs - np.polyval(coefficients, normalized_y))
+        fit_quality = max(0.0, 1.0 - min(30.0, float(np.median(residual))) / 30.0)
+        count_quality = min(1.0, len(xs) / float(self.min_lane_side_pixels * 4))
+        x_at_eval = float(np.polyval(coefficients, 0.90))
+        if not 0.0 <= x_at_eval <= float(width - 1):
+            return None
+        return coefficients, x_at_eval, fit_quality * count_quality
