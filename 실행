@@ -1,3 +1,10 @@
+python3 morai_pure_pursuit_camera_udp.py \
+  --path ~/ROI/src/path_planning/data/2026_molit_comp_global_path.txt \
+  --camera-port 1101 \
+  --path-overlay-dir /tmp/morai_route_overlay \
+  --path-overlay-display
+저장된 이미지는 다음에서 확인합니다.
+ls /tmp/morai_route_overlay
 cd ~/AutoVehicle
 git pull --ff-only origin main
 
