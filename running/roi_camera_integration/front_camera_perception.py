@@ -108,8 +108,10 @@ class FrontCameraPerception:
         if self._last_lane_mask is not None:
             highlighted = np.zeros_like(image)
             # BGR yellow highlights every pixel accepted by the lane mask.
-            highlighted[:, :, 1] = self._last_lane_mask
-            highlighted[:, :, 2] = self._last_lane_mask
+            mask_height = self._last_lane_mask.shape[0]
+            mask_y = image.shape[0] - mask_height
+            highlighted[mask_y:, :, 1] = self._last_lane_mask
+            highlighted[mask_y:, :, 2] = self._last_lane_mask
             overlay = cv2.addWeighted(overlay, 0.78, highlighted, 0.62, 0.0)
 
         height, width = overlay.shape[:2]
