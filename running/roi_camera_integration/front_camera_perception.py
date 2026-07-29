@@ -111,6 +111,10 @@ class FrontCameraPerception:
         self._last_edge_mask = None
         self._last_stop_line_segments = []
         self._last_stop_line_detected = False
+        # The lane debug image is BEV, while route projection must be drawn on
+        # the perspective camera image. Keep the resized image available for
+        # the optional, visualization-only global-path overlay.
+        self.last_processed_image = None
         self.last_debug_overlay = None
 
     def process_jpeg(
@@ -130,6 +134,7 @@ class FrontCameraPerception:
 
         source_height, source_width = image.shape[:2]
         image = self._resize(image)
+        self.last_processed_image = image.copy()
         height, width = image.shape[:2]
         traffic_state, traffic_score = self._traffic_light(image)
         lane_offset = self._lane_offset(image)

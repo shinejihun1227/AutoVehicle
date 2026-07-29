@@ -14,8 +14,9 @@ if THIS_DIR not in sys.path:
     sys.path.insert(0, THIS_DIR)
 
 from camera_behavior import FrontCameraBehavior
-from front_camera_perception import FrontCameraPerception
+from front_camera_perception import FrontCameraPerception, cv2
 from front_camera_udp import FrontCameraUdpReceiver
+from path_overlay import CameraMount, draw_path_overlay, points_to_xyz
 
 from path_planning.coordinates import GpsToMapEnu, GpsToRecordedLocalEnu, MapProjection
 from path_planning.localization_dead_reckoning import SpeedAidedDeadReckoning
@@ -118,6 +119,51 @@ def argument_parser(localization_mode):
         type=int,
         default=1101,
         help="Front camera algorithm destination/Host Sensor Port",
+    )
+    parser.add_argument(
+        "--path-overlay",
+        action="store_true",
+        help="project the loaded global path onto the perspective front-camera image",
+    )
+    parser.add_argument(
+        "--path-overlay-dir",
+        default="",
+        help="save route-overlay JPEGs to this directory (does not affect control)",
+    )
+    parser.add_argument(
+        "--path-overlay-display",
+        action="store_true",
+        help="show the perspective camera route overlay in an OpenCV window",
+    )
+    parser.add_argument(
+        "--path-overlay-fov-deg",
+        type=float,
+        default=90.0,
+        help="horizontal FOV of Cam 1; default matches cam_set.json",
+    )
+    parser.add_argument("--path-overlay-camera-x", type=float, default=1.9)
+    parser.add_argument("--path-overlay-camera-y", type=float, default=0.0)
+    parser.add_argument("--path-overlay-camera-z", type=float, default=1.2)
+    parser.add_argument("--path-overlay-camera-yaw-deg", type=float, default=0.0)
+    parser.add_argument(
+        "--path-overlay-camera-pitch-down-deg",
+        type=float,
+        default=2.0,
+        help="positive when Cam 1 looks down; default matches cam_set.json pitch=2",
+    )
+    parser.add_argument("--path-overlay-min-forward-m", type=float, default=0.5)
+    parser.add_argument("--path-overlay-max-forward-m", type=float, default=45.0)
+    parser.add_argument("--path-overlay-max-lateral-m", type=float, default=35.0)
+    parser.add_argument(
+        "--path-overlay-use-path-z",
+        action="store_true",
+        help="use waypoint z values instead of projecting the route on the current road plane",
+    )
+    parser.add_argument(
+        "--path-overlay-save-period",
+        type=float,
+        default=0.5,
+        help="minimum seconds between saved route-overlay images",
     )
     parser.add_argument(
         "--competition-status-host-port",
@@ -292,6 +338,16 @@ def _validate(arguments):
             raise ValueError("{} must be positive".format(name))
     if arguments.target_speed_kmh < 0.0:
         raise ValueError("target-speed-kmh cannot be negative")
+    if not 1.0 < arguments.path_overlay_fov_deg < 179.0:
+        raise ValueError("path-overlay-fov-deg must be between 1 and 179 degrees")
+    if arguments.path_overlay_min_forward_m < 0.0:
+        raise ValueError("path-overlay-min-forward-m cannot be negative")
+    if arguments.path_overlay_max_forward_m <= arguments.path_overlay_min_forward_m:
+        raise ValueError("path-overlay-max-forward-m must exceed min-forward-m")
+    if arguments.path_overlay_max_lateral_m <= 0.0:
+        raise ValueError("path-overlay-max-lateral-m must be positive")
+    if arguments.path_overlay_save_period <= 0.0:
+        raise ValueError("path-overlay-save-period must be positive")
     for name in (
         "lookahead_speed_gain",
         "minimum_waypoint_spacing",
@@ -418,6 +474,34 @@ def run(localization_mode, arguments):
         process_rate_hz=15.0,
     )
     camera_behavior = FrontCameraBehavior()
+    path_overlay_enabled = bool(
+        arguments.path_overlay
+        or arguments.path_overlay_dir
+        or arguments.path_overlay_display
+    )
+    path_overlay_camera = CameraMount(
+        x_m=arguments.path_overlay_camera_x,
+        y_m=arguments.path_overlay_camera_y,
+        z_m=arguments.path_overlay_camera_z,
+        yaw_deg=arguments.path_overlay_camera_yaw_deg,
+        pitch_down_deg=arguments.path_overlay_camera_pitch_down_deg,
+    )
+    path_overlay_points = points_to_xyz(points)
+    path_overlay_frame_count = 0
+    last_path_overlay_save = 0.0
+    if path_overlay_enabled and arguments.path_overlay_dir:
+        os.makedirs(os.path.expanduser(arguments.path_overlay_dir), exist_ok=True)
+    if path_overlay_enabled:
+        print(
+            "  camera route overlay: enabled (Cam 1 FOV={:.1f}deg, "
+            "mount=({:.2f},{:.2f},{:.2f})m, pitch-down={:.1f}deg)".format(
+                arguments.path_overlay_fov_deg,
+                path_overlay_camera.x_m,
+                path_overlay_camera.y_m,
+                path_overlay_camera.z_m,
+                path_overlay_camera.pitch_down_deg,
+            )
+        )
     selector.register(camera_receiver.socket, selectors.EVENT_READ, "camera")
 
     control_socket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
@@ -667,6 +751,37 @@ def run(localization_mode, arguments):
                 and gps_outage <= arguments.max_gps_outage
             )
             state = localizer.state_at(now) if sensor_fresh else None
+            if path_overlay_enabled and state is not None:
+                camera_image = camera_perception.last_processed_image
+                if camera_image is not None:
+                    route_overlay, overlay_stats = draw_path_overlay(
+                        camera_image,
+                        path_overlay_points,
+                        state.x_m,
+                        state.y_m,
+                        state.z_m,
+                        state.yaw_rad,
+                        camera=path_overlay_camera,
+                        horizontal_fov_deg=arguments.path_overlay_fov_deg,
+                        min_forward_m=arguments.path_overlay_min_forward_m,
+                        max_forward_m=arguments.path_overlay_max_forward_m,
+                        max_lateral_m=arguments.path_overlay_max_lateral_m,
+                        use_path_z=arguments.path_overlay_use_path_z,
+                    )
+                    if arguments.path_overlay_dir and (
+                        now - last_path_overlay_save >= arguments.path_overlay_save_period
+                    ):
+                        last_path_overlay_save = now
+                        path_overlay_frame_count += 1
+                        overlay_path = os.path.join(
+                            os.path.expanduser(arguments.path_overlay_dir),
+                            "route_overlay_{:06d}.jpg".format(path_overlay_frame_count),
+                        )
+                        cv2.imwrite(overlay_path, route_overlay)
+                    if arguments.path_overlay_display:
+                        cv2.imshow("MORAI Front Camera Route Overlay", route_overlay)
+                        if cv2.waitKey(1) & 0xFF == ord("q"):
+                            raise KeyboardInterrupt
             collision_active = now < collision_brake_until
             drive_control_ready = external_control_ready(
                 status_ctrl_mode, status_gear
@@ -797,6 +912,8 @@ def run(localization_mode, arguments):
             control_socket.sendto(stop_packet, control_destination)
             time.sleep(0.02)
         camera_receiver.close()
+        if path_overlay_enabled and arguments.path_overlay_display and cv2 is not None:
+            cv2.destroyAllWindows()
         selector.close()
         for udp_socket in receive_sockets:
             udp_socket.close()

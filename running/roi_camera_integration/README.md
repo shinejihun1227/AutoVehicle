@@ -30,6 +30,12 @@ From the Windows workspace, copy these four files into the ROI package:
 ~/ROI/src/path_planning/src/front_camera_debug.py
 ```
 
+For the optional competition-route camera overlay, copy one additional file:
+
+```text
+~/ROI/src/path_planning/src/path_overlay.py
+```
+
 The first three files are importable by the ROI Python package. The debug
 script can be run directly from the `src` directory after setting `PYTHONPATH`
 or copied as a package script.
@@ -218,6 +224,36 @@ The default behavior is intentionally conservative:
 
 Do not enable lane steering correction until the sign and scale have been
 calibrated on the actual fixed Front-camera view.
+
+## Competition global path on the camera image
+
+The integrated UDP runtime can draw the same route points used by Pure
+Pursuit on the perspective Front-camera image. It transforms the route from
+the controller's map/local frame into the vehicle frame, then projects it with
+Cam 1's `1280x720`, `FOV=90`, `pos=(1.9,0,1.2)`, `yaw=0`, `pitch=2` settings.
+The detector's working image is `640x360`, so the overlay is saved/displayed
+at that resolution. The route overlay is diagnostic-only and does not alter
+accel, brake, or steering.
+
+By default the route is projected onto the current road plane, so an absolute
+map-height value in the TXT file cannot move the line vertically by mistake.
+After confirming that route `z` and live `state.z_m` share the same datum, add
+`--path-overlay-use-path-z` if height variation should be visualized.
+
+Add these options to the existing `morai_pure_pursuit_camera_udp.py` command:
+
+```bash
+--path ~/morai_recorded_paths/2026_molit_comp_global_path.txt \
+--camera-port 1101 \
+--path-overlay-dir /tmp/morai_route_overlay \
+--path-overlay-display
+```
+
+Or save without opening an OpenCV window by omitting `--path-overlay-display`.
+The files are written as `route_overlay_000001.jpg`, etc. Verify that the
+route and `state.x_m/state.y_m/state.yaw_rad` use the same coordinate frame;
+if the route is visibly shifted or rotated, fix that frame alignment before
+using the path for any camera-based control decision.
 
 ## Automated tests before MORAI integration
 
