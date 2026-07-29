@@ -94,7 +94,9 @@ The initial Front-camera BEV uses normalized source points
 starting points and may need adjustment for the actual MORAI road view.
 
 The front-only detector now fits each visible lane boundary with a quadratic
-curve, checks the projected lane width, and smooths the lane offset over time.
+curve, searches around the previous valid curves before falling back to a
+histogram, averages the two fitted curves into a 2D center curve, checks the
+projected lane width, and smooths the lane offset over time.
 This changes only perception/diagnostics; lane steering remains disabled until
 the result is calibrated on the actual route.
 

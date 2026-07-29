@@ -70,6 +70,8 @@ class FrontCameraPerception:
         sobel_x_threshold: int = 45,
         sobel_y_threshold: int = 45,
         ransac_iterations: int = 80,
+        lane_curve_smoothing_alpha: float = 0.15,
+        tracking_margin_px: int = 30,
     ) -> None:
         self.resize_width = int(resize_width)
         self.process_period = 0.0 if process_rate_hz <= 0.0 else 1.0 / process_rate_hz
@@ -87,6 +89,10 @@ class FrontCameraPerception:
         self.sobel_x_threshold = int(sobel_x_threshold)
         self.sobel_y_threshold = int(sobel_y_threshold)
         self.ransac_iterations = max(10, int(ransac_iterations))
+        self.lane_curve_smoothing_alpha = max(
+            0.0, min(1.0, float(lane_curve_smoothing_alpha))
+        )
+        self.tracking_margin_px = max(20, int(tracking_margin_px))
         self._last_process_time = 0.0
         self._last_lane_mask = None
         self._last_lane_center_x = None
@@ -96,6 +102,10 @@ class FrontCameraPerception:
         self._last_right_lane_x = None
         self._last_lane_confidence = 0.0
         self._smoothed_lane_offset = None
+        self._last_center_fit = None
+        self._tracked_left_fit = None
+        self._tracked_right_fit = None
+        self._tracked_center_fit = None
         self._last_bev_image = None
         self._last_color_mask = None
         self._last_edge_mask = None
@@ -174,6 +184,7 @@ class FrontCameraPerception:
         cv2.line(overlay, (center_x, 0), (center_x, height - 1), (0, 0, 255), 2)
         self._draw_lane_fit(overlay, self._last_left_fit, (255, 0, 0))
         self._draw_lane_fit(overlay, self._last_right_fit, (0, 165, 255))
+        self._draw_lane_fit(overlay, self._last_center_fit, (0, 255, 0))
         for x1, y1, x2, y2 in self._last_stop_line_segments:
             cv2.line(overlay, (x1, y1), (x2, y2), (255, 255, 0), 3)
 
@@ -182,7 +193,14 @@ class FrontCameraPerception:
             lane_color = (0, 0, 255)
         else:
             lane_x = int(round(self._last_lane_center_x))
-            cv2.line(overlay, (lane_x, lane_roi_y), (lane_x, height - 1), (0, 255, 0), 3)
+            if self._last_center_fit is None:
+                cv2.line(
+                    overlay,
+                    (lane_x, lane_roi_y),
+                    (lane_x, height - 1),
+                    (0, 255, 0),
+                    3,
+                )
             lane_text = "lane_x={} offset_px={:+.1f}".format(
                 lane_x,
                 0.0 if lane_offset is None else lane_offset,
@@ -357,6 +375,7 @@ class FrontCameraPerception:
         self._last_lane_center_x = None
         self._last_left_fit = None
         self._last_right_fit = None
+        self._last_center_fit = None
         self._last_left_lane_x = None
         self._last_right_lane_x = None
         self._last_lane_confidence = 0.0
@@ -378,7 +397,26 @@ class FrontCameraPerception:
         if self._last_left_lane_x is not None and self._last_right_lane_x is not None:
             lane_width = self._last_right_lane_x - self._last_left_lane_x
             if width * 0.20 <= lane_width <= width * 1.25:
-                lane_center = (self._last_left_lane_x + self._last_right_lane_x) * 0.5
+                self._last_left_fit = self._smooth_lane_fit(
+                    self._tracked_left_fit, self._last_left_fit
+                )
+                self._last_right_fit = self._smooth_lane_fit(
+                    self._tracked_right_fit, self._last_right_fit
+                )
+                self._tracked_left_fit = self._last_left_fit
+                self._tracked_right_fit = self._last_right_fit
+                self._last_left_lane_x = float(
+                    np.polyval(self._last_left_fit, 0.85)
+                )
+                self._last_right_lane_x = float(
+                    np.polyval(self._last_right_fit, 0.85)
+                )
+                center_fit = (self._last_left_fit + self._last_right_fit) * 0.5
+                self._last_center_fit = self._smooth_lane_fit(
+                    self._tracked_center_fit, center_fit
+                )
+                self._tracked_center_fit = self._last_center_fit
+                lane_center = float(np.polyval(self._last_center_fit, 0.85))
                 confidence = min(left_quality, right_quality)
             else:
                 # Both curves exist but their geometry is implausible. Do
@@ -404,9 +442,39 @@ class FrontCameraPerception:
         self._last_lane_center_x = width * 0.5 + self._smoothed_lane_offset
         return self._smoothed_lane_offset
 
+    def _smooth_lane_fit(self, previous, current):
+        if previous is None:
+            return current
+        alpha = self.lane_curve_smoothing_alpha
+        return alpha * current + (1.0 - alpha) * previous
+
     def _sliding_window_points(self, mask):
         height, width = mask.shape[:2]
         nonzero_y, nonzero_x = np.nonzero(mask > 0)
+
+        # Once a valid pair exists, search around the previous curves first.
+        # Histogram initialization remains the fallback after a lane loss.
+        if self._tracked_left_fit is not None and self._tracked_right_fit is not None:
+            normalized_y = nonzero_y.astype(np.float32) / max(1.0, height - 1)
+            left_distance = np.abs(
+                nonzero_x - np.polyval(self._tracked_left_fit, normalized_y)
+            )
+            right_distance = np.abs(
+                nonzero_x - np.polyval(self._tracked_right_fit, normalized_y)
+            )
+            left_match = left_distance <= self.tracking_margin_px
+            right_match = right_distance <= self.tracking_margin_px
+            if (
+                int(np.count_nonzero(left_match)) >= self.min_lane_side_pixels
+                and int(np.count_nonzero(right_match)) >= self.min_lane_side_pixels
+            ):
+                return (
+                    nonzero_y[left_match],
+                    nonzero_x[left_match],
+                    nonzero_y[right_match],
+                    nonzero_x[right_match],
+                )
+
         histogram = np.sum(mask[int(height * 0.55):, :], axis=0)
         midpoint = width // 2
         left_base = int(np.argmax(histogram[:midpoint])) if midpoint else 0
