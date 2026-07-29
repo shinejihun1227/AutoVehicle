@@ -332,7 +332,8 @@ class FrontCameraPerception:
         )
         segments = []
         if lines is not None:
-            for line in lines[:, 0, :]:
+            # OpenCV versions return either (N, 1, 4) or (N, 4).
+            for line in np.asarray(lines).reshape(-1, 4):
                 x1, y1, x2, y2 = [int(value) for value in line]
                 angle = abs(np.degrees(np.arctan2(y2 - y1, x2 - x1)))
                 if angle <= 10.0 and (y1 + y2) * 0.5 >= height * 0.50:
