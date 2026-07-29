@@ -380,6 +380,11 @@ class FrontCameraPerception:
             if width * 0.20 <= lane_width <= width * 1.25:
                 lane_center = (self._last_left_lane_x + self._last_right_lane_x) * 0.5
                 confidence = min(left_quality, right_quality)
+            else:
+                # Both curves exist but their geometry is implausible. Do
+                # not turn this frame into a steering estimate.
+                self._last_lane_confidence = 0.0
+                return None
         elif self._last_left_lane_x is not None or self._last_right_lane_x is not None:
             lane_center = float(np.median(xs))
             confidence = 0.25 * max(left_quality, right_quality)
