@@ -1,3 +1,13 @@
+cd ~/AutoVehicle
+git pull --ff-only origin main
+
+cd running
+python3 -m unittest discover \
+  -s roi_camera_integration/tests \
+  -p "test_*.py" -v
+그다음 실시간 확인:
+cd ~/AutoVehicle/running/roi_camera_integration
+
 python3 front_camera_debug.py \
   --bind-ip 0.0.0.0 \
   --port 1101 \
