@@ -79,7 +79,7 @@ When `--save-dir` is used, every 30th decoded frame is saved twice:
 
 ```text
 front_camera_000030.jpg          # original decoded JPEG
-front_camera_overlay_000030.jpg # OpenCV lane-mask visualization
+front_camera_overlay_000030.jpg # OpenCV BEV/lane-pipeline visualization
 ```
 
 The overlay marks accepted lane pixels in yellow, the fitted left boundary in
@@ -88,6 +88,10 @@ filtered lane center in green. The log also reports `lane_confidence`,
 `left_x`, and `right_x`. For a live Ubuntu GUI window, add `--display` to the
 debug command. Press `q` in the OpenCV window or `Ctrl+C` in the terminal to
 stop.
+
+The initial Front-camera BEV uses normalized source points
+`(0.30,0.55),(0.70,0.55),(0.96,1.00),(0.04,1.00)`. These are calibration
+starting points and may need adjustment for the actual MORAI road view.
 
 The front-only detector now fits each visible lane boundary with a quadratic
 curve, checks the projected lane width, and smooths the lane offset over time.
