@@ -117,7 +117,7 @@ class FrontCameraPerception:
     def _apply_bev(self, image):
         """BEV (Bird's-Eye View) 조감도 시점 변환"""
         h, w = image.shape[:2]
-        # 도로 원근 사다리꼴 (카메라 각도에 따라 조정 필요)
+        # 도로 원근 사다리꼴 (카메라 각도 및 설치 높이에 맞게 좌표 조정 가능)
         src_pts = np.float32([
             [w * 0.25, h * 0.55],
             [w * 0.75, h * 0.55],
@@ -166,11 +166,14 @@ class FrontCameraPerception:
         lines = cv2.HoughLinesP(thresh, 1, np.pi / 180, threshold=40, minLineLength=60, maxLineGap=15)
         if lines is not None:
             for line in lines:
-                x1, y1, x2, y2 = line[0]
-                # 기울기 각도 계산 (수평 -10도 ~ +10도 이내면 정지선 판정)
-                angle = np.abs(np.arctan2(y2 - y1, x2 - x1) * 180.0 / np.pi)
-                if angle < 10.0 or angle > 170.0:
-                    return True
+                # 1차원이든 2차원이든 4개 점(x1, y1, x2, y2)을 안전하게 추출
+                line_pts = line.ravel()
+                if len(line_pts) >= 4:
+                    x1, y1, x2, y2 = line_pts[:4]
+                    # 기울기 각도 계산 (수평 -10도 ~ +10도 이내면 정지선 판정)
+                    angle = np.abs(np.arctan2(y2 - y1, x2 - x1) * 180.0 / np.pi)
+                    if angle < 10.0 or angle > 170.0:
+                        return True
         return False
 
     def _lane_offset_ransac(self, image) -> Optional[float]:
@@ -201,7 +204,7 @@ class FrontCameraPerception:
             return None
 
         # 3. RANSAC 기반 피팅 (x = my + b)
-        poly = PolynomialFeatures(degree=1)  # 1차 직선 피팅 (직선도로/안정성 극대화)
+        poly = PolynomialFeatures(degree=1)  # 1차 직선 피팅
         ys_poly = poly.fit_transform(ys.reshape(-1, 1))
 
         try:
