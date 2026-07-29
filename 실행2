@@ -1,14 +1,24 @@
-cd ~/AutoVehicle
-git pull --rebase origin main
+cd ~
 
-ls -lh data/2026_molit_comp_global_path.txt
-이후:
-cd ~/AutoVehicle/running/roi_camera_integration
-
+git clone -b dev/stanley --single-branch \
+  https://github.com/hyunho0429/ROI.git ROI
+이미 ~/ROI 폴더가 있다면 clone하지 말고:
+cd ~/ROI
+git pull origin dev/stanley
+2. ROI 빌드
 source /opt/ros/noetic/setup.bash
-source ~/ROI/devel/setup.bash
 
+cd ~/ROI
+catkin_make
+source devel/setup.bash
+3. path_planning import 확인
 export PYTHONPATH="$HOME/ROI/src/path_planning/src:$PYTHONPATH"
+
+python3 -c "from path_planning.coordinates import GpsToMapEnu; print('path_planning import OK')"
+다음 문장이 나오면 정상입니다.
+path_planning import OK
+4. 주행 및 경로 오버레이 실행
+cd ~/AutoVehicle/running/roi_camera_integration
 
 python3 morai_pure_pursuit_camera_udp.py \
   --bind-ip 0.0.0.0 \
