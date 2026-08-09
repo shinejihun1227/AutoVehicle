@@ -31,9 +31,20 @@ udp_fallback:
     host_sensor_port: 2000
     destination_port: 2001
   gps:
+    protocol: NMEA0183
     destination_port: 3001
+    packet_size: 1028
+    sentences:
+      - GPRMC
+      - GPGGA
+    validate_checksum: true
   imu:
+    protocol: MORAI_IMU
     destination_port: 4001
+    packet_size: 115
+    legacy_packet_size: 107
+    data_size: 80
+    byte_order: little_endian
   control:
     ubuntu_source_port: 9094
     morai_destination_port: 9093
@@ -44,4 +55,3 @@ internal_output_topics:
   camera_right: /camera/right/image/compressed
   camera_aux: /camera/aux/image/compressed
   lidar: /lidar3D
-
