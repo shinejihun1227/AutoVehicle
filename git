@@ -3,15 +3,8 @@
 sudo apt update
 sudo apt install -y git
 
-git clone --single-branch --branch morai \
+git clone --branch morai \
   https://github.com/shinejihun1227/AutoVehicle.git \
-  ~/morai_repo
-
-ln -s ~/morai_repo/morai_ws ~/morai_ws
+  ~/morai_ws
 
 cd ~/morai_ws
-
-
-
-이후 코드들을 업데이트 할 때
-git -C ~/morai_repo pull --ff-only origin morai
