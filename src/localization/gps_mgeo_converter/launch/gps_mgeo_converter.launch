@@ -8,7 +8,7 @@
         name="gps_mgeo_converter"
         output="screen">
     <rosparam param="local_origin_utm">[302595.0, 4124145.0, 0.0]</rosparam>
-    <rosparam param="gps_xyz_in_base_link">[$(arg gps_xyz_x), $(arg gps_xyz_y), $(arg gps_xyz_z)]</rosparam>
+    <rosparam param="gps_xyz_in_base_link" subst_value="true">[$(arg gps_xyz_x), $(arg gps_xyz_y), $(arg gps_xyz_z)]</rosparam>
     <param name="map_frame" value="map" />
     <param name="base_frame" value="base_link" />
     <param name="gps_topic" value="/gps" />
