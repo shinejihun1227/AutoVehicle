@@ -23,3 +23,29 @@ rostopic echo -n 1 /Imu
 rostopic echo -n 1 /localization/gps
 rostopic echo -n 1 /localization/odometry
 rostopic echo -n 1 /control/steering_preview
+
+
+cd ~/morai_ws
+
+git clone -b beta_drive --single-branch \
+https://github.com/MORAI-Autonomous/MORAI-ROS_morai_msgs.git \
+src/morai_msgs
+
+
+ls ~/morai_ws/src/morai_msgs/msg
+cat ~/morai_ws/src/morai_msgs/package.xml | grep '<name>'
+
+
+
+cd ~/morai_ws
+source /opt/ros/noetic/setup.bash
+
+rosdep install --from-paths src --ignore-src -r -y
+
+rm -rf build devel
+catkin_make
+source devel/setup.bash
+
+rospack profile
+rospack find morai_msgs
+rosmsg show morai_msgs/CtrlCmd
