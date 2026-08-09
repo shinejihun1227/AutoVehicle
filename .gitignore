@@ -1,7 +1,0 @@
-build/
-devel/
-install/
-logs/
-*.bag
-*.pyc
-__pycache__/
