@@ -165,6 +165,7 @@ class MoraiUdpBridge:
                 packet,
                 expected_packet_size=GPS_PACKET_SIZE,
                 validate_checksum=validate_checksum,
+                allow_short_packet=True,
             ),
             callback=self.publish_gps,
             stats=self.gps_stats,

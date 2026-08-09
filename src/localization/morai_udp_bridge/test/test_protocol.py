@@ -51,6 +51,14 @@ class ProtocolTest(unittest.TestCase):
         self.assertLess(measurement.longitude, 0.0)
         self.assertEqual(measurement.status, 1)
 
+    def test_short_nmea_packet(self):
+        sentence = nmea_sentence(
+            "GPRMC,123519,A,3723.2475,N,12701.3416,E,000.5,054.7,191194,,,A"
+        )
+        measurement = parse_gps_packet(sentence)
+        self.assertEqual(measurement.packet_length, len(sentence))
+        self.assertEqual(measurement.status, 1)
+
     def test_networkmodule_imu_115(self):
         packet = struct.pack(
             "<9s i 3i i i 10d 2s",

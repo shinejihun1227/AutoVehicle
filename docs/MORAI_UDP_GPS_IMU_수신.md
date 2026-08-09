@@ -15,12 +15,14 @@ Ubuntu x86에서 명시적 little-endian으로 읽는다. 따라서 구조체 pa
 
 ## 2. GPS 패킷
 
-GPS는 MORAI 예제의 구조체 기준으로 다음과 같이 받는다.
+GPS는 MORAI 예제의 구조체 기준으로 받되, 시뮬레이터 버전에 따라 패킷 전체가
+1028바이트로 패딩되거나 NMEA 문장 길이 그대로(현재 확인값 77바이트) 들어오는
+두 경우를 모두 허용한다.
 
 ```text
 offset 0       : header 6 bytes, $GPRMC 또는 $GPGGA
 offset 6       : NMEA data 1022 bytes
-전체           : 1028 bytes
+전체           : 1028 bytes(NUL padding 포함) 또는 NMEA 문장 실제 길이
 ```
 
 NMEA의 위도·경도는 `ddmm.mmmm` 형식이므로 decimal degree로 변환한다.

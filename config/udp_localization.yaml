@@ -10,6 +10,7 @@ gps:
   destination_port: 3001
   protocol: NMEA0183
   packet_size: 1028
+  allow_short_packets: true
   sentences:
     - GPRMC
     - GPGGA

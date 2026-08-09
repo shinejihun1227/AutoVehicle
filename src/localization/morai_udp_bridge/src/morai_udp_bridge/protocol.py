@@ -136,6 +136,7 @@ def parse_gps_packet(
     *,
     expected_packet_size: int = GPS_PACKET_SIZE,
     validate_checksum: bool = True,
+    allow_short_packet: bool = True,
 ) -> GpsMeasurement:
     """MORAI GPS UDP 패킷 하나를 파싱한다.
 
@@ -143,9 +144,13 @@ def parse_gps_packet(
     NMEA sentence의 header 뒤쪽이며, 남는 바이트는 NUL padding으로 처리한다.
     """
 
-    if len(packet) != expected_packet_size:
+    # MORAI 버전에 따라 1028바이트 NUL-padding 패킷 또는 실제 NMEA 길이의
+    # 짧은 패킷(현재 확인값 77바이트)이 들어온다.
+    short_packet_is_valid = 6 <= len(packet) < expected_packet_size
+    if len(packet) != expected_packet_size and not (allow_short_packet and short_packet_is_valid):
         raise ProtocolError(
-            f"GPS 패킷 길이 오류: expected={expected_packet_size}, actual={len(packet)}"
+            "GPS 패킷 길이 오류: "
+            f"expected={expected_packet_size} 또는 짧은 NMEA 패킷, actual={len(packet)}"
         )
 
     header = packet[:6]
