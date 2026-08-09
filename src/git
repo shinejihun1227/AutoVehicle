@@ -1,0 +1,17 @@
+cd ~
+git clone -b morai --single-branch \
+https://github.com/shinejihun1227/AutoVehicle.git morai_ws
+
+cd ~/morai_ws
+source /opt/ros/noetic/setup.bash
+rosdep install --from-paths src --ignore-src -r -y
+catkin_make
+source devel/setup.bash
+센서와 위치만 먼저 검증합니다.
+roslaunch morai_bringup localization_purepursuit.launch enable_control:=false
+확인:
+rostopic echo -n 1 /gps
+rostopic echo -n 1 /Imu
+rostopic echo -n 1 /localization/gps
+rostopic echo -n 1 /localization/odometry
+rostopic echo -n 1 /control/steering_preview
