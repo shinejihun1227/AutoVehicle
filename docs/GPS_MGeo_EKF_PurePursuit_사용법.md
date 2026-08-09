@@ -159,7 +159,29 @@ rostopic info /ctrl_cmd
 터미널에는 경로 점 수와 Pure Pursuit의 nearest index, lookahead 거리, steering preview가
 출력된다. 경로 재생이 끝나면 `MGeo 경로 pose 재생을 완료했다.`가 출력된다.
 
-## 8. 실제 센서 연결 전환
+## 8. CtrlCmd 폐루프 제어 검증
+
+Pure Pursuit가 실제로 발행한 `/ctrl_cmd`를 가상 차량 모델이 받아서 차량 pose를 적분하는
+폐루프 테스트를 실행할 수 있다. 이 단계에서는 `/ctrl_cmd`가 실제 MORAI로 전달되지 않으며,
+MORAI 차량의 물리 엔진·타이어 모델을 검증하는 테스트도 아니다.
+
+```bash
+roslaunch purepursuit_mgeo mgeo_purepursuit_closed_loop.launch
+```
+
+확인할 토픽:
+
+```bash
+rostopic hz /localization/odometry
+rostopic echo /control/steering_preview
+rostopic echo /ctrl_cmd
+```
+
+가상 차량이 `/ctrl_cmd`의 velocity와 steering을 사용해 움직이고, Pure Pursuit가 갱신된
+`/localization/odometry`를 다시 받아 경로를 추종한다. 이 테스트를 통과한 후에 실제 MORAI
+차량의 `/localization/odometry`로 교체한다.
+
+## 9. 실제 센서 연결 전환
 
 경로 replay를 종료한 뒤에만 실제 통합 런치를 실행한다.
 
@@ -170,7 +192,7 @@ roslaunch morai_bringup localization_purepursuit.launch enable_control:=false
 이때 `/localization/odometry`는 replay 노드가 아니라 GPS-MGeo 변환기와 ENU EKF가 발행해야
 한다. 두 노드가 동시에 같은 `/localization/odometry`를 발행하면 안 된다.
 
-## 9. 자주 발생하는 문제
+## 10. 자주 발생하는 문제
 
 ### 위치가 수백만 m로 나오거나 경로에서 멀다
 
@@ -192,10 +214,11 @@ MORAI IMU quaternion의 축 정의와 차량 축 정의를 확인하고 `ekf_loc
 `purepursuit_mgeo.launch`의 `steering_sign`을 `-1.0`으로 바꾸기 전에,
 MORAI 차량 모델의 조향 필드 단위와 좌우 부호를 저속에서 확인한다.
 
-## 10. 이번 구현의 한계
+## 11. 이번 구현의 한계
 
 - EKF는 현재 2D local ENU 상태 `[x, y, yaw, 전진속도, gyro bias, accel bias]`를 사용한다.
 - GPS 품질별 공분산이 MORAI 메시지에 없으므로 기본 GPS 분산을 사용한다.
 - 차량 제원은 반영했지만 MORAI의 `CtrlCmd.steering` 부호·단위는 저속에서 추가 검증해야 한다.
+- 폐루프 가상 차량은 실제 MORAI 차량의 동역학을 대신하지 않는다.
 - 카메라 4개와 객체 검출·추적은 이번 단계에서 연결하지 않았다.
 - Windows에서는 ROS 노드를 실행할 수 없으므로 `catkin_make`와 실제 토픽 검증은 Ubuntu에서 한다.
