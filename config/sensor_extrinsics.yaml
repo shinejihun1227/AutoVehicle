@@ -23,5 +23,5 @@ sensors:
 notes:
   - GPS의 x, y가 0이므로 평면상 GPS 안테나와 base_link 위치는 동일하다.
   - GPS 고도는 base_link 고도로 사용할 때 1.2 m를 차감한다.
-  - IMU는 base_link와 같은 위치·자세로 임시 정의되어 있다.
-  - 실제 차량 모델의 wheelbase와 센서 자세를 확인한 뒤 이 파일을 갱신한다.
+  - IMU는 base_link와 같은 위치·자세로 정의되어 있다.
+  - 차량 모델은 2025_Hyundai_ioniq5이며 wheelbase는 3.000 m이다.

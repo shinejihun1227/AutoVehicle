@@ -14,6 +14,10 @@ MORAI UDP 센서값을 MGeo local ENU 좌표계로 바꾼 뒤 EKF와 Pure Pursui
 | 지도 좌표 | MGeo local ENU: x=동쪽, y=북쪽, z=위쪽 |
 | MGeo 원점 | UTM52N `(302595.0, 4124145.0, 0.0)` |
 | Pure Pursuit 기준점 | `base_link`, 즉 뒤 차축 중앙 |
+| 차량 모델 | `2025_Hyundai_ioniq5` |
+| 휠베이스 | `3.000 m` |
+| 최대 휠각 | `40° = 0.6981317008 rad` |
+| 최소 회전반경 | `5.87 m` |
 | 카메라 | 이번 통합 런치에는 포함하지 않음 |
 
 센서 외부 파라미터의 실제 파일은 `config/sensor_extrinsics.yaml`이다. GPS의 x·y가
@@ -111,11 +115,12 @@ Ubuntu에서 수신한 ROS 시각을 사용한다. 시간 동기 검증이 끝�
 
 다음 항목을 먼저 확인한다.
 
-1. MORAI 차량 모델의 실제 뒤 차축-앞 차축 거리(휠베이스)를 확인한다.
-2. `wheelbase_m:=2.7`의 임시값을 실제 값으로 바꾼다.
-3. MGeo 경로와 초기 `/localization/odometry` 위치가 같은 좌표계인지 확인한다.
-4. 정지·저속에서 `/control/steering_preview` 부호가 MORAI 조향 방향과 같은지 확인한다.
-5. `CtrlCmd`의 종방향 명령 모드와 필드 이름을 Ubuntu에서 확인한다.
+1. 차량 모델이 `2025_Hyundai_ioniq5`인지 확인한다.
+2. `wheelbase_m:=3.0`이 적용되었는지 확인한다.
+3. 최대 휠각 `40°`가 `0.6981317008 rad`로 제한되는지 확인한다.
+4. MGeo 경로와 초기 `/localization/odometry` 위치가 같은 좌표계인지 확인한다.
+5. 정지·저속에서 `/control/steering_preview` 부호가 MORAI 조향 방향과 같은지 확인한다.
+6. `CtrlCmd`의 종방향 명령 모드와 필드 이름을 Ubuntu에서 확인한다.
 
 ```bash
 rosmsg show morai_msgs/CtrlCmd
@@ -125,7 +130,7 @@ rosmsg show morai_msgs/CtrlCmd
 
 ```bash
 roslaunch morai_bringup localization_purepursuit.launch \
-  wheelbase_m:=<실제휠베이스> enable_control:=true
+  wheelbase_m:=3.0 enable_control:=true
 ```
 
 `purepursuit_mgeo_node.py`는 MGeo x·y를 `map`에서 `base_link`로 변환하고,
@@ -158,6 +163,6 @@ MORAI 차량 모델의 조향 필드 단위와 좌우 부호를 저속에서 확
 
 - EKF는 현재 2D local ENU 상태 `[x, y, yaw, 전진속도, gyro bias, accel bias]`를 사용한다.
 - GPS 품질별 공분산이 MORAI 메시지에 없으므로 기본 GPS 분산을 사용한다.
-- 실제 휠베이스와 조향 제한값은 차량 모델 확인 전까지 확정할 수 없다.
+- 차량 제원은 반영했지만 MORAI의 `CtrlCmd.steering` 부호·단위는 저속에서 추가 검증해야 한다.
 - 카메라 4개와 객체 검출·추적은 이번 단계에서 연결하지 않았다.
 - Windows에서는 ROS 노드를 실행할 수 없으므로 `catkin_make`와 실제 토픽 검증은 Ubuntu에서 한다.

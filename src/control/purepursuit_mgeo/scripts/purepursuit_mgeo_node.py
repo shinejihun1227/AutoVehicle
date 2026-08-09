@@ -29,13 +29,15 @@ class PurePursuitNode:
         path_file = rospy.get_param("~path_file")
         self.points = load_mgeo_path(path_file)
         self.target_speed = float(rospy.get_param("~target_speed_mps", 2.0))
-        self.max_steering = float(rospy.get_param("~max_steering_rad", 0.6))
+        self.max_steering = float(
+            rospy.get_param("~max_steering_rad", math.radians(40.0))
+        )
         self.rate_hz = float(rospy.get_param("~control_rate_hz", 20.0))
         self.enable_control = bool(rospy.get_param("~enable_control", False))
         self.longl_cmd_type = int(rospy.get_param("~longl_cmd_type", 2))
         self.steering_sign = float(rospy.get_param("~steering_sign", 1.0))
 
-        wheelbase = float(rospy.get_param("~wheelbase_m", 2.7))
+        wheelbase = float(rospy.get_param("~wheelbase_m", 3.0))
         lookahead_min = float(rospy.get_param("~lookahead_min_m", 4.0))
         lookahead_gain = float(rospy.get_param("~lookahead_gain", 0.35))
         goal_tolerance = float(rospy.get_param("~goal_tolerance_m", 1.5))
