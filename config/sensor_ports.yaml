@@ -44,6 +44,7 @@ udp_fallback:
     packet_size: 115
     legacy_packet_size: 107
     data_size: 80
+    accepted_data_lengths: [80, 88]
     byte_order: little_endian
   control:
     ubuntu_source_port: 9094

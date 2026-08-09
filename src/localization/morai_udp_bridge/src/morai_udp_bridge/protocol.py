@@ -17,6 +17,9 @@ GPS_PACKET_SIZE = 1028  # header 6 bytes + data 1022 bytes
 IMU_PACKET_SIZE = 115  # MORAI NetworkModule 24.R2/26.R1 ctypes structure
 LEGACY_IMU_PACKET_SIZE = 107  # 문서에 남아 있는 구형 IMU 형식
 IMU_DATA_SIZE = 80  # double 10개
+# MORAI 버전에 따라 data_length 필드가 80 또는 88로 전송된다.
+# 두 값 모두 뒤의 실제 double 데이터는 10개(80바이트)로 동일하다.
+IMU_ACCEPTED_DATA_LENGTHS = (IMU_DATA_SIZE, IMU_DATA_SIZE + 8)
 
 _GPS_HEADERS = (b"$GPRMC", b"$GPGGA")
 _IMU_FORMAT = "<9s i 3i i i 10d 2s"
@@ -248,9 +251,10 @@ def parse_imu_packet(
         tail = values[17]
         layout = "networkmodule_115"
 
-    if require_data_length_80 and data_length != IMU_DATA_SIZE:
+    if require_data_length_80 and data_length not in IMU_ACCEPTED_DATA_LENGTHS:
         raise ProtocolError(
-            f"IMU data_length 오류: expected={IMU_DATA_SIZE}, actual={data_length}"
+            "IMU data_length 오류: "
+            f"expected={list(IMU_ACCEPTED_DATA_LENGTHS)}, actual={data_length}"
         )
     _check_imu_timestamp(sec, nsec)
 

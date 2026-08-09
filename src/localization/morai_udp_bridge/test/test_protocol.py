@@ -105,6 +105,32 @@ class ProtocolTest(unittest.TestCase):
         self.assertEqual(measurement.layout, "legacy_107")
         self.assertEqual(measurement.auxiliary, (7,))
 
+    def test_networkmodule_imu_accepts_data_length_88(self):
+        packet = struct.pack(
+            "<9s i 3i i i 10d 2s",
+            b"MORAIIMU\x00",
+            88,
+            1,
+            2,
+            3,
+            1700000000,
+            123,
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            0.1,
+            0.2,
+            0.3,
+            1.0,
+            2.0,
+            3.0,
+            b"\r\n",
+        )
+        measurement = parse_imu_packet(packet)
+        self.assertEqual(measurement.data_length, 88)
+        self.assertEqual(measurement.linear_acceleration, (1.0, 2.0, 3.0))
+
 
 if __name__ == "__main__":
     unittest.main()
