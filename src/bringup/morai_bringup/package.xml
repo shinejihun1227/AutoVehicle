@@ -9,6 +9,7 @@
   <buildtool_depend>catkin</buildtool_depend>
   <exec_depend>tf</exec_depend>
   <exec_depend>morai_udp_bridge</exec_depend>
+  <exec_depend>morai_udp_drive_bridge</exec_depend>
   <exec_depend>gps_mgeo_converter</exec_depend>
   <exec_depend>ekf_local_enu</exec_depend>
   <exec_depend>purepursuit_mgeo</exec_depend>

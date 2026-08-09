@@ -48,6 +48,11 @@ udp_fallback:
   control:
     ubuntu_source_port: 9094
     morai_destination_port: 9093
+  ego_status:
+    morai_host_port: 908
+    ubuntu_destination_port: 909
+    packet_size: 181
+    note: MORAI EgoVehicleStatus를 수신하는 UDP 포트
 
 internal_output_topics:
   camera_front: /camera/front/image/compressed
