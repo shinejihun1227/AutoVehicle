@@ -1,0 +1,10 @@
+cd ~/AutoVehicle/running/roi_camera_integration
+
+export PYTHONPATH="$HOME/ROI/src/path_planning/src:$PYTHONPATH"
+
+python3 morai_pure_pursuit_camera_udp.py \
+  --bind-ip 0.0.0.0 \
+  --control-ip 192.168.0.151 \
+  --camera-port 1101 \
+  --path ~/AutoVehicle/data/2026_molit_comp_global_path.txt \
+  --target-speed-kmh 0
