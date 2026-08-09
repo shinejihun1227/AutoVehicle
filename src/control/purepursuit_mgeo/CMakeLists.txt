@@ -15,6 +15,7 @@ catkin_package()
 
 catkin_install_python(PROGRAMS
   scripts/purepursuit_mgeo_node.py
+  scripts/replay_mgeo_path_pose.py
   DESTINATION ${CATKIN_PACKAGE_BIN_DESTINATION}
 )
 

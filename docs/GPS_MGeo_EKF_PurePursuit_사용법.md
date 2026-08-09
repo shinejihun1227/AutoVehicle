@@ -137,7 +137,40 @@ roslaunch morai_bringup localization_purepursuit.launch \
 뒤 차축 중앙을 기준으로 곡률을 계산한 뒤 MORAI `CtrlCmd.steering`에 라디안 값을 넣는다.
 경로 파일은 위도·경도가 아니라 이미 MGeo local ENU x y z 형식이어야 한다.
 
-## 7. 자주 발생하는 문제
+## 7. MORAI 없이 대회 경로만 먼저 검증
+
+GPS·IMU가 아직 준비되지 않았을 때는 경로의 각 점을 차량 pose처럼 재생해서 Pure Pursuit의
+추종점과 조향 계산만 확인할 수 있다. 이 테스트는 실제 localization이 아니며, `/ctrl_cmd`를
+발행하지 않는다.
+
+```bash
+roslaunch purepursuit_mgeo mgeo_purepursuit_dryrun.launch
+```
+
+확인할 토픽:
+
+```bash
+rostopic hz /localization/odometry
+rostopic echo -n 1 /control/lookahead_point
+rostopic echo -n 1 /control/steering_preview
+rostopic info /ctrl_cmd
+```
+
+터미널에는 경로 점 수와 Pure Pursuit의 nearest index, lookahead 거리, steering preview가
+출력된다. 경로 재생이 끝나면 `MGeo 경로 pose 재생을 완료했다.`가 출력된다.
+
+## 8. 실제 센서 연결 전환
+
+경로 replay를 종료한 뒤에만 실제 통합 런치를 실행한다.
+
+```bash
+roslaunch morai_bringup localization_purepursuit.launch enable_control:=false
+```
+
+이때 `/localization/odometry`는 replay 노드가 아니라 GPS-MGeo 변환기와 ENU EKF가 발행해야
+한다. 두 노드가 동시에 같은 `/localization/odometry`를 발행하면 안 된다.
+
+## 9. 자주 발생하는 문제
 
 ### 위치가 수백만 m로 나오거나 경로에서 멀다
 
@@ -159,7 +192,7 @@ MORAI IMU quaternion의 축 정의와 차량 축 정의를 확인하고 `ekf_loc
 `purepursuit_mgeo.launch`의 `steering_sign`을 `-1.0`으로 바꾸기 전에,
 MORAI 차량 모델의 조향 필드 단위와 좌우 부호를 저속에서 확인한다.
 
-## 8. 이번 구현의 한계
+## 10. 이번 구현의 한계
 
 - EKF는 현재 2D local ENU 상태 `[x, y, yaw, 전진속도, gyro bias, accel bias]`를 사용한다.
 - GPS 품질별 공분산이 MORAI 메시지에 없으므로 기본 GPS 분산을 사용한다.
