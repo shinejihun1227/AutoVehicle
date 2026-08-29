@@ -1,0 +1,41 @@
+# Detection·control integration defaults.
+# 실제 차량의 camera calibration, LiDAR TF, ROI 측정 후 값을 갱신한다.
+
+topics:
+  cameras:
+    front: /camera/front/image/compressed
+    left: /camera/left/image/compressed
+    right: /camera/right/image/compressed
+    aux: /camera/aux/image/compressed
+  lidar: /lidar3D
+  lane: /detection/lane
+  traffic_light: /detection/traffic_light
+  lidar_obstacles: /detection/lidar_obstacles
+  camera_obstacles: /detection/camera_obstacles
+  fused_obstacles: /detection/fused_obstacles
+  fused_safety_stop: /detection/fused_safety_stop
+  nominal_command: /control/ctrl_cmd
+  final_command: /ctrl_cmd
+
+lidar:
+  input_frame: velodyne
+  base_frame: base_link
+  roi_x_min_m: 0.2
+  roi_x_max_m: 20.0
+  roi_y_abs_max_m: 3.0
+  roi_z_min_m: 0.05
+  roi_z_max_m: 2.0
+  stop_distance_m: 6.0
+  min_points: 5
+
+control_mux:
+  nominal_timeout_sec: 0.5
+  safety_timeout_sec: 0.5
+  require_fresh_safety: true
+  require_fresh_localization: true
+  lane_correction_enabled: false
+
+camera:
+  lane_meters_per_pixel: 0.01
+  lane_roi_start_ratio: 0.45
+  traffic_light_min_pixels: 20

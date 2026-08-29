@@ -11,6 +11,13 @@
   <arg name="control_source_port" default="9094" />
   <arg name="enable_control" default="false" />
   <arg name="wheelbase_m" default="3.0" />
+  <arg name="command_topic" default="/ctrl_cmd" />
+  <arg name="ekf_gps_topic" default="/localization/gps" />
+  <arg name="ekf_imu_topic" default="/Imu" />
+  <arg name="ekf_default_gps_variance_m2" default="1.0" />
+  <arg name="ekf_gyro_noise_std_rad_s" default="0.08" />
+  <arg name="ekf_accel_noise_std_m_s2" default="0.8" />
+  <arg name="ekf_bias_random_walk" default="0.001" />
 
   <!-- 1. MORAI GPS·IMU UDP -> /gps, /Imu -->
   <include file="$(find morai_udp_bridge)/launch/morai_udp_bridge.launch">
@@ -53,7 +60,14 @@
   </include>
 
   <!-- 5. GPS + IMU -> MGeo map/base_link EKF -->
-  <include file="$(find ekf_local_enu)/launch/ekf_local_enu.launch" />
+  <include file="$(find ekf_local_enu)/launch/ekf_local_enu.launch">
+    <arg name="gps_topic" value="$(arg ekf_gps_topic)" />
+    <arg name="imu_topic" value="$(arg ekf_imu_topic)" />
+    <arg name="default_gps_variance_m2" value="$(arg ekf_default_gps_variance_m2)" />
+    <arg name="gyro_noise_std_rad_s" value="$(arg ekf_gyro_noise_std_rad_s)" />
+    <arg name="accel_noise_std_m_s2" value="$(arg ekf_accel_noise_std_m_s2)" />
+    <arg name="bias_random_walk" value="$(arg ekf_bias_random_walk)" />
+  </include>
 
   <!-- 6. EKF pose + MGeo path -> CtrlCmd -->
   <include file="$(find purepursuit_mgeo)/launch/purepursuit_mgeo.launch">
@@ -61,5 +75,6 @@
     <arg name="path_file" value="$(arg path_file)" />
     <arg name="enable_control" value="$(arg enable_control)" />
     <arg name="wheelbase_m" value="$(arg wheelbase_m)" />
+    <arg name="command_topic" value="$(arg command_topic)" />
   </include>
 </launch>

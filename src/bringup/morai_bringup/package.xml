@@ -13,4 +13,9 @@
   <exec_depend>gps_mgeo_converter</exec_depend>
   <exec_depend>ekf_local_enu</exec_depend>
   <exec_depend>purepursuit_mgeo</exec_depend>
+  <exec_depend>control_mux</exec_depend>
+  <exec_depend>morai_camera_perception</exec_depend>
+  <exec_depend>lidar_obstacle_detector</exec_depend>
+  <exec_depend>morai_sensor_fusion</exec_depend>
+  <exec_depend>morai_perception_msgs</exec_depend>
 </package>

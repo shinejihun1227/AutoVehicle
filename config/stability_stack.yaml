@@ -1,0 +1,44 @@
+# 기존 주행 코드를 변경하지 않고 실험하는 안정성 스택 설정.
+
+topics:
+  gps_clean: /localization/gps
+  gps_noisy: /localization/gps_noisy
+  gps_filtered: /localization/gps_filtered
+  imu_clean: /Imu
+  imu_noisy: /Imu_noisy
+  lane: /detection/lane
+  nominal_command: /control/ctrl_cmd
+  camera_stable_command: /control/camera_stable_cmd
+  final_command: /ctrl_cmd
+
+gps_noise:
+  position_noise_std_x_m: 0.5
+  position_noise_std_y_m: 0.5
+  bias_random_walk_x_m_sqrt_s: 0.02
+  bias_random_walk_y_m_sqrt_s: 0.02
+  outlier_probability: 0.01
+  outlier_std_m: 3.0
+  dropout_probability: 0.02
+  random_seed: 20260822
+
+imu_noise:
+  gyro_noise_std_rad_s: 0.01
+  accel_noise_std_m_s2: 0.1
+  gyro_bias_random_walk_rad_s_sqrt_s: 0.002
+  accel_bias_random_walk_m_s2_sqrt_s: 0.02
+  orientation_yaw_noise_std_rad: 0.0
+  dropout_probability: 0.01
+  random_seed: 20260823
+
+gps_filter:
+  max_position_jump_m: 5.0
+  max_speed_mps: 15.0
+  median_window_size: 3
+
+camera_stability:
+  enabled: false
+  lateral_gain: 0.15
+  heading_gain: 0.35
+  lateral_sign: 1.0
+  heading_sign: 1.0
+  max_steering_rate_rad_s: 0.8

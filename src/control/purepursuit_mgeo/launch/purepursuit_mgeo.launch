@@ -3,6 +3,8 @@
   <arg name="path_file" default="$(arg workspace_path)/data/routes/2026_molit_comp_global_path.txt" />
   <arg name="enable_control" default="false" />
   <arg name="wheelbase_m" default="3.0" />
+  <!-- 기존 단독 실행 호환. 새 안정성 스택은 /control/ctrl_cmd를 명시한다. -->
+  <arg name="command_topic" default="/ctrl_cmd" />
 
   <node pkg="purepursuit_mgeo"
         type="purepursuit_mgeo_node.py"
@@ -10,7 +12,7 @@
         output="screen">
     <param name="path_file" value="$(arg path_file)" />
     <param name="pose_topic" value="/localization/odometry" />
-    <param name="command_topic" value="/ctrl_cmd" />
+    <param name="command_topic" value="$(arg command_topic)" />
     <param name="lookahead_topic" value="/control/lookahead_point" />
     <param name="wheelbase_m" value="$(arg wheelbase_m)" />
     <param name="target_speed_mps" value="2.0" />

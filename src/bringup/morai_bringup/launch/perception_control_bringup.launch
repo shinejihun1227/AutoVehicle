@@ -1,0 +1,52 @@
+<launch>
+  <!-- 센서·인식·안전정지·control_mux 통합 런치.
+       enable_control=false가 기본이며, 실제 제어 전환 전에 모든 토픽을 검증한다. -->
+  <arg name="workspace_path" default="$(env HOME)/morai_ws" />
+  <arg name="path_file" default="$(arg workspace_path)/data/routes/2026_molit_comp_global_path.txt" />
+  <arg name="morai_host_ip" default="192.168.0.151" />
+  <arg name="control_remote_port" default="9093" />
+  <arg name="enable_control" default="false" />
+  <arg name="require_fresh_safety" default="true" />
+  <arg name="publish_lidar_static_tf" default="false" />
+  <arg name="lidar_x_m" default="0.0" />
+  <arg name="lidar_y_m" default="0.0" />
+  <arg name="lidar_z_m" default="0.0" />
+  <arg name="lidar_yaw_deg" default="0.0" />
+  <arg name="lidar_pitch_deg" default="0.0" />
+  <arg name="lidar_roll_deg" default="0.0" />
+
+  <!-- 1. GPS·IMU·EKF·Pure Pursuit. Pure Pursuit는 nominal 명령만 발행한다. -->
+  <include file="$(find morai_bringup)/launch/morai_udp_ekf_purepursuit.launch">
+    <arg name="workspace_path" value="$(arg workspace_path)" />
+    <arg name="path_file" value="$(arg path_file)" />
+    <arg name="morai_host_ip" value="$(arg morai_host_ip)" />
+    <arg name="control_remote_port" value="$(arg control_remote_port)" />
+    <arg name="enable_control" value="$(arg enable_control)" />
+    <arg name="command_topic" value="/control/ctrl_cmd" />
+  </include>
+
+  <!-- 2. 카메라 4대 상태, 전방 차선·신호, camera obstacle interface -->
+  <include file="$(find morai_camera_perception)/launch/camera_perception.launch" />
+
+  <!-- 3. LiDAR 전방 ROI 장애물·LiDAR safety_stop -->
+  <include file="$(find lidar_obstacle_detector)/launch/lidar_obstacle_detector.launch" />
+
+  <!-- 4. camera·LiDAR obstacle fusion 및 fused safety_stop -->
+  <include file="$(find morai_sensor_fusion)/launch/sensor_fusion.launch" />
+
+  <!-- 5. 단일 최종 제어 명령 발행자 -->
+  <include file="$(find control_mux)/launch/control_mux.launch">
+    <arg name="nominal_command_topic" value="/control/ctrl_cmd" />
+    <arg name="output_command_topic" value="/ctrl_cmd" />
+    <arg name="safety_stop_topic" value="/detection/fused_safety_stop" />
+    <arg name="require_fresh_safety" value="$(arg require_fresh_safety)" />
+    <arg name="require_fresh_localization" value="true" />
+  </include>
+
+  <!-- MORAI가 velodyne TF를 제공하지 않는 경우에만 실제 장착값으로 켠다. -->
+  <node if="$(arg publish_lidar_static_tf)"
+        pkg="tf"
+        type="static_transform_publisher"
+        name="base_link_to_velodyne"
+        args="$(arg lidar_x_m) $(arg lidar_y_m) $(arg lidar_z_m) $(arg lidar_yaw_deg) $(arg lidar_pitch_deg) $(arg lidar_roll_deg) base_link velodyne 100" />
+</launch>

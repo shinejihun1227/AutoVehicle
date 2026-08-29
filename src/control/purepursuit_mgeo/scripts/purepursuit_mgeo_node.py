@@ -51,7 +51,8 @@ class PurePursuitNode:
         )
 
         self.pose_topic = rospy.get_param("~pose_topic", "/localization/odometry")
-        self.command_topic = rospy.get_param("~command_topic", "/ctrl_cmd")
+        # 정상 주행 명령은 control_mux가 최종 /ctrl_cmd로 중재한다.
+        self.command_topic = rospy.get_param("~command_topic", "/control/ctrl_cmd")
         self.lookahead_topic = rospy.get_param("~lookahead_topic", "/control/lookahead_point")
         self.map_frame = rospy.get_param("~map_frame", "map")
         self.latest_odom: Optional[Odometry] = None

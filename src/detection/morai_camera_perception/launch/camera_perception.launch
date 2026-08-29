@@ -1,0 +1,41 @@
+<launch>
+  <arg name="front_topic" default="/camera/front/image/compressed" />
+  <arg name="left_topic" default="/camera/left/image/compressed" />
+  <arg name="right_topic" default="/camera/right/image/compressed" />
+  <arg name="aux_topic" default="/camera/aux/image/compressed" />
+
+  <node pkg="morai_camera_perception"
+        type="camera_health_monitor.py"
+        name="camera_health_monitor"
+        output="screen">
+    <param name="front_topic" value="$(arg front_topic)" />
+    <param name="left_topic" value="$(arg left_topic)" />
+    <param name="right_topic" value="$(arg right_topic)" />
+    <param name="aux_topic" value="$(arg aux_topic)" />
+  </node>
+
+  <node pkg="morai_camera_perception"
+        type="camera_lane_detector.py"
+        name="camera_lane_detector"
+        output="screen">
+    <param name="image_topic" value="$(arg front_topic)" />
+    <param name="output_topic" value="/detection/lane" />
+    <param name="meters_per_pixel" value="0.01" />
+  </node>
+
+  <node pkg="morai_camera_perception"
+        type="traffic_light_detector.py"
+        name="traffic_light_detector"
+        output="screen">
+    <param name="image_topic" value="$(arg front_topic)" />
+    <param name="output_topic" value="/detection/traffic_light" />
+  </node>
+
+  <node pkg="morai_camera_perception"
+        type="camera_obstacle_detector.py"
+        name="camera_obstacle_detector"
+        output="screen">
+    <param name="image_topic" value="$(arg front_topic)" />
+    <param name="output_topic" value="/detection/camera_obstacles" />
+  </node>
+</launch>

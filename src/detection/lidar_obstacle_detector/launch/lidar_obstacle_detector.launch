@@ -1,0 +1,18 @@
+<launch>
+  <arg name="point_topic" default="/lidar3D" />
+  <arg name="input_frame" default="velodyne" />
+  <arg name="base_frame" default="base_link" />
+  <arg name="stop_distance_m" default="6.0" />
+  <arg name="min_points" default="5" />
+
+  <node pkg="lidar_obstacle_detector"
+        type="lidar_obstacle_detector.py"
+        name="lidar_obstacle_detector"
+        output="screen">
+    <param name="point_topic" value="$(arg point_topic)" />
+    <param name="input_frame" value="$(arg input_frame)" />
+    <param name="base_frame" value="$(arg base_frame)" />
+    <param name="stop_distance_m" value="$(arg stop_distance_m)" />
+    <param name="min_points" value="$(arg min_points)" />
+  </node>
+</launch>
