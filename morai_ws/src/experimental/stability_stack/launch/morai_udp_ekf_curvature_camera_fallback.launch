@@ -29,14 +29,22 @@
   <arg name="front_camera_topic" default="/camera/front/image/compressed" />
   <arg name="camera_debug_topic" default="/detection/lane_debug/compressed" />
   <arg name="publish_camera_debug" default="true" />
+  <arg name="use_camera_team_model" default="true" />
+  <arg name="camera_model_path" default="$(find morai_camera_perception)/models/lane_segmentation.onnx" />
+  <arg name="camera_mask_topic" default="/detection/lane_model_mask/compressed" />
+  <arg name="publish_camera_mask" default="true" />
+  <!-- GUI 환경에서는 원본과 차선 오버레이 영상을 자동으로 표시한다. -->
+  <arg name="show_camera_windows" default="true" />
+  <arg name="camera_viewer_max_width" default="1280" />
+  <arg name="camera_viewer_max_height" default="720" />
 
   <!-- 실제 장착값을 확인한 뒤에만 static camera TF를 켠다. -->
   <arg name="publish_camera_static_tf" default="false" />
-  <arg name="camera_x_m" default="0.0" />
+  <arg name="camera_x_m" default="1.9" />
   <arg name="camera_y_m" default="0.0" />
-  <arg name="camera_z_m" default="1.5" />
+  <arg name="camera_z_m" default="1.2" />
   <arg name="camera_yaw_deg" default="0.0" />
-  <arg name="camera_pitch_deg" default="0.0" />
+  <arg name="camera_pitch_deg" default="2.0" />
   <arg name="camera_roll_deg" default="0.0" />
 
   <!-- 노이즈 시 camera fallback에 사용할 보수적 속도 상한이다. -->
@@ -159,17 +167,68 @@
     <param name="progress_backtrack_tolerance_m" value="2.0" />
   </node>
 
-  <!-- 8. 전방 camera lane detector. 양쪽 차선만 높은 confidence로 fallback에 사용 -->
-  <node pkg="morai_camera_perception" type="camera_lane_detector_robust.py"
-        name="camera_fallback_lane_detector" output="screen">
+  <!-- 8. CAMERA팀 ONNX 차선 인식. 기존 주행 인터페이스로 변환한다. -->
+  <group if="$(arg use_camera_team_model)">
+    <node pkg="morai_camera_perception" type="camera_lane_team_node.py"
+          name="camera_team_lane_detector" output="screen">
+      <param name="image_topic" value="$(arg front_camera_topic)" />
+      <param name="output_topic" value="/detection/lane" />
+      <param name="debug_topic" value="$(arg camera_debug_topic)" />
+      <param name="mask_topic" value="$(arg camera_mask_topic)" />
+      <param name="publish_debug" value="$(arg publish_camera_debug)" />
+      <param name="publish_mask" value="$(arg publish_camera_mask)" />
+      <param name="model_path" value="$(arg camera_model_path)" />
+      <param name="model_width" value="640" />
+      <param name="model_height" value="360" />
+      <param name="lane_threshold" value="0.50" />
+      <param name="roi_start_ratio" value="0.45" />
+      <param name="roi_top_ratio" value="0.58" />
+      <param name="roi_bottom_ratio" value="0.98" />
+      <param name="lane_width_m" value="3.5" />
+      <param name="default_lane_width_px_ratio" value="0.35" />
+      <param name="filter_window" value="5" />
+      <param name="max_fit_residual_px" value="18.0" />
+      <param name="output_sign" value="1.0" />
+    </node>
+  </group>
+
+  <!-- 기존 색상/Hough 검출기는 A/B 비교용으로 계속 보존한다. -->
+  <group unless="$(arg use_camera_team_model)">
+    <node pkg="morai_camera_perception" type="camera_lane_detector_robust.py"
+          name="camera_fallback_lane_detector" output="screen">
+      <param name="image_topic" value="$(arg front_camera_topic)" />
+      <param name="output_topic" value="/detection/lane" />
+      <param name="debug_topic" value="$(arg camera_debug_topic)" />
+      <param name="publish_debug" value="$(arg publish_camera_debug)" />
+      <param name="lane_width_m" value="3.5" />
+      <param name="meters_per_pixel" value="0.01" />
+      <param name="smooth_alpha" value="0.35" />
+      <param name="lane_filter_window" value="5" />
+    </node>
+  </group>
+
+  <!-- 8-1. 카메라 원본 영상 표시. 디버그 전용이며 제어 토픽을 발행하지 않는다. -->
+  <node if="$(arg show_camera_windows)"
+        pkg="morai_camera_perception"
+        type="compressed_image_viewer.py"
+        name="camera_front_viewer"
+        output="screen">
     <param name="image_topic" value="$(arg front_camera_topic)" />
-    <param name="output_topic" value="/detection/lane" />
-    <param name="debug_topic" value="$(arg camera_debug_topic)" />
-    <param name="publish_debug" value="$(arg publish_camera_debug)" />
-    <param name="lane_width_m" value="3.5" />
-    <param name="meters_per_pixel" value="0.01" />
-    <param name="smooth_alpha" value="0.35" />
-    <param name="lane_filter_window" value="5" />
+    <param name="window_name" value="MORAI Front Camera - Raw" />
+    <param name="max_width" value="$(arg camera_viewer_max_width)" />
+    <param name="max_height" value="$(arg camera_viewer_max_height)" />
+  </node>
+
+  <!-- 8-2. 차선·ROI·오차가 그려진 영상 표시. -->
+  <node if="$(arg show_camera_windows)"
+        pkg="morai_camera_perception"
+        type="compressed_image_viewer.py"
+        name="camera_lane_debug_viewer"
+        output="screen">
+    <param name="image_topic" value="$(arg camera_debug_topic)" />
+    <param name="window_name" value="MORAI Front Camera - Lane Debug" />
+    <param name="max_width" value="$(arg camera_viewer_max_width)" />
+    <param name="max_height" value="$(arg camera_viewer_max_height)" />
   </node>
 
   <node pkg="stability_stack" type="camera_localization_fallback_controller.py"
