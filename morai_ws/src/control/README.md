@@ -1,4 +1,4 @@
-# Control 팀
+# 제어(Control) 팀
 
 MGeo 해석, 대회 경로 생성, 경로 인덱싱, 속도·조향 제어, 안전정지
 우선순위, MORAI CtrlCmd 송신을 담당한다.

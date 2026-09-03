@@ -1,4 +1,4 @@
-# curvature_speed_purepursuit
+# 곡률 기반 속도 계획 Pure Pursuit 실험
 
 기존 `purepursuit_mgeo`, `control_mux`, `/ctrl_cmd`와 연결하지 않는 곡률 기반 속도 계획 실험 패키지다.
 

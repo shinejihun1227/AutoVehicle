@@ -4,6 +4,9 @@
 `run+camera`, `running` 폴더의 코드는 정리 대상이며, 필요한 개념과 설정은
 이 폴더의 문서로만 관리합니다.
 
+현재 폴더 구성, 실행 순서, 토픽 연결, 테스트 기준은
+[현재 구성 및 실행 보고서](docs/현재_구성_및_실행_보고서.md)를 먼저 읽습니다.
+
 ## 고정된 카메라 포트
 
 | 센서 | MORAI Host Sensor Port | Ubuntu Destination Port |
@@ -49,7 +52,7 @@ morai_ws/
 ├─ config/             모든 공통 설정
 ├─ data/               경로·MGeo·대회 참고자료
 ├─ docs/               분석과 팀 간 계약
-└─ launch/             통합 실행 파일
+└─ 각 package/launch/  패키지별 실행 파일
 ```
 
 ## 센서 융합 원칙
@@ -87,3 +90,13 @@ flowchart LR
 새로운 패키지나 토픽을 만들기 전에 [팀 간 인터페이스 계약](docs/INTERFACE_CONTRACT.md)과
 [이관 계획](docs/MIGRATION_PLAN.md), [세부 규정집 요약](docs/세부규정집_요약.md)을
 확인합니다.
+
+## 현재 권장 실행 순서
+
+1. `curvature_speed_purepursuit_noisy_closed_loop.launch`로 가상 차량 폐루프를 시험한다.
+2. 실제 `/localization/odometry`를 입력으로 `curvature_speed_purepursuit_noisy.launch`를
+   `publish_command=false`로 실행한다.
+3. GPS·IMU·EKF와 filtered odometry를 확인한 뒤에만 실제 MORAI 제어 명령을 연결한다.
+
+기존 Pure Pursuit와 새 곡률 기반 Pure Pursuit를 동시에 실행하지 않습니다. 새 실험은
+`/experimental/*` 토픽을 사용하고, 기존 주행은 `/ctrl_cmd` 체계를 사용합니다.

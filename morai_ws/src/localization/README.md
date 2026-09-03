@@ -1,4 +1,4 @@
-# Localization
+# 위치 추정(Localization)
 
 이 폴더는 MORAI ROS의 GPS와 IMU를 이용해 차량의 map -> base_link pose를 추정한다.
 

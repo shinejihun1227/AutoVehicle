@@ -1,4 +1,4 @@
-# Detection 팀
+# 인식(Detection) 팀
 
 카메라 4대와 VLP16 LiDAR의 ROS 입력, 센서 보정, 차선·신호·장애물 인식,
 카메라·LiDAR 융합, 안전정지 근거를 담당한다.
