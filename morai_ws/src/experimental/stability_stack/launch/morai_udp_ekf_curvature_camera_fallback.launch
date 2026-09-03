@@ -1,0 +1,224 @@
+<launch>
+  <!--
+    인위적인 noise topic 없이 raw GPS/IMU + 곡률 Pure Pursuit +
+    전방 카메라 차선 fallback을 연결하는 독립 실행 파일.
+
+    정상: raw GPS/IMU -> EKF -> curvature Pure Pursuit
+    이상: sensor_quality_monitor -> camera lane assist/fallback
+    최종: camera fallback -> control_mux -> /ctrl_cmd -> MORAI
+
+    /Ego_topic은 이 launch의 판단·제어 입력으로 사용하지 않는다.
+  -->
+
+  <arg name="workspace_path" default="$(env HOME)/morai_ws" />
+  <arg name="path_file" default="$(arg workspace_path)/data/routes/2026_molit_comp_global_path.txt" />
+
+  <!-- 현재 MORAI PC 주소 -->
+  <arg name="morai_host_ip" default="192.168.0.148" />
+  <arg name="control_remote_port" default="9093" />
+  <arg name="control_source_port" default="9094" />
+  <arg name="bind_ip" default="0.0.0.0" />
+  <arg name="gps_port" default="3001" />
+  <arg name="imu_port" default="4001" />
+  <arg name="ego_status_port" default="909" />
+
+  <!-- 먼저 false로 토픽과 검출 결과를 확인한다. -->
+  <arg name="enable_control" default="false" />
+
+  <!-- MORAI 카메라 토픽은 실제 rostopic list 결과에 맞게 바꾼다. -->
+  <arg name="front_camera_topic" default="/camera/front/image/compressed" />
+  <arg name="camera_debug_topic" default="/detection/lane_debug/compressed" />
+  <arg name="publish_camera_debug" default="true" />
+
+  <!-- 실제 장착값을 확인한 뒤에만 static camera TF를 켠다. -->
+  <arg name="publish_camera_static_tf" default="false" />
+  <arg name="camera_x_m" default="0.0" />
+  <arg name="camera_y_m" default="0.0" />
+  <arg name="camera_z_m" default="1.5" />
+  <arg name="camera_yaw_deg" default="0.0" />
+  <arg name="camera_pitch_deg" default="0.0" />
+  <arg name="camera_roll_deg" default="0.0" />
+
+  <!-- 노이즈 시 camera fallback에 사용할 보수적 속도 상한이다. -->
+  <arg name="fallback_speed_cap_mps" default="2.0" />
+  <arg name="stop_without_camera" default="true" />
+
+  <!-- 장애물 안전 토픽을 실제로 연결할 때 true로 켠다. -->
+  <arg name="enable_lidar_safety" default="false" />
+  <arg name="lidar_topic" default="/lidar3D" />
+  <arg name="require_fresh_safety" default="false" />
+
+  <!-- 1. MORAI GPS·IMU UDP -> /gps, /Imu -->
+  <include file="$(find morai_udp_bridge)/launch/morai_udp_bridge.launch">
+    <arg name="bind_ip" value="$(arg bind_ip)" />
+    <arg name="gps_port" value="$(arg gps_port)" />
+    <arg name="imu_port" value="$(arg imu_port)" />
+    <arg name="gps_topic" value="/gps" />
+    <arg name="imu_topic" value="/Imu" />
+    <arg name="gps_frame_id" value="gps_link" />
+    <arg name="imu_frame_id" value="imu_link" />
+    <arg name="imu_use_packet_time" value="false" />
+  </include>
+
+  <!-- 2. CtrlCmd UDP 송신. status topic은 수신만 하며 본 fallback은 구독하지 않는다. -->
+  <include file="$(find morai_udp_drive_bridge)/launch/morai_udp_drive_bridge.launch">
+    <arg name="status_bind_ip" value="$(arg bind_ip)" />
+    <arg name="status_port" value="$(arg ego_status_port)" />
+    <arg name="status_topic" value="/Ego_topic" />
+    <arg name="control_remote_ip" value="$(arg morai_host_ip)" />
+    <arg name="control_remote_port" value="$(arg control_remote_port)" />
+    <arg name="control_bind_port" value="$(arg control_source_port)" />
+    <arg name="command_topic" value="/ctrl_cmd" />
+  </include>
+
+  <!-- 3. 현재 workspace의 GPS/IMU 기준 TF -->
+  <node pkg="tf" type="static_transform_publisher" name="camera_fallback_base_to_gps"
+        args="0 0 1.2 0 0 0 base_link gps_link 100" />
+  <node pkg="tf" type="static_transform_publisher" name="camera_fallback_base_to_imu"
+        args="0 0 0 0 0 0 base_link imu_link 100" />
+  <node if="$(arg publish_camera_static_tf)" pkg="tf" type="static_transform_publisher"
+        name="camera_fallback_base_to_front_camera"
+        args="$(arg camera_x_m) $(arg camera_y_m) $(arg camera_z_m) $(arg camera_yaw_deg) $(arg camera_pitch_deg) $(arg camera_roll_deg) base_link front_camera 100" />
+
+  <!-- 4. GPS 위경도 -> MGeo local ENU /localization/gps -->
+  <include file="$(find gps_mgeo_converter)/launch/gps_mgeo_converter.launch">
+    <arg name="gps_xyz_x" value="0.0" />
+    <arg name="gps_xyz_y" value="0.0" />
+    <arg name="gps_xyz_z" value="1.2" />
+  </include>
+
+  <!-- 5. raw GPS + raw IMU -> map/base_link EKF. synthetic noise/filter 없음. -->
+  <include file="$(find ekf_local_enu)/launch/ekf_local_enu.launch">
+    <arg name="gps_topic" value="/localization/gps" />
+    <arg name="imu_topic" value="/Imu" />
+    <arg name="use_sensor_quality_gate" value="true" />
+    <arg name="quality_topic" value="/localization/sensor_quality" />
+    <arg name="enable_gps_jump_gate" value="true" />
+    <arg name="gps_jump_gate_m" value="3.0" />
+    <arg name="gps_speed_gate_mps" value="10.0" />
+    <arg name="enable_gps_innovation_gate" value="true" />
+    <arg name="gps_innovation_gate_m" value="5.0" />
+    <arg name="default_gps_variance_m2" value="1.0" />
+    <arg name="gyro_noise_std_rad_s" value="0.08" />
+    <arg name="accel_noise_std_m_s2" value="0.8" />
+    <arg name="bias_random_walk" value="0.001" />
+  </include>
+
+  <!-- 6. GPS 수신 상태와 주행 중 sensor anomaly를 각각 감시한다. -->
+  <node pkg="stability_stack" type="gps_blackout_detector.py"
+        name="camera_fallback_gps_blackout_detector" output="screen">
+    <param name="input_topic" value="/gps" />
+    <param name="health_topic" value="/localization/gps_health" />
+    <param name="status_topic" value="/stability/gps_blackout_status" />
+    <param name="blackout_timeout_sec" value="0.5" />
+    <param name="recovery_valid_samples" value="5" />
+  </node>
+
+  <node pkg="stability_stack" type="sensor_quality_monitor.py"
+        name="camera_fallback_sensor_quality_monitor" output="screen">
+    <param name="gps_topic" value="/localization/gps" />
+    <param name="imu_topic" value="/Imu" />
+    <param name="odom_topic" value="/localization/odometry" />
+    <param name="health_topic" value="/localization/gps_health" />
+    <param name="quality_topic" value="/localization/sensor_quality" />
+    <param name="status_topic" value="/stability/sensor_quality_status" />
+    <param name="gps_jump_threshold_m" value="3.0" />
+    <param name="gps_step_speed_threshold_mps" value="10.0" />
+    <param name="gps_residual_threshold_m" value="2.0" />
+    <param name="imu_gyro_diff_threshold_rad_s" value="0.8" />
+    <param name="imu_accel_diff_threshold_m_s2" value="6.0" />
+  </node>
+
+  <!-- 7. 지도 기반 곡률 속도 Pure Pursuit: 정상 명령을 별도 토픽으로 발행 -->
+  <node pkg="curvature_speed_purepursuit"
+        type="curvature_speed_purepursuit_node.py"
+        name="camera_fallback_curvature_purepursuit" output="screen">
+    <param name="path_file" value="$(arg path_file)" />
+    <param name="pose_topic" value="/localization/odometry" />
+    <param name="command_topic" value="/control/curvature_ctrl_cmd" />
+    <param name="publish_command" value="$(arg enable_control)" />
+    <param name="pose_timeout_sec" value="0.5" />
+    <param name="duplicate_epsilon_m" value="0.000001" />
+    <param name="curvature_half_window_points" value="1" />
+    <param name="curvature_smoothing_window" value="5" />
+    <param name="max_speed_mps" value="2.0" />
+    <param name="lateral_accel_limit_mps2" value="1.0" />
+    <param name="max_accel_mps2" value="1.0" />
+    <param name="max_decel_mps2" value="1.5" />
+    <param name="initial_speed_mps" value="0.0" />
+    <param name="final_speed_mps" value="0.0" />
+    <param name="wheelbase_m" value="3.0" />
+    <param name="lookahead_min_m" value="4.0" />
+    <param name="lookahead_gain" value="0.35" />
+    <param name="goal_tolerance_m" value="1.5" />
+    <param name="max_steering_rad" value="0.6981317008" />
+    <param name="steering_sign" value="1.0" />
+    <param name="longl_cmd_type" value="2" />
+    <param name="control_rate_hz" value="20.0" />
+    <param name="progress_search_window_points" value="250" />
+    <param name="progress_backtrack_tolerance_m" value="2.0" />
+  </node>
+
+  <!-- 8. 전방 camera lane detector. 양쪽 차선만 높은 confidence로 fallback에 사용 -->
+  <node pkg="morai_camera_perception" type="camera_lane_detector_robust.py"
+        name="camera_fallback_lane_detector" output="screen">
+    <param name="image_topic" value="$(arg front_camera_topic)" />
+    <param name="output_topic" value="/detection/lane" />
+    <param name="debug_topic" value="$(arg camera_debug_topic)" />
+    <param name="publish_debug" value="$(arg publish_camera_debug)" />
+    <param name="lane_width_m" value="3.5" />
+    <param name="meters_per_pixel" value="0.01" />
+    <param name="smooth_alpha" value="0.35" />
+    <param name="lane_filter_window" value="5" />
+  </node>
+
+  <node pkg="stability_stack" type="camera_localization_fallback_controller.py"
+        name="camera_localization_fallback_controller" output="screen">
+    <param name="nominal_command_topic" value="/control/curvature_ctrl_cmd" />
+    <param name="output_command_topic" value="/control/camera_fallback_cmd" />
+    <param name="lane_topic" value="/detection/lane" />
+    <param name="quality_topic" value="/localization/sensor_quality" />
+    <param name="odom_topic" value="/localization/odometry" />
+    <param name="min_lane_confidence" value="0.65" />
+    <param name="lane_filter_window" value="5" />
+    <param name="lane_preview_distance_m" value="4.0" />
+    <param name="lateral_gain" value="0.8" />
+    <param name="heading_gain" value="0.7" />
+    <param name="lane_sign" value="1.0" />
+    <param name="camera_assist_gain" value="0.65" />
+    <param name="fallback_nominal_weight" value="0.25" />
+    <param name="fallback_speed_cap_mps" value="$(arg fallback_speed_cap_mps)" />
+    <param name="stop_without_camera" value="$(arg stop_without_camera)" />
+    <param name="max_steering_rate_rad_s" value="0.8" />
+  </node>
+
+  <!-- 9. 선택적 LiDAR safety pipeline -->
+  <group if="$(arg enable_lidar_safety)">
+    <include file="$(find lidar_obstacle_detector)/launch/lidar_obstacle_detector.launch">
+      <arg name="point_topic" value="$(arg lidar_topic)" />
+      <arg name="input_frame" value="velodyne" />
+      <arg name="base_frame" value="base_link" />
+    </include>
+    <node pkg="morai_camera_perception" type="camera_obstacle_detector.py"
+          name="camera_fallback_camera_obstacle_detector" output="screen">
+      <param name="image_topic" value="$(arg front_camera_topic)" />
+      <param name="output_topic" value="/detection/camera_obstacles" />
+    </node>
+    <include file="$(find morai_sensor_fusion)/launch/sensor_fusion.launch">
+      <arg name="lidar_topic" value="/detection/lidar_obstacles" />
+      <arg name="camera_topic" value="/detection/camera_obstacles" />
+      <arg name="require_lidar" value="true" />
+    </include>
+  </group>
+
+  <!-- 10. 최종 안전 중재. lane correction은 fallback에서 이미 수행했으므로 false -->
+  <include file="$(find control_mux)/launch/control_mux.launch">
+    <arg name="nominal_command_topic" value="/control/camera_fallback_cmd" />
+    <arg name="output_command_topic" value="/ctrl_cmd" />
+    <arg name="safety_stop_topic" value="/detection/fused_safety_stop" />
+    <arg name="require_fresh_safety" value="$(arg require_fresh_safety)" />
+    <!-- GPS blackout에서도 camera fallback 명령이 통과하도록 localization freshness는 mux에서 강제하지 않는다. -->
+    <arg name="require_fresh_localization" value="false" />
+    <arg name="lane_correction_enabled" value="false" />
+  </include>
+</launch>

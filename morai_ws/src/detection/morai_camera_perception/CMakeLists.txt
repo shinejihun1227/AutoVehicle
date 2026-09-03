@@ -14,6 +14,7 @@ catkin_package()
 catkin_install_python(PROGRAMS
   scripts/camera_health_monitor.py
   scripts/camera_lane_detector.py
+  scripts/camera_lane_detector_robust.py
   scripts/traffic_light_detector.py
   scripts/camera_obstacle_detector.py
   DESTINATION ${CATKIN_PACKAGE_BIN_DESTINATION}

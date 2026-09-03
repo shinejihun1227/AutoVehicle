@@ -2,7 +2,7 @@
 <package format="2">
   <name>morai_camera_perception</name>
   <version>0.1.0</version>
-  <description>MORAI 카메라 4대 상태 확인과 초기 차선·신호·장애물 인터페이스</description>
+  <description>MORAI 카메라 상태 확인과 차선·신호·장애물 인터페이스</description>
   <maintainer email="team@example.com">MORAI 자율주행팀</maintainer>
   <license>MIT</license>
 
@@ -12,4 +12,6 @@
   <depend>rospy</depend>
   <depend>sensor_msgs</depend>
   <depend>std_msgs</depend>
+  <exec_depend>python3-numpy</exec_depend>
+  <exec_depend>python3-opencv</exec_depend>
 </package>

@@ -6,6 +6,14 @@
   <arg name="gyro_noise_std_rad_s" default="0.08" />
   <arg name="accel_noise_std_m_s2" default="0.8" />
   <arg name="bias_random_walk" default="0.001" />
+  <arg name="use_sensor_quality_gate" default="false" />
+  <arg name="quality_topic" default="/localization/sensor_quality" />
+  <arg name="quality_timeout_sec" default="0.5" />
+  <arg name="enable_gps_jump_gate" default="false" />
+  <arg name="gps_jump_gate_m" default="3.0" />
+  <arg name="gps_speed_gate_mps" default="10.0" />
+  <arg name="enable_gps_innovation_gate" default="false" />
+  <arg name="gps_innovation_gate_m" default="5.0" />
 
   <node pkg="ekf_local_enu"
         type="ekf_local_enu_node.py"
@@ -24,6 +32,14 @@
     <param name="gyro_noise_std_rad_s" value="$(arg gyro_noise_std_rad_s)" />
     <param name="accel_noise_std_m_s2" value="$(arg accel_noise_std_m_s2)" />
     <param name="bias_random_walk" value="$(arg bias_random_walk)" />
+    <param name="use_sensor_quality_gate" value="$(arg use_sensor_quality_gate)" />
+    <param name="quality_topic" value="$(arg quality_topic)" />
+    <param name="quality_timeout_sec" value="$(arg quality_timeout_sec)" />
+    <param name="enable_gps_jump_gate" value="$(arg enable_gps_jump_gate)" />
+    <param name="gps_jump_gate_m" value="$(arg gps_jump_gate_m)" />
+    <param name="gps_speed_gate_mps" value="$(arg gps_speed_gate_mps)" />
+    <param name="enable_gps_innovation_gate" value="$(arg enable_gps_innovation_gate)" />
+    <param name="gps_innovation_gate_m" value="$(arg gps_innovation_gate_m)" />
     <param name="publish_tf" value="true" />
   </node>
 </launch>

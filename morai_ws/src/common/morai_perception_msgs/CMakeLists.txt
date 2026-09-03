@@ -14,6 +14,7 @@ add_message_files(
   LaneDetection.msg
   TrafficLight.msg
   GpsHealth.msg
+  SensorQuality.msg
 )
 
 generate_messages(DEPENDENCIES std_msgs)

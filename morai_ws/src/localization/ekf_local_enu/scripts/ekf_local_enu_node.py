@@ -17,6 +17,7 @@ import numpy as np
 import rospy
 import tf2_ros
 from geometry_msgs.msg import PoseWithCovarianceStamped, TransformStamped
+from morai_perception_msgs.msg import SensorQuality
 from nav_msgs.msg import Odometry
 from sensor_msgs.msg import Imu
 from ekf_local_enu.math_utils import quaternion_to_yaw, wrap_angle, yaw_to_quaternion
@@ -46,6 +47,30 @@ class LocalEnuEkf:
         self.accel_noise_std = float(rospy.get_param("~accel_noise_std_m_s2", 0.8))
         self.bias_random_walk = float(rospy.get_param("~bias_random_walk", 0.001))
         self.publish_tf = bool(rospy.get_param("~publish_tf", True))
+        self.use_sensor_quality_gate = bool(
+            rospy.get_param("~use_sensor_quality_gate", False)
+        )
+        self.quality_topic = rospy.get_param(
+            "~quality_topic", "/localization/sensor_quality"
+        )
+        self.quality_timeout_sec = max(
+            0.05, float(rospy.get_param("~quality_timeout_sec", 0.5))
+        )
+        self.enable_gps_jump_gate = bool(
+            rospy.get_param("~enable_gps_jump_gate", False)
+        )
+        self.gps_jump_gate_m = max(
+            0.1, float(rospy.get_param("~gps_jump_gate_m", 3.0))
+        )
+        self.gps_speed_gate_mps = max(
+            0.5, float(rospy.get_param("~gps_speed_gate_mps", 10.0))
+        )
+        self.enable_gps_innovation_gate = bool(
+            rospy.get_param("~enable_gps_innovation_gate", False)
+        )
+        self.gps_innovation_gate_m = max(
+            0.1, float(rospy.get_param("~gps_innovation_gate_m", 5.0))
+        )
 
         # [x, y, yaw, v_forward, gyro_bias_z, accel_bias_x]
         self.state = np.zeros((6, 1), dtype=float)
@@ -55,9 +80,21 @@ class LocalEnuEkf:
         self.last_gps_stamp: Optional[float] = None
         self.latest_z = 0.0
         self.latest_imu_yaw: Optional[float] = None
+        self.latest_quality: Optional[SensorQuality] = None
+        self.latest_quality_time = 0.0
+        self.last_accepted_gps_position: Optional[tuple] = None
+        self.last_accepted_gps_stamp: Optional[float] = None
 
         self.gps_sub = rospy.Subscriber(self.gps_topic, Odometry, self.gps_callback, queue_size=20)
         self.imu_sub = rospy.Subscriber(self.imu_topic, Imu, self.imu_callback, queue_size=50)
+        self.quality_sub = None
+        if self.use_sensor_quality_gate:
+            self.quality_sub = rospy.Subscriber(
+                self.quality_topic,
+                SensorQuality,
+                self.quality_callback,
+                queue_size=20,
+            )
         self.odom_pub = rospy.Publisher(self.odom_topic, Odometry, queue_size=20)
         self.pose_pub = rospy.Publisher(self.pose_topic, PoseWithCovarianceStamped, queue_size=20)
         self.tf_broadcaster = tf2_ros.TransformBroadcaster()
@@ -71,6 +108,29 @@ class LocalEnuEkf:
             self.base_frame,
             self.use_imu_orientation,
         )
+
+    def quality_callback(self, message: SensorQuality) -> None:
+        self.latest_quality = message
+        self.latest_quality_time = rospy.get_time()
+
+    def quality_fresh(self) -> bool:
+        return (
+            self.use_sensor_quality_gate
+            and self.latest_quality is not None
+            and rospy.get_time() - self.latest_quality_time <= self.quality_timeout_sec
+        )
+
+    def gps_update_allowed(self) -> bool:
+        if not self.quality_fresh():
+            return True
+        return not bool(
+            self.latest_quality.gps_blackout or self.latest_quality.gps_noisy
+        )
+
+    def imu_prediction_allowed(self) -> bool:
+        if not self.quality_fresh():
+            return True
+        return not bool(self.latest_quality.imu_noisy)
 
     def imu_callback(self, msg: Imu) -> None:
         stamp = stamp_seconds(msg.header.stamp)
@@ -94,6 +154,13 @@ class LocalEnuEkf:
         self.last_imu_stamp = stamp
         if not 0.0001 < dt <= 0.25:
             rospy.logwarn_throttle(5.0, "IMU dt가 비정상이라 예측을 건너뛴다: %.6f", dt)
+            return
+
+        if not self.imu_prediction_allowed():
+            rospy.logwarn_throttle(
+                2.0,
+                "sensor_quality가 IMU noise를 판정하여 해당 IMU prediction을 건너뛴다.",
+            )
             return
 
         self.predict(
@@ -129,6 +196,8 @@ class LocalEnuEkf:
             self.state[3, 0] = gps_vx * math.cos(self.state[2, 0]) + gps_vy * math.sin(self.state[2, 0])
             self.initialized = True
             self.last_gps_stamp = stamp
+            self.last_accepted_gps_position = (x, y)
+            self.last_accepted_gps_stamp = stamp
             if self.last_imu_stamp is None:
                 self.last_imu_stamp = stamp
             rospy.loginfo(
@@ -145,6 +214,31 @@ class LocalEnuEkf:
             return
         self.last_gps_stamp = stamp
 
+        if not self.gps_motion_gate_allowed(x, y, stamp):
+            rospy.logwarn_throttle(
+                2.0,
+                "GPS jump gate가 비정상 위치 변화를 거부하여 GPS update를 건너뛴다.",
+            )
+            return
+
+        if not self.gps_update_allowed():
+            rospy.logwarn_throttle(
+                2.0,
+                "sensor_quality가 GPS blackout/noise를 판정하여 GPS update를 건너뛴다.",
+            )
+            return
+
+        if (
+            self.enable_gps_innovation_gate
+            and math.hypot(x - self.state[0, 0], y - self.state[1, 0])
+            > self.gps_innovation_gate_m
+        ):
+            rospy.logwarn_throttle(
+                2.0,
+                "GPS innovation gate가 큰 위치 잔차를 거부하여 GPS update를 건너뛴다.",
+            )
+            return
+
         variance_x = float(msg.pose.covariance[0])
         variance_y = float(msg.pose.covariance[7])
         if variance_x <= 0.0:
@@ -152,7 +246,26 @@ class LocalEnuEkf:
         if variance_y <= 0.0:
             variance_y = self.default_gps_variance
         self.update_position(x, y, variance_x, variance_y)
+        self.last_accepted_gps_position = (x, y)
+        self.last_accepted_gps_stamp = stamp
         self.publish(stamp)
+
+    def gps_motion_gate_allowed(self, x: float, y: float, stamp: float) -> bool:
+        if not self.enable_gps_jump_gate:
+            return True
+        if (
+            self.last_accepted_gps_position is None
+            or self.last_accepted_gps_stamp is None
+        ):
+            return True
+        dt = stamp - self.last_accepted_gps_stamp
+        distance = math.hypot(
+            x - self.last_accepted_gps_position[0],
+            y - self.last_accepted_gps_position[1],
+        )
+        if dt <= 1e-3:
+            return distance <= self.gps_jump_gate_m
+        return distance <= self.gps_jump_gate_m and distance / dt <= self.gps_speed_gate_mps
 
     def predict(self, gyro_z: float, accel_x: float, dt: float) -> None:
         x, y, yaw, velocity, gyro_bias, accel_bias = self.state[:, 0]

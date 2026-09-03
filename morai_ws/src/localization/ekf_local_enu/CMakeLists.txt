@@ -3,6 +3,7 @@ project(ekf_local_enu)
 
 find_package(catkin REQUIRED COMPONENTS
   geometry_msgs
+  morai_perception_msgs
   nav_msgs
   rospy
   sensor_msgs
