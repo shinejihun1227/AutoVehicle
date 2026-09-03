@@ -1,0 +1,15 @@
+<?xml version="1.0"?>
+<package format="2">
+  <name>morai_camera_perception</name>
+  <version>0.1.0</version>
+  <description>MORAI 카메라 4대 상태 확인과 초기 차선·신호·장애물 인터페이스</description>
+  <maintainer email="team@example.com">MORAI 자율주행팀</maintainer>
+  <license>MIT</license>
+
+  <buildtool_depend>catkin</buildtool_depend>
+  <depend>diagnostic_msgs</depend>
+  <depend>morai_perception_msgs</depend>
+  <depend>rospy</depend>
+  <depend>sensor_msgs</depend>
+  <depend>std_msgs</depend>
+</package>

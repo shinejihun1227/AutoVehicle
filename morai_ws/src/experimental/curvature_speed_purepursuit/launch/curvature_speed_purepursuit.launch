@@ -1,0 +1,45 @@
+<launch>
+  <!-- 기존 /ctrl_cmd와 연결하지 않는 곡률 기반 속도 계획 테스트 -->
+  <arg name="workspace_path" default="$(env HOME)/morai_ws" />
+  <arg name="path_file" default="$(arg workspace_path)/data/routes/2026_molit_comp_global_path.txt" />
+  <arg name="pose_topic" default="/localization/odometry" />
+  <arg name="command_topic" default="/experimental/curvature_ctrl_cmd" />
+  <arg name="publish_command" default="false" />
+
+  <node pkg="curvature_speed_purepursuit"
+        type="curvature_speed_purepursuit_node.py"
+        name="curvature_speed_purepursuit"
+        output="screen">
+    <param name="path_file" value="$(arg path_file)" />
+    <param name="pose_topic" value="$(arg pose_topic)" />
+    <param name="command_topic" value="$(arg command_topic)" />
+    <param name="publish_command" value="$(arg publish_command)" />
+
+    <!-- 곡률 계산 -->
+    <param name="duplicate_epsilon_m" value="0.000001" />
+    <param name="curvature_half_window_points" value="1" />
+    <param name="curvature_smoothing_window" value="5" />
+
+    <!-- 속도 계획: 단위 m, m/s, m/s^2 -->
+    <param name="max_speed_mps" value="2.0" />
+    <param name="lateral_accel_limit_mps2" value="1.0" />
+    <param name="max_accel_mps2" value="1.0" />
+    <param name="max_decel_mps2" value="1.5" />
+    <param name="initial_speed_mps" value="0.0" />
+    <param name="final_speed_mps" value="0.0" />
+
+    <!-- Pure Pursuit -->
+    <param name="wheelbase_m" value="3.0" />
+    <param name="lookahead_min_m" value="4.0" />
+    <param name="lookahead_gain" value="0.35" />
+    <param name="goal_tolerance_m" value="1.5" />
+    <param name="max_steering_rad" value="0.6981317008" />
+    <param name="steering_sign" value="1.0" />
+    <param name="longl_cmd_type" value="2" />
+    <param name="control_rate_hz" value="20.0" />
+
+    <!-- 진행점 검색 -->
+    <param name="progress_search_window_points" value="250" />
+    <param name="progress_backtrack_tolerance_m" value="2.0" />
+  </node>
+</launch>

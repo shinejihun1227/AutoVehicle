@@ -1,0 +1,45 @@
+<launch>
+  <!-- 기존 Pure Pursuit 대신 새 노드만 사용하는 독립 kinematic 폐루프 테스트 -->
+  <arg name="workspace_path" default="$(env HOME)/morai_ws" />
+  <arg name="path_file" default="$(arg workspace_path)/data/routes/2026_molit_comp_global_path.txt" />
+  <arg name="wheelbase_m" default="3.0" />
+
+  <node pkg="curvature_speed_purepursuit"
+        type="curvature_speed_purepursuit_node.py"
+        name="curvature_speed_purepursuit_closed_loop_controller"
+        output="screen">
+    <param name="path_file" value="$(arg path_file)" />
+    <param name="pose_topic" value="/experimental/curvature_odometry" />
+    <param name="command_topic" value="/experimental/curvature_ctrl_cmd" />
+    <param name="publish_command" value="true" />
+    <param name="wheelbase_m" value="$(arg wheelbase_m)" />
+    <param name="max_speed_mps" value="2.0" />
+    <param name="lateral_accel_limit_mps2" value="1.0" />
+    <param name="max_accel_mps2" value="1.0" />
+    <param name="max_decel_mps2" value="1.5" />
+    <param name="initial_speed_mps" value="0.0" />
+    <param name="final_speed_mps" value="0.0" />
+    <param name="lookahead_min_m" value="4.0" />
+    <param name="lookahead_gain" value="0.35" />
+    <param name="goal_tolerance_m" value="1.5" />
+    <param name="max_steering_rad" value="0.6981317008" />
+    <param name="control_rate_hz" value="20.0" />
+  </node>
+
+  <!-- 기존 차량 모델은 테스트용으로만 사용하며 모든 토픽을 experimental로 분리한다. -->
+  <node pkg="purepursuit_mgeo"
+        type="kinematic_vehicle_sim.py"
+        name="curvature_speed_kinematic_vehicle_sim"
+        output="screen">
+    <param name="path_file" value="$(arg path_file)" />
+    <param name="wheelbase_m" value="$(arg wheelbase_m)" />
+    <param name="max_steering_rad" value="0.6981317008" />
+    <param name="rate_hz" value="50.0" />
+    <param name="max_accel_mps2" value="1.0" />
+    <param name="max_decel_mps2" value="1.5" />
+    <param name="speed_time_constant" value="0.5" />
+    <param name="command_timeout_sec" value="0.5" />
+    <param name="command_topic" value="/experimental/curvature_ctrl_cmd" />
+    <param name="odom_topic" value="/experimental/curvature_odometry" />
+  </node>
+</launch>

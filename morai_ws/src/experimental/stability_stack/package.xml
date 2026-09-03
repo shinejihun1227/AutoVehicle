@@ -1,0 +1,22 @@
+<?xml version="1.0"?>
+<package format="2">
+  <name>stability_stack</name>
+  <version>0.1.0</version>
+  <description>GPS·IMU 노이즈 시험, GPS robust filter, 전방 카메라 안정화 제어 실험 스택</description>
+  <maintainer email="team@example.com">MORAI 자율주행팀</maintainer>
+  <license>MIT</license>
+
+  <buildtool_depend>catkin</buildtool_depend>
+  <depend>morai_msgs</depend>
+  <depend>morai_perception_msgs</depend>
+  <depend>nav_msgs</depend>
+  <depend>rospy</depend>
+  <depend>sensor_msgs</depend>
+  <depend>std_msgs</depend>
+  <exec_depend>morai_bringup</exec_depend>
+  <exec_depend>morai_camera_perception</exec_depend>
+  <exec_depend>lidar_obstacle_detector</exec_depend>
+  <exec_depend>morai_sensor_fusion</exec_depend>
+  <exec_depend>control_mux</exec_depend>
+  <exec_depend>tf</exec_depend>
+</package>

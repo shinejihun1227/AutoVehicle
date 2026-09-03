@@ -1,0 +1,19 @@
+<launch>
+  <arg name="stop_after_sec" default="5.0" />
+  <arg name="clear_after_sec" default="-1.0" />
+
+  <node pkg="control_mux"
+        type="control_mux_test_publisher.py"
+        name="control_mux_test_publisher"
+        output="screen">
+    <param name="stop_after_sec" value="$(arg stop_after_sec)" />
+    <param name="clear_after_sec" value="$(arg clear_after_sec)" />
+    <param name="publish_nominal" value="true" />
+    <param name="publish_odom" value="true" />
+  </node>
+
+  <include file="$(find control_mux)/launch/control_mux.launch">
+    <arg name="require_fresh_safety" value="true" />
+    <arg name="require_fresh_localization" value="true" />
+  </include>
+</launch>

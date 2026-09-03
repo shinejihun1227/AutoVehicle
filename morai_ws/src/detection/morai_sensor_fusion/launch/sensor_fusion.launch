@@ -1,0 +1,15 @@
+<launch>
+  <arg name="lidar_topic" default="/detection/lidar_obstacles" />
+  <arg name="camera_topic" default="/detection/camera_obstacles" />
+  <arg name="require_lidar" default="true" />
+
+  <node pkg="morai_sensor_fusion"
+        type="obstacle_fusion_node.py"
+        name="obstacle_fusion"
+        output="screen">
+    <param name="lidar_topic" value="$(arg lidar_topic)" />
+    <param name="camera_topic" value="$(arg camera_topic)" />
+    <param name="require_lidar" value="$(arg require_lidar)" />
+    <param name="stop_distance_m" value="6.0" />
+  </node>
+</launch>

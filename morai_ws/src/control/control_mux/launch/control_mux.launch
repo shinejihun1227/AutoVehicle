@@ -1,0 +1,25 @@
+<launch>
+  <arg name="nominal_command_topic" default="/control/ctrl_cmd" />
+  <arg name="output_command_topic" default="/ctrl_cmd" />
+  <arg name="safety_stop_topic" default="/detection/fused_safety_stop" />
+  <arg name="traffic_light_topic" default="/detection/traffic_light" />
+  <arg name="lane_topic" default="/detection/lane" />
+  <arg name="require_fresh_safety" default="true" />
+  <arg name="require_fresh_localization" default="true" />
+  <arg name="lane_correction_enabled" default="false" />
+
+  <node pkg="control_mux"
+        type="control_mux_node.py"
+        name="control_mux"
+        output="screen">
+    <param name="nominal_command_topic" value="$(arg nominal_command_topic)" />
+    <param name="output_command_topic" value="$(arg output_command_topic)" />
+    <param name="safety_stop_topic" value="$(arg safety_stop_topic)" />
+    <param name="traffic_light_topic" value="$(arg traffic_light_topic)" />
+    <param name="lane_topic" value="$(arg lane_topic)" />
+    <param name="require_fresh_safety" value="$(arg require_fresh_safety)" />
+    <param name="require_fresh_localization" value="$(arg require_fresh_localization)" />
+    <param name="lane_correction_enabled" value="$(arg lane_correction_enabled)" />
+    <param name="max_steering_rad" value="0.6981317008" />
+  </node>
+</launch>

@@ -1,0 +1,75 @@
+<launch>
+  <!--
+    Raw odometry -> artificial noise -> median/EMA/outlier filter ->
+    curvature-speed Pure Pursuit. Existing /ctrl_cmd is never used.
+  -->
+  <arg name="workspace_path" default="$(env HOME)/morai_ws" />
+  <arg name="path_file" default="$(arg workspace_path)/data/routes/2026_molit_comp_global_path.txt" />
+  <arg name="input_topic" default="/localization/odometry" />
+  <arg name="publish_command" default="false" />
+
+  <node pkg="curvature_speed_purepursuit"
+        type="curvature_odometry_noise_filter_node.py"
+        name="curvature_odometry_noise_filter_preview"
+        output="screen">
+    <param name="input_topic" value="$(arg input_topic)" />
+    <param name="noisy_topic" value="/experimental/curvature_noisy_odometry" />
+    <param name="filtered_topic" value="/experimental/curvature_filtered_odometry" />
+    <param name="status_topic" value="/experimental/curvature_noise_filter_status" />
+
+    <!-- Noise parameters: m, rad, m/s, and random-walk units. -->
+    <param name="position_noise_std_m" value="0.25" />
+    <param name="yaw_noise_std_rad" value="0.03" />
+    <param name="velocity_noise_std_mps" value="0.05" />
+    <param name="position_bias_random_walk_m_sqrt_s" value="0.02" />
+    <param name="yaw_bias_random_walk_rad_sqrt_s" value="0.002" />
+    <param name="velocity_bias_random_walk_mps_sqrt_s" value="0.01" />
+    <param name="dropout_probability" value="0.02" />
+    <param name="random_seed" value="20260901" />
+
+    <!-- Filter parameters. -->
+    <param name="median_window_size" value="3" />
+    <param name="ema_alpha" value="0.35" />
+    <param name="max_position_jump_m" value="5.0" />
+    <!-- Position white noise is differentiated by the speed gate; keep this
+         threshold above the expected noise-induced apparent speed. -->
+    <param name="max_measurement_speed_mps" value="50.0" />
+    <param name="max_yaw_jump_rad" value="0.7853981634" />
+  </node>
+
+  <node pkg="curvature_speed_purepursuit"
+        type="curvature_speed_purepursuit_node.py"
+        name="curvature_speed_purepursuit_noisy_preview"
+        output="screen">
+    <param name="path_file" value="$(arg path_file)" />
+    <param name="pose_topic" value="/experimental/curvature_filtered_odometry" />
+    <param name="command_topic" value="/experimental/curvature_ctrl_cmd" />
+    <param name="publish_command" value="$(arg publish_command)" />
+    <param name="pose_timeout_sec" value="0.5" />
+
+    <!-- Curvature and speed planning. -->
+    <param name="duplicate_epsilon_m" value="0.000001" />
+    <param name="curvature_half_window_points" value="1" />
+    <param name="curvature_smoothing_window" value="5" />
+    <param name="max_speed_mps" value="2.0" />
+    <param name="lateral_accel_limit_mps2" value="1.0" />
+    <param name="max_accel_mps2" value="1.0" />
+    <param name="max_decel_mps2" value="1.5" />
+    <param name="initial_speed_mps" value="0.0" />
+    <param name="final_speed_mps" value="0.0" />
+
+    <!-- Pure Pursuit. -->
+    <param name="wheelbase_m" value="3.0" />
+    <param name="lookahead_min_m" value="4.0" />
+    <param name="lookahead_gain" value="0.35" />
+    <param name="goal_tolerance_m" value="1.5" />
+    <param name="max_steering_rad" value="0.6981317008" />
+    <param name="steering_sign" value="1.0" />
+    <param name="longl_cmd_type" value="2" />
+    <param name="control_rate_hz" value="20.0" />
+
+    <!-- Progress search. -->
+    <param name="progress_search_window_points" value="250" />
+    <param name="progress_backtrack_tolerance_m" value="2.0" />
+  </node>
+</launch>

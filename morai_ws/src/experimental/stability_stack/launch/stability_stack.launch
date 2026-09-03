@@ -1,0 +1,166 @@
+<launch>
+  <!-- 기존 주행 루프와 분리된 안정성 실험 스택 -->
+  <arg name="workspace_path" default="$(env HOME)/morai_ws" />
+  <arg name="path_file" default="$(arg workspace_path)/data/routes/2026_molit_comp_global_path.txt" />
+  <arg name="morai_host_ip" default="192.168.0.151" />
+  <arg name="control_remote_port" default="9093" />
+  <arg name="enable_control" default="false" />
+  <arg name="enable_sensor_noise" default="true" />
+  <arg name="camera_stability_enabled" default="false" />
+  <arg name="blackout_stability_enabled" default="true" />
+  <arg name="gps_blackout_timeout_sec" default="0.5" />
+  <arg name="gps_recovery_valid_samples" default="5" />
+  <arg name="blackout_speed_mps" default="1.0" />
+  <arg name="recovering_speed_mps" default="1.5" />
+  <arg name="stop_on_gps_blackout" default="false" />
+  <arg name="require_fresh_safety" default="true" />
+  <arg name="publish_lidar_static_tf" default="false" />
+  <arg name="lidar_x_m" default="0.0" />
+  <arg name="lidar_y_m" default="0.0" />
+  <arg name="lidar_z_m" default="0.0" />
+  <arg name="lidar_yaw_deg" default="0.0" />
+  <arg name="lidar_pitch_deg" default="0.0" />
+  <arg name="lidar_roll_deg" default="0.0" />
+
+  <!-- 노이즈를 켠 경우: raw -> noisy -> robust GPS filter -> EKF -->
+  <group if="$(arg enable_sensor_noise)">
+    <node pkg="stability_stack"
+          type="gps_noise_injector.py"
+          name="gps_noise_injector"
+          output="screen">
+      <param name="input_topic" value="/localization/gps" />
+      <param name="output_topic" value="/localization/gps_noisy" />
+      <param name="position_noise_std_x_m" value="0.5" />
+      <param name="position_noise_std_y_m" value="0.5" />
+      <param name="bias_random_walk_x_m_sqrt_s" value="0.02" />
+      <param name="bias_random_walk_y_m_sqrt_s" value="0.02" />
+      <param name="outlier_probability" value="0.01" />
+      <param name="outlier_std_m" value="3.0" />
+      <param name="dropout_probability" value="0.02" />
+      <param name="random_seed" value="20260822" />
+    </node>
+
+    <node pkg="stability_stack"
+          type="imu_noise_injector.py"
+          name="imu_noise_injector"
+          output="screen">
+      <param name="input_topic" value="/Imu" />
+      <param name="output_topic" value="/Imu_noisy" />
+      <param name="gyro_noise_std_rad_s" value="0.01" />
+      <param name="accel_noise_std_m_s2" value="0.1" />
+      <param name="gyro_bias_random_walk_rad_s_sqrt_s" value="0.002" />
+      <param name="accel_bias_random_walk_m_s2_sqrt_s" value="0.02" />
+      <param name="orientation_yaw_noise_std_rad" value="0.0" />
+      <param name="dropout_probability" value="0.01" />
+      <param name="random_seed" value="20260823" />
+    </node>
+
+    <node pkg="stability_stack"
+          type="gps_robust_filter.py"
+          name="gps_robust_filter"
+          output="screen">
+      <param name="input_topic" value="/localization/gps_noisy" />
+      <param name="output_topic" value="/localization/gps_filtered" />
+      <param name="max_position_jump_m" value="5.0" />
+      <param name="max_speed_mps" value="15.0" />
+      <param name="median_window_size" value="3" />
+    </node>
+  </group>
+
+  <!-- 원본 GPS 수신 중단/status=0을 감시한다. -->
+  <node pkg="stability_stack"
+        type="gps_blackout_detector.py"
+        name="gps_blackout_detector"
+        output="screen">
+    <param name="input_topic" value="/gps" />
+    <param name="health_topic" value="/localization/gps_health" />
+    <param name="status_topic" value="/stability/gps_blackout_status" />
+    <param name="blackout_timeout_sec" value="$(arg gps_blackout_timeout_sec)" />
+    <param name="recovery_valid_samples" value="$(arg gps_recovery_valid_samples)" />
+  </node>
+
+  <!-- 노이즈를 끈 경우에는 기존 raw localization topic을 그대로 사용한다. -->
+  <group unless="$(arg enable_sensor_noise)">
+    <include file="$(find morai_bringup)/launch/morai_udp_ekf_purepursuit.launch">
+      <arg name="workspace_path" value="$(arg workspace_path)" />
+      <arg name="path_file" value="$(arg path_file)" />
+      <arg name="morai_host_ip" value="$(arg morai_host_ip)" />
+      <arg name="control_remote_port" value="$(arg control_remote_port)" />
+      <arg name="enable_control" value="$(arg enable_control)" />
+      <arg name="command_topic" value="/control/ctrl_cmd" />
+      <arg name="ekf_gps_topic" value="/localization/gps" />
+      <arg name="ekf_imu_topic" value="/Imu" />
+    </include>
+  </group>
+
+  <group if="$(arg enable_sensor_noise)">
+    <include file="$(find morai_bringup)/launch/morai_udp_ekf_purepursuit.launch">
+      <arg name="workspace_path" value="$(arg workspace_path)" />
+      <arg name="path_file" value="$(arg path_file)" />
+      <arg name="morai_host_ip" value="$(arg morai_host_ip)" />
+      <arg name="control_remote_port" value="$(arg control_remote_port)" />
+      <arg name="enable_control" value="$(arg enable_control)" />
+      <arg name="command_topic" value="/control/ctrl_cmd" />
+      <arg name="ekf_gps_topic" value="/localization/gps_filtered" />
+      <arg name="ekf_imu_topic" value="/Imu_noisy" />
+      <arg name="ekf_default_gps_variance_m2" value="0.25" />
+      <arg name="ekf_gyro_noise_std_rad_s" value="0.01" />
+      <arg name="ekf_accel_noise_std_m_s2" value="0.1" />
+      <arg name="ekf_bias_random_walk" value="0.002" />
+    </include>
+  </group>
+
+  <!-- 전방 카메라 lane·traffic 결과와 카메라 4대 health -->
+  <include file="$(find morai_camera_perception)/launch/camera_perception.launch" />
+
+  <!-- LiDAR safety와 camera·LiDAR fused safety -->
+  <include file="$(find lidar_obstacle_detector)/launch/lidar_obstacle_detector.launch" />
+  <include file="$(find morai_sensor_fusion)/launch/sensor_fusion.launch" />
+
+  <node if="$(arg publish_lidar_static_tf)"
+        pkg="tf"
+        type="static_transform_publisher"
+        name="stability_base_link_to_velodyne"
+        args="$(arg lidar_x_m) $(arg lidar_y_m) $(arg lidar_z_m) $(arg lidar_yaw_deg) $(arg lidar_pitch_deg) $(arg lidar_roll_deg) base_link velodyne 100" />
+
+  <!-- Pure Pursuit nominal 명령을 전방 카메라로 선택적으로 보정 -->
+  <node pkg="stability_stack"
+        type="camera_stability_controller.py"
+        name="camera_stability_controller"
+        output="screen">
+    <param name="nominal_command_topic" value="/control/ctrl_cmd" />
+    <param name="output_command_topic" value="/control/camera_stable_cmd" />
+    <param name="lane_topic" value="/detection/lane" />
+    <param name="enabled" value="$(arg camera_stability_enabled)" />
+    <param name="lateral_gain" value="0.15" />
+    <param name="heading_gain" value="0.35" />
+    <param name="lateral_sign" value="1.0" />
+    <param name="heading_sign" value="1.0" />
+    <param name="max_steering_rate_rad_s" value="0.8" />
+  </node>
+
+  <!-- GPS blackout/recovery 중 속도·조향 변화를 제한한다. -->
+  <node pkg="stability_stack"
+        type="gps_blackout_stability_controller.py"
+        name="gps_blackout_stability_controller"
+        output="screen">
+    <param name="input_command_topic" value="/control/camera_stable_cmd" />
+    <param name="output_command_topic" value="/control/blackout_stable_cmd" />
+    <param name="gps_health_topic" value="/localization/gps_health" />
+    <param name="enabled" value="$(arg blackout_stability_enabled)" />
+    <param name="blackout_speed_mps" value="$(arg blackout_speed_mps)" />
+    <param name="recovering_speed_mps" value="$(arg recovering_speed_mps)" />
+    <param name="stop_on_blackout" value="$(arg stop_on_gps_blackout)" />
+    <param name="stop_on_health_stale" value="true" />
+    <param name="max_steering_rate_rad_s" value="0.5" />
+    <param name="max_velocity_rate_mps2" value="1.0" />
+  </node>
+
+  <include file="$(find control_mux)/launch/control_mux.launch">
+    <arg name="nominal_command_topic" value="/control/blackout_stable_cmd" />
+    <arg name="output_command_topic" value="/ctrl_cmd" />
+    <arg name="safety_stop_topic" value="/detection/fused_safety_stop" />
+    <arg name="require_fresh_safety" value="$(arg require_fresh_safety)" />
+    <arg name="require_fresh_localization" value="true" />
+  </include>
+</launch>
