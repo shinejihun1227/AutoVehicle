@@ -36,19 +36,7 @@ roslaunch curvature_speed_purepursuit curvature_speed_purepursuit.launch \
 /experimental/curvature_goal_reached
 ```
 
-## 독립 폐루프 테스트
-
-기존 차량 모델 노드를 테스트용으로만 재사용하며, 모든 입력·출력 토픽을
-`/experimental/*`로 분리한다.
-
-```bash
-roslaunch curvature_speed_purepursuit curvature_speed_purepursuit_closed_loop.launch \
-  path_file:=/home/<user>/morai_ws/data/routes/2026_molit_comp_global_path.txt
-```
-
-이 launch는 기존 Pure Pursuit를 실행하지 않는다.
-
-## 노이즈 포함 미리보기
+## 노이즈 포함 실제 localization 미리보기
 
 노이즈 포함 시험에서는 다음 순서로 데이터가 흐른다.
 
@@ -86,20 +74,6 @@ roslaunch curvature_speed_purepursuit curvature_speed_purepursuit_noisy.launch \
 /experimental/curvature_noise_filter_status
 /experimental/curvature_ctrl_cmd
 ```
-
-## 노이즈 포함 독립 폐루프 테스트
-
-테스트용 kinematic vehicle이 만드는 raw odometry에 노이즈와 dropout을 넣은 뒤,
-필터 출력으로 곡률 기반 Pure Pursuit를 주행시킨다.
-
-```bash
-roslaunch curvature_speed_purepursuit \
-  curvature_speed_purepursuit_noisy_closed_loop.launch \
-  path_file:=/home/<user>/morai_ws/data/routes/2026_molit_comp_global_path.txt
-```
-
-이 폐루프에서 사용하는 토픽은 모두 `/experimental/*`이며 기존 `/ctrl_cmd`,
-기존 localization/EKF, 기존 Pure Pursuit와 연결되지 않는다.
 
 주의: 이 노이즈 노드는 `/gps`, `/Imu`의 원시 센서 노이즈를 재현하는 것이 아니라
 곡률 제어기에 들어가는 `nav_msgs/Odometry` 입력의 noise robustness를 시험한다.

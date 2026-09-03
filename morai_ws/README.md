@@ -93,10 +93,11 @@ flowchart LR
 
 ## 현재 권장 실행 순서
 
-1. `curvature_speed_purepursuit_noisy_closed_loop.launch`로 가상 차량 폐루프를 시험한다.
+1. `localization_purepursuit.launch`를 `enable_control=false`로 실행해 GPS·IMU·EKF를 확인한다.
 2. 실제 `/localization/odometry`를 입력으로 `curvature_speed_purepursuit_noisy.launch`를
    `publish_command=false`로 실행한다.
-3. GPS·IMU·EKF와 filtered odometry를 확인한 뒤에만 실제 MORAI 제어 명령을 연결한다.
+3. 카메라·LiDAR·안전정지·control mux를 `perception_control_bringup.launch`에서 확인한다.
+4. 모든 검증이 끝난 뒤에만 실제 MORAI 제어 명령을 연결한다.
 
 기존 Pure Pursuit와 새 곡률 기반 Pure Pursuit를 동시에 실행하지 않습니다. 새 실험은
 `/experimental/*` 토픽을 사용하고, 기존 주행은 `/ctrl_cmd` 체계를 사용합니다.

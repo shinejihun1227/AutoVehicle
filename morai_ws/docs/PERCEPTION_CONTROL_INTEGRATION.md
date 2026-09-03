@@ -57,16 +57,6 @@ rostopic echo /ctrl_cmd
 처음 5초는 nominal command가 통과하고, 5~10초에는 brake stop, 10초 이후에는
 nominal command가 다시 통과해야 한다.
 
-가상 차량까지 연결하려면 다음을 사용한다.
-
-```bash
-roslaunch control_mux control_mux_closed_loop.launch
-```
-
-Pure Pursuit가 `/control/ctrl_cmd`에 nominal 명령을 발행하고, `control_mux`가
-`/ctrl_cmd`를 발행하며, 가상 차량이 최종 명령을 소비한다. `stop_after_sec` 이후
-가상 차량의 속도가 0으로 감소하는지 확인한다.
-
 ## 통합 런치
 
 ```bash

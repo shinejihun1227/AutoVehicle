@@ -122,16 +122,7 @@ roslaunch morai_bringup morai_udp_ekf_purepursuit.launch \
 시작 시 명령이 없거나 0.5초 이상 끊기면 브릿지는 정지 명령을 보낸다. 종료 시에도
 브레이크 정지 패킷을 한 번 보낸다.
 
-## 6. 반드시 분리할 테스트
-
-다음 두 launch를 동시에 실행하지 않는다.
-
-- `mgeo_purepursuit_closed_loop.launch`: 가상 차량이 `/localization/odometry`를 발행
-- `morai_udp_ekf_purepursuit.launch`: 실제 GPS·IMU EKF가 `/localization/odometry`를 발행
-
-둘을 동시에 실행하면 localization topic이 충돌한다.
-
-## 7. 공식 프로토콜 단위
+## 6. 공식 프로토콜 단위
 
 - EgoVehicleStatus: 181 bytes
 - EgoCtrlCmd: 55 bytes
