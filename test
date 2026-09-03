@@ -1,3 +1,16 @@
+source /opt/ros/noetic/setup.bash
+rospack find morai_msgs
+위 명령에서 패키지를 찾지 못하면 설치합니다.
+cd ~/AutoVehicle/morai_ws/src
+
+git clone --branch beta_drive \
+  https://github.com/MORAI-Autonomous/MORAI-ROS_morai_msgs.git \
+  morai_msgs
+다시 확인합니다.
+rospack profile
+rospack find morai_msgs
+
+
 1. Ubuntu 호스트에서 Docker 실행
 xhost +SI:localuser:root
 
