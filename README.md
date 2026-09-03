@@ -19,3 +19,6 @@ MORAI 1130 → Ubuntu 1131   네 번째 카메라
 
 현재 코드의 폴더별 역할과 실제 실행 순서는
 [현재 구성 및 실행 보고서](morai_ws/docs/현재_구성_및_실행_보고서.md)를 기준으로 확인합니다.
+
+새 Docker를 만들고 `morai_msgs` 설치부터 곡률 기반 주행·GPS blackout까지 처음부터
+검증하려면 [새 Docker 통합 테스트 가이드](TEST_FROM_SCRATCH_KO.md)를 먼저 실행합니다.
