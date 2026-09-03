@@ -1,0 +1,289 @@
+<launch>
+  <!--
+    GPS·IMU 노이즈 시험 + GPS robust filter + ENU EKF +
+    곡률 기반 속도 계획 Pure Pursuit 통합 실행 파일.
+
+    데이터 흐름:
+      MORAI UDP
+        -> /gps, /Imu
+        -> GPS 변환 /localization/gps
+        -> (선택) 센서 노이즈 추가
+        -> IMU spike 제한·EMA filter /Imu_filtered
+        -> GPS jump 제거·Median filter /localization/gps_filtered
+        -> EKF /localization/odometry
+        -> 곡률 기반 Pure Pursuit /control/curvature_ctrl_cmd
+        -> GPS blackout 안정화 /control/blackout_stable_cmd
+        -> control_mux /ctrl_cmd
+        -> MORAI UDP 제어
+
+    기존 morai_udp_ekf_purepursuit.launch와 stability_stack.launch는
+    포함하지 않는다. 따라서 기존 일반 Pure Pursuit와 명령 토픽이 충돌하지 않는다.
+
+    주의:
+      - enable_control=false가 기본값이다. 먼저 preview/토픽 검증을 한다.
+      - 이 테스트 launch는 카메라·LiDAR 안전정지를 포함하지 않는다.
+        실제 차량 제어 시에는 별도 안전 토픽을 연결하고
+        require_fresh_safety=true로 설정하는 것을 권장한다.
+  -->
+
+  <arg name="workspace_path" default="$(env HOME)/morai_ws" />
+  <arg name="path_file" default="$(arg workspace_path)/data/routes/2026_molit_comp_global_path.txt" />
+
+  <!-- 변경된 MORAI PC 주소 -->
+  <arg name="morai_host_ip" default="192.168.0.148" />
+  <arg name="control_remote_port" default="9093" />
+  <arg name="control_source_port" default="9094" />
+
+  <arg name="bind_ip" default="0.0.0.0" />
+  <arg name="gps_port" default="3001" />
+  <arg name="imu_port" default="4001" />
+  <arg name="ego_status_port" default="909" />
+
+  <!-- false이면 raw GPS/IMU를 사용하되 GPS robust filter는 계속 사용한다. -->
+  <arg name="enable_sensor_noise" default="true" />
+  <!-- false이면 CtrlCmd를 만들지 않고 상태·곡률 토픽만 확인한다. -->
+  <arg name="enable_control" default="false" />
+
+  <arg name="gps_blackout_timeout_sec" default="0.5" />
+  <arg name="gps_recovery_valid_samples" default="5" />
+  <arg name="blackout_speed_mps" default="1.0" />
+  <arg name="recovering_speed_mps" default="1.5" />
+  <arg name="stop_on_gps_blackout" default="false" />
+
+  <!-- 카메라·LiDAR를 이 launch에 포함하지 않으므로 기본 false이다. -->
+  <arg name="require_fresh_safety" default="false" />
+
+  <!-- 1. MORAI GPS·IMU UDP -> /gps, /Imu -->
+  <include file="$(find morai_udp_bridge)/launch/morai_udp_bridge.launch">
+    <arg name="bind_ip" value="$(arg bind_ip)" />
+    <arg name="gps_port" value="$(arg gps_port)" />
+    <arg name="imu_port" value="$(arg imu_port)" />
+    <arg name="gps_topic" value="/gps" />
+    <arg name="imu_topic" value="/Imu" />
+    <arg name="gps_frame_id" value="gps_link" />
+    <arg name="imu_frame_id" value="imu_link" />
+    <arg name="imu_use_packet_time" value="false" />
+  </include>
+
+  <!-- 2. MORAI EgoVehicleStatus 수신 + 최종 /ctrl_cmd UDP 송신 -->
+  <include file="$(find morai_udp_drive_bridge)/launch/morai_udp_drive_bridge.launch">
+    <arg name="status_bind_ip" value="$(arg bind_ip)" />
+    <arg name="status_port" value="$(arg ego_status_port)" />
+    <arg name="status_topic" value="/Ego_topic" />
+    <arg name="status_frame_id" value="map" />
+    <arg name="control_remote_ip" value="$(arg morai_host_ip)" />
+    <arg name="control_remote_port" value="$(arg control_remote_port)" />
+    <arg name="control_bind_port" value="$(arg control_source_port)" />
+    <arg name="command_topic" value="/ctrl_cmd" />
+  </include>
+
+  <!-- 3. 차량 기준점과 GPS·IMU 정적 TF -->
+  <node pkg="tf"
+        type="static_transform_publisher"
+        name="curvature_base_link_to_gps_link"
+        args="0 0 1.2 0 0 0 base_link gps_link 100" />
+  <node pkg="tf"
+        type="static_transform_publisher"
+        name="curvature_base_link_to_imu_link"
+        args="0 0 0 0 0 0 base_link imu_link 100" />
+
+  <!-- 4. GPS 위경도 -> MGeo local ENU /localization/gps -->
+  <include file="$(find gps_mgeo_converter)/launch/gps_mgeo_converter.launch">
+    <arg name="gps_xyz_x" value="0.0" />
+    <arg name="gps_xyz_y" value="0.0" />
+    <arg name="gps_xyz_z" value="1.2" />
+  </include>
+
+  <!-- 5-A. GPS·IMU 인위적 노이즈 생성 -->
+  <group if="$(arg enable_sensor_noise)">
+    <node pkg="stability_stack"
+          type="gps_noise_injector.py"
+          name="curvature_gps_noise_injector"
+          output="screen">
+      <param name="input_topic" value="/localization/gps" />
+      <param name="output_topic" value="/localization/gps_noisy" />
+      <param name="position_noise_std_x_m" value="0.5" />
+      <param name="position_noise_std_y_m" value="0.5" />
+      <param name="bias_random_walk_x_m_sqrt_s" value="0.02" />
+      <param name="bias_random_walk_y_m_sqrt_s" value="0.02" />
+      <param name="outlier_probability" value="0.01" />
+      <param name="outlier_std_m" value="3.0" />
+      <param name="dropout_probability" value="0.02" />
+      <param name="random_seed" value="20260822" />
+    </node>
+
+    <node pkg="stability_stack"
+          type="imu_noise_injector.py"
+          name="curvature_imu_noise_injector"
+          output="screen">
+      <param name="input_topic" value="/Imu" />
+      <param name="output_topic" value="/Imu_noisy" />
+      <param name="gyro_noise_std_rad_s" value="0.01" />
+      <param name="accel_noise_std_m_s2" value="0.1" />
+      <param name="gyro_bias_random_walk_rad_s_sqrt_s" value="0.002" />
+      <param name="accel_bias_random_walk_m_s2_sqrt_s" value="0.02" />
+      <!-- 기본값 0: orientation quaternion은 보존하고 gyro·accel만 흔든다. -->
+      <param name="orientation_yaw_noise_std_rad" value="0.0" />
+      <param name="dropout_probability" value="0.01" />
+      <param name="random_seed" value="20260823" />
+    </node>
+  </group>
+
+  <!-- 5-B. IMU spike 제한 + EMA 필터 -->
+  <group if="$(arg enable_sensor_noise)">
+    <node pkg="stability_stack"
+          type="imu_robust_filter.py"
+          name="curvature_imu_robust_filter_noisy"
+          output="screen">
+      <param name="input_topic" value="/Imu_noisy" />
+      <param name="output_topic" value="/Imu_filtered" />
+      <param name="status_topic" value="/stability/imu_filter_status" />
+      <param name="ema_alpha" value="0.35" />
+      <param name="max_gyro_jump_rad_s" value="2.0" />
+      <param name="max_accel_jump_m_s2" value="10.0" />
+      <param name="filter_orientation_yaw" value="true" />
+      <param name="max_yaw_jump_rad" value="0.7853981634" />
+    </node>
+  </group>
+  <group unless="$(arg enable_sensor_noise)">
+    <node pkg="stability_stack"
+          type="imu_robust_filter.py"
+          name="curvature_imu_robust_filter_raw"
+          output="screen">
+      <param name="input_topic" value="/Imu" />
+      <param name="output_topic" value="/Imu_filtered" />
+      <param name="status_topic" value="/stability/imu_filter_status" />
+      <param name="ema_alpha" value="0.35" />
+      <param name="max_gyro_jump_rad_s" value="2.0" />
+      <param name="max_accel_jump_m_s2" value="10.0" />
+      <param name="filter_orientation_yaw" value="true" />
+      <param name="max_yaw_jump_rad" value="0.7853981634" />
+    </node>
+  </group>
+
+  <!-- 5-C. GPS jump 제거. 노이즈를 꺼도 실제 GPS 이상치는 검사한다. -->
+  <group if="$(arg enable_sensor_noise)">
+    <node pkg="stability_stack"
+          type="gps_robust_filter.py"
+          name="curvature_gps_robust_filter_noisy"
+          output="screen">
+      <param name="input_topic" value="/localization/gps_noisy" />
+      <param name="output_topic" value="/localization/gps_filtered" />
+      <param name="max_position_jump_m" value="5.0" />
+      <param name="max_speed_mps" value="15.0" />
+      <param name="median_window_size" value="3" />
+    </node>
+  </group>
+  <group unless="$(arg enable_sensor_noise)">
+    <node pkg="stability_stack"
+          type="gps_robust_filter.py"
+          name="curvature_gps_robust_filter_raw"
+          output="screen">
+      <param name="input_topic" value="/localization/gps" />
+      <param name="output_topic" value="/localization/gps_filtered" />
+      <param name="max_position_jump_m" value="5.0" />
+      <param name="max_speed_mps" value="15.0" />
+      <param name="median_window_size" value="3" />
+    </node>
+  </group>
+
+  <!-- 6. 원본 /gps의 수신 중단과 status=0 감시 -->
+  <node pkg="stability_stack"
+        type="gps_blackout_detector.py"
+        name="curvature_gps_blackout_detector"
+        output="screen">
+    <param name="input_topic" value="/gps" />
+    <param name="health_topic" value="/localization/gps_health" />
+    <param name="status_topic" value="/stability/gps_blackout_status" />
+    <param name="blackout_timeout_sec" value="$(arg gps_blackout_timeout_sec)" />
+    <param name="recovery_valid_samples" value="$(arg gps_recovery_valid_samples)" />
+  </node>
+
+  <!-- 7. filtered GPS + filtered IMU -> EKF -->
+  <group if="$(arg enable_sensor_noise)">
+    <include file="$(find ekf_local_enu)/launch/ekf_local_enu.launch">
+      <arg name="gps_topic" value="/localization/gps_filtered" />
+      <arg name="imu_topic" value="/Imu_filtered" />
+      <arg name="default_gps_variance_m2" value="0.25" />
+      <arg name="default_yaw_std_deg" value="8.0" />
+      <arg name="gyro_noise_std_rad_s" value="0.01" />
+      <arg name="accel_noise_std_m_s2" value="0.1" />
+      <arg name="bias_random_walk" value="0.002" />
+    </include>
+  </group>
+  <group unless="$(arg enable_sensor_noise)">
+    <include file="$(find ekf_local_enu)/launch/ekf_local_enu.launch">
+      <arg name="gps_topic" value="/localization/gps_filtered" />
+      <arg name="imu_topic" value="/Imu_filtered" />
+      <arg name="default_gps_variance_m2" value="1.0" />
+      <arg name="default_yaw_std_deg" value="8.0" />
+      <arg name="gyro_noise_std_rad_s" value="0.08" />
+      <arg name="accel_noise_std_m_s2" value="0.8" />
+      <arg name="bias_random_walk" value="0.001" />
+    </include>
+  </group>
+
+  <!-- 8. EKF pose -> 곡률 기반 Pure Pursuit -->
+  <node pkg="curvature_speed_purepursuit"
+        type="curvature_speed_purepursuit_node.py"
+        name="integrated_curvature_speed_purepursuit"
+        output="screen">
+    <param name="path_file" value="$(arg path_file)" />
+    <param name="pose_topic" value="/localization/odometry" />
+    <param name="command_topic" value="/control/curvature_ctrl_cmd" />
+    <param name="publish_command" value="$(arg enable_control)" />
+    <param name="pose_timeout_sec" value="0.5" />
+
+    <!-- 경로 곡률·속도 프로파일 -->
+    <param name="duplicate_epsilon_m" value="0.000001" />
+    <param name="curvature_half_window_points" value="1" />
+    <param name="curvature_smoothing_window" value="5" />
+    <param name="max_speed_mps" value="2.0" />
+    <param name="lateral_accel_limit_mps2" value="1.0" />
+    <param name="max_accel_mps2" value="1.0" />
+    <param name="max_decel_mps2" value="1.5" />
+    <param name="initial_speed_mps" value="0.0" />
+    <param name="final_speed_mps" value="0.0" />
+
+    <!-- Pure Pursuit -->
+    <param name="wheelbase_m" value="3.0" />
+    <param name="lookahead_min_m" value="4.0" />
+    <param name="lookahead_gain" value="0.35" />
+    <param name="goal_tolerance_m" value="1.5" />
+    <param name="max_steering_rad" value="0.6981317008" />
+    <param name="steering_sign" value="1.0" />
+    <param name="longl_cmd_type" value="2" />
+    <param name="control_rate_hz" value="20.0" />
+
+    <!-- 진행점 검색 -->
+    <param name="progress_search_window_points" value="250" />
+    <param name="progress_backtrack_tolerance_m" value="2.0" />
+  </node>
+
+  <!-- 9. GPS blackout/recovery 중 곡률 PP 명령 제한 -->
+  <node pkg="stability_stack"
+        type="gps_blackout_stability_controller.py"
+        name="integrated_gps_blackout_stability_controller"
+        output="screen">
+    <param name="input_command_topic" value="/control/curvature_ctrl_cmd" />
+    <param name="output_command_topic" value="/control/blackout_stable_cmd" />
+    <param name="gps_health_topic" value="/localization/gps_health" />
+    <param name="enabled" value="true" />
+    <param name="blackout_speed_mps" value="$(arg blackout_speed_mps)" />
+    <param name="recovering_speed_mps" value="$(arg recovering_speed_mps)" />
+    <param name="stop_on_blackout" value="$(arg stop_on_gps_blackout)" />
+    <param name="stop_on_health_stale" value="true" />
+    <param name="max_steering_rate_rad_s" value="0.5" />
+    <param name="max_velocity_rate_mps2" value="1.0" />
+  </node>
+
+  <!-- 10. 최종 제어 중재: /control/blackout_stable_cmd -> /ctrl_cmd -->
+  <include file="$(find control_mux)/launch/control_mux.launch">
+    <arg name="nominal_command_topic" value="/control/blackout_stable_cmd" />
+    <arg name="output_command_topic" value="/ctrl_cmd" />
+    <arg name="safety_stop_topic" value="/detection/fused_safety_stop" />
+    <arg name="require_fresh_safety" value="$(arg require_fresh_safety)" />
+    <arg name="require_fresh_localization" value="true" />
+    <arg name="lane_correction_enabled" value="false" />
+  </include>
+</launch>

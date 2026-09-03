@@ -1,0 +1,42 @@
+std_msgs/Header header
+bool stationary
+bool calibration_valid
+string mode
+uint32 current_window_samples_gps
+uint32 current_window_samples_imu
+uint32 total_stationary_updates
+float64 stationary_duration_sec
+float64 stationary_score
+
+float64 gps_center_x_m
+float64 gps_center_y_m
+float64 gps_std_x_m
+float64 gps_std_y_m
+float64 gps_3sigma_x_m
+float64 gps_3sigma_y_m
+float64 gps_step_speed_mps
+
+float64 gyro_mean_x_rad_s
+float64 gyro_mean_y_rad_s
+float64 gyro_mean_z_rad_s
+float64 gyro_std_x_rad_s
+float64 gyro_std_y_rad_s
+float64 gyro_std_z_rad_s
+float64 gyro_3sigma_x_rad_s
+float64 gyro_3sigma_y_rad_s
+float64 gyro_3sigma_z_rad_s
+
+float64 accel_mean_x_m_s2
+float64 accel_mean_y_m_s2
+float64 accel_mean_z_m_s2
+float64 accel_std_x_m_s2
+float64 accel_std_y_m_s2
+float64 accel_std_z_m_s2
+float64 accel_3sigma_x_m_s2
+float64 accel_3sigma_y_m_s2
+float64 accel_3sigma_z_m_s2
+
+float64 gps_rate_hz
+float64 imu_rate_hz
+float64 gps_max_gap_sec
+float64 imu_max_gap_sec

@@ -138,7 +138,7 @@ class RobustCameraLaneDetector:
     def x_at_y(fit: Tuple[float, float], y: float) -> float:
         return fit[0] * float(y) + fit[1]
 
-    def detect_lines(self, image) -> Tuple[List[Line], List[Line], object]:
+    def detect_lines(self, image) -> Tuple[List[Line], List[Line]]:
         height, width = image.shape[:2]
         roi_y = int(height * self.roi_start_ratio)
         roi = image[roi_y:, :]
@@ -188,8 +188,81 @@ class RobustCameraLaneDetector:
                 elif slope > 0.35 and bottom_x > center_x:
                     right.append(line)
 
-        debug = cv2.cvtColor(full_mask, cv2.COLOR_GRAY2BGR)
-        return left, right, debug
+        return left, right
+
+    def make_debug_image(
+        self,
+        image,
+        left_lines: List[Line],
+        right_lines: List[Line],
+        status: str,
+        center_bottom: Optional[float] = None,
+        center_top: Optional[float] = None,
+        bottom_y: Optional[float] = None,
+        top_y: Optional[float] = None,
+    ):
+        """원본 영상 위에 차선 검출 결과를 그려 사람이 바로 확인하게 한다."""
+        debug = image.copy()
+        height, width = debug.shape[:2]
+        polygon = self.roi_polygon(width, height)
+
+        roi_overlay = debug.copy()
+        cv2.fillPoly(roi_overlay, [polygon], (40, 120, 40))
+        debug = cv2.addWeighted(debug, 0.88, roi_overlay, 0.12, 0.0)
+        cv2.polylines(debug, [polygon], True, (255, 180, 0), 2)
+
+        for line in left_lines:
+            x1, y1, x2, y2 = line
+            cv2.line(debug, (x1, y1), (x2, y2), (0, 255, 0), 3)
+        for line in right_lines:
+            x1, y1, x2, y2 = line
+            cv2.line(debug, (x1, y1), (x2, y2), (0, 255, 0), 3)
+
+        if (
+            center_bottom is not None
+            and center_top is not None
+            and bottom_y is not None
+            and top_y is not None
+        ):
+            cv2.circle(debug, (int(center_bottom), int(bottom_y)), 7, (0, 0, 255), -1)
+            cv2.circle(debug, (int(center_top), int(top_y)), 7, (255, 0, 0), -1)
+            cv2.line(
+                debug,
+                (int(width * 0.5), int(top_y)),
+                (int(width * 0.5), int(bottom_y)),
+                (0, 255, 255),
+                2,
+            )
+            cv2.line(
+                debug,
+                (int(center_top), int(top_y)),
+                (int(center_bottom), int(bottom_y)),
+                (255, 0, 255),
+                2,
+            )
+
+        cv2.rectangle(debug, (0, 0), (width, 58), (0, 0, 0), -1)
+        cv2.putText(
+            debug,
+            "LANE %s" % status,
+            (15, 25),
+            cv2.FONT_HERSHEY_SIMPLEX,
+            0.7,
+            (0, 255, 0) if status.startswith("VALID") else (0, 165, 255),
+            2,
+            cv2.LINE_AA,
+        )
+        cv2.putText(
+            debug,
+            "green=lane  magenta=estimated-centerline  yellow=vehicle-center",
+            (15, 49),
+            cv2.FONT_HERSHEY_SIMPLEX,
+            0.43,
+            (230, 230, 230),
+            1,
+            cv2.LINE_AA,
+        )
+        return debug
 
     def publish_invalid(self, message: CompressedImage, debug_image=None) -> None:
         output = LaneDetection()
@@ -221,9 +294,17 @@ class RobustCameraLaneDetector:
             return
 
         height, width = image.shape[:2]
-        left_lines, right_lines, debug = self.detect_lines(image)
+        left_lines, right_lines = self.detect_lines(image)
         if len(left_lines) + len(right_lines) < self.min_line_count:
-            self.publish_invalid(message, debug)
+            self.publish_invalid(
+                message,
+                self.make_debug_image(
+                    image,
+                    left_lines,
+                    right_lines,
+                    "INVALID: insufficient lane lines",
+                ),
+            )
             return
 
         left_fit = self.fit_x_by_y(left_lines)
@@ -253,7 +334,12 @@ class RobustCameraLaneDetector:
             # fallback 제어기가 단독 주행에 사용하지 않도록 한다.
             fit = left_fit if left_fit is not None else right_fit
             if fit is None:
-                self.publish_invalid(message, debug)
+                self.publish_invalid(
+                    message,
+                    self.make_debug_image(
+                        image, left_lines, right_lines, "INVALID: no fitted lane"
+                    ),
+                )
                 return
             detected_bottom = self.x_at_y(fit, bottom_y)
             detected_top = self.x_at_y(fit, top_y)
@@ -267,7 +353,12 @@ class RobustCameraLaneDetector:
             lane_width_px = width_guess
 
         if bottom_x is None or top_x is None or lane_width_px is None:
-            self.publish_invalid(message, debug)
+            self.publish_invalid(
+                message,
+                self.make_debug_image(
+                    image, left_lines, right_lines, "INVALID: missing lane geometry"
+                ),
+            )
             return
 
         if self.smoothed_bottom is None:
@@ -304,20 +395,22 @@ class RobustCameraLaneDetector:
         output.valid = True
         self.publisher.publish(output)
 
-        debug_color = cv2.cvtColor(debug, cv2.COLOR_BGR2RGB)
-        for line in left_lines + right_lines:
-            x1, y1, x2, y2 = line
-            cv2.line(debug_color, (x1, y1), (x2, y2), (0, 255, 0), 2)
-        cv2.circle(debug_color, (int(center_bottom), int(bottom_y)), 6, (0, 0, 255), -1)
-        cv2.circle(debug_color, (int(center_top), int(top_y)), 6, (255, 0, 0), -1)
-        cv2.line(
-            debug_color,
-            (int(width * 0.5), int(top_y)),
-            (int(width * 0.5), int(bottom_y)),
-            (255, 255, 0),
-            2,
+        debug_image = self.make_debug_image(
+            image,
+            left_lines,
+            right_lines,
+            "VALID  confidence=%.2f  offset=%+.2fm  heading=%+.3frad"
+            % (
+                output.confidence,
+                output.lateral_offset_m,
+                output.heading_error_rad,
+            ),
+            center_bottom,
+            center_top,
+            bottom_y,
+            top_y,
         )
-        self.publish_debug_image(message, debug_color)
+        self.publish_debug_image(message, debug_image)
 
 
 if __name__ == "__main__":

@@ -3,6 +3,12 @@
   <arg name="left_topic" default="/camera/left/image/compressed" />
   <arg name="right_topic" default="/camera/right/image/compressed" />
   <arg name="aux_topic" default="/camera/aux/image/compressed" />
+  <arg name="use_camera_team_model" default="true" />
+  <arg name="model_path" default="$(find morai_camera_perception)/models/lane_segmentation.onnx" />
+  <arg name="debug_topic" default="/detection/lane_debug/compressed" />
+  <arg name="show_camera_windows" default="true" />
+  <arg name="viewer_max_width" default="1280" />
+  <arg name="viewer_max_height" default="720" />
 
   <node pkg="morai_camera_perception"
         type="camera_health_monitor.py"
@@ -14,13 +20,52 @@
     <param name="aux_topic" value="$(arg aux_topic)" />
   </node>
 
-  <node pkg="morai_camera_perception"
-        type="camera_lane_detector.py"
-        name="camera_lane_detector"
+  <group if="$(arg use_camera_team_model)">
+    <node pkg="morai_camera_perception"
+          type="camera_lane_team_node.py"
+          name="camera_team_lane_detector"
+          output="screen">
+      <param name="image_topic" value="$(arg front_topic)" />
+      <param name="output_topic" value="/detection/lane" />
+      <param name="debug_topic" value="$(arg debug_topic)" />
+      <param name="model_path" value="$(arg model_path)" />
+      <param name="publish_debug" value="true" />
+      <param name="publish_mask" value="true" />
+      <param name="lane_width_m" value="3.5" />
+    </node>
+  </group>
+
+  <group unless="$(arg use_camera_team_model)">
+    <node pkg="morai_camera_perception"
+          type="camera_lane_detector.py"
+          name="camera_lane_detector"
+          output="screen">
+      <param name="image_topic" value="$(arg front_topic)" />
+      <param name="output_topic" value="/detection/lane" />
+      <param name="meters_per_pixel" value="0.01" />
+    </node>
+  </group>
+
+  <node if="$(arg show_camera_windows)"
+        pkg="morai_camera_perception"
+        type="compressed_image_viewer.py"
+        name="camera_front_viewer"
         output="screen">
     <param name="image_topic" value="$(arg front_topic)" />
-    <param name="output_topic" value="/detection/lane" />
-    <param name="meters_per_pixel" value="0.01" />
+    <param name="window_name" value="MORAI Front Camera - Raw" />
+    <param name="max_width" value="$(arg viewer_max_width)" />
+    <param name="max_height" value="$(arg viewer_max_height)" />
+  </node>
+
+  <node if="$(arg show_camera_windows)"
+        pkg="morai_camera_perception"
+        type="compressed_image_viewer.py"
+        name="camera_lane_debug_viewer"
+        output="screen">
+    <param name="image_topic" value="$(arg debug_topic)" />
+    <param name="window_name" value="MORAI Front Camera - Lane Debug" />
+    <param name="max_width" value="$(arg viewer_max_width)" />
+    <param name="max_height" value="$(arg viewer_max_height)" />
   </node>
 
   <node pkg="morai_camera_perception"

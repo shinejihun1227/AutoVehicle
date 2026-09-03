@@ -15,11 +15,17 @@ catkin_install_python(PROGRAMS
   scripts/camera_health_monitor.py
   scripts/camera_lane_detector.py
   scripts/camera_lane_detector_robust.py
+  scripts/camera_lane_team_node.py
+  scripts/compressed_image_viewer.py
   scripts/traffic_light_detector.py
   scripts/camera_obstacle_detector.py
   DESTINATION ${CATKIN_PACKAGE_BIN_DESTINATION}
 )
 
 install(DIRECTORY launch
+  DESTINATION ${CATKIN_PACKAGE_SHARE_DESTINATION}
+)
+
+install(DIRECTORY models
   DESTINATION ${CATKIN_PACKAGE_SHARE_DESTINATION}
 )

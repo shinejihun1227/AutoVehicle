@@ -1,0 +1,61 @@
+<launch>
+  <!--
+    인위적인 noise injector/filter/EKF/Pure Pursuit를 포함하지 않는
+    원본 GPS·IMU 노이즈 측정 전용 launch.
+
+    기존 주행 launch가 실행 중이면 GPS/IMU UDP 포트가 겹치므로 종료한 뒤
+    이 launch를 실행한다.
+  -->
+  <arg name="bind_ip" default="0.0.0.0" />
+  <arg name="gps_port" default="3001" />
+  <arg name="imu_port" default="4001" />
+  <arg name="gps_xyz_x" default="0.0" />
+  <arg name="gps_xyz_y" default="0.0" />
+  <arg name="gps_xyz_z" default="1.2" />
+  <arg name="speed_topic" default="" />
+  <arg name="csv_path" default="" />
+  <arg name="start_raw_sources" default="true" />
+
+  <group if="$(arg start_raw_sources)">
+    <!-- 1. MORAI UDP 원본 센서만 ROS 토픽으로 변환 -->
+    <include file="$(find morai_udp_bridge)/launch/morai_udp_bridge.launch">
+      <arg name="bind_ip" value="$(arg bind_ip)" />
+      <arg name="gps_port" value="$(arg gps_port)" />
+      <arg name="imu_port" value="$(arg imu_port)" />
+      <arg name="gps_topic" value="/gps" />
+      <arg name="imu_topic" value="/Imu" />
+      <arg name="gps_frame_id" value="gps_link" />
+      <arg name="imu_frame_id" value="imu_link" />
+      <arg name="imu_use_packet_time" value="false" />
+    </include>
+
+    <!-- 2. 원본 GPS 위경도 -> map-local ENU -->
+    <include file="$(find gps_mgeo_converter)/launch/gps_mgeo_converter.launch">
+      <arg name="gps_xyz_x" value="$(arg gps_xyz_x)" />
+      <arg name="gps_xyz_y" value="$(arg gps_xyz_y)" />
+      <arg name="gps_xyz_z" value="$(arg gps_xyz_z)" />
+    </include>
+  </group>
+
+  <!-- 3. 측정 전용. 주행 명령 토픽을 publish하지 않는다. -->
+  <node pkg="sensor_noise_estimator"
+        type="sensor_noise_estimator_node.py"
+        name="sensor_noise_estimator"
+        output="screen">
+    <param name="gps_topic" value="/localization/gps" />
+    <param name="imu_topic" value="/Imu" />
+    <param name="speed_topic" value="$(arg speed_topic)" />
+    <param name="csv_path" value="$(arg csv_path)" />
+
+    <!-- 정지 판정 및 통계 창 -->
+    <param name="stationary_speed_mps" value="0.15" />
+    <param name="gyro_stationary_threshold_rad_s" value="0.04" />
+    <param name="accel_xy_stationary_threshold_m_s2" value="0.6" />
+    <param name="gps_stationary_speed_threshold_mps" value="1.0" />
+    <param name="settle_time_sec" value="1.5" />
+    <param name="window_duration_sec" value="5.0" />
+    <param name="update_period_sec" value="1.0" />
+    <param name="min_gps_samples" value="10" />
+    <param name="min_imu_samples" value="30" />
+  </node>
+</launch>
