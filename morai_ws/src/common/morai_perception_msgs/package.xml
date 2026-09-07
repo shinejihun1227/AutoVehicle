@@ -2,7 +2,7 @@
 <package format="2">
   <name>morai_perception_msgs</name>
   <version>0.1.0</version>
-  <description>차선·신호·장애물·안전정지 공통 메시지</description>
+  <description>차선·신호·장애물·안전정지·정지선 공통 메시지</description>
   <maintainer email="team@example.com">MORAI 자율주행팀</maintainer>
   <license>MIT</license>
 

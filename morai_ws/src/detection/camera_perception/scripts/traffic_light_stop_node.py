@@ -5,6 +5,7 @@ import time
 
 import rospy
 from common.msg import ObjectInfoArray
+from morai_perception_msgs.msg import TrafficLight
 from std_msgs.msg import Bool
 
 from camera_perception.traffic_signal import TrafficSignalStopLatch
@@ -16,15 +17,22 @@ class TrafficLightStopNode:
         output_topic = rospy.get_param(
             "~output_topic", "/perception/traffic_light/stop_required"
         )
+        state_topic = rospy.get_param(
+            "~state_topic", "/perception/traffic_light/state"
+        )
         clear_confirmation_s = float(
             rospy.get_param("~clear_confirmation_s", 0.5)
         )
         self.publisher = rospy.Publisher(output_topic, Bool, queue_size=1, latch=True)
+        self.state_publisher = rospy.Publisher(
+            state_topic, TrafficLight, queue_size=1, latch=True
+        )
         self.latch = TrafficSignalStopLatch(clear_confirmation_s)
         self.stop_required = False
         rospy.Subscriber(input_topic, ObjectInfoArray, self.callback, queue_size=1)
         rospy.on_shutdown(self.shutdown)
         self.publisher.publish(Bool(data=False))
+        self.state_publisher.publish(self.state_message("UNKNOWN", 0.0, False))
         rospy.logwarn(
             "Traffic-light stop: input=%s output=%s priority=GREEN>RED-only/Yellow/Amber "
             "clear_confirmation=%.2fs",
@@ -44,9 +52,42 @@ class TrafficLightStopNode:
             )
         self.stop_required = stop_required
         self.publisher.publish(Bool(data=stop_required))
+        normalized = [str(name).strip().lower() for name in class_names]
+        if any("green" in name for name in normalized):
+            state = "GREEN"
+        elif any("yellow" in name or "amber" in name for name in normalized):
+            state = "YELLOW"
+        elif "red" in normalized:
+            state = "RED"
+        else:
+            state = "UNKNOWN"
+        if stop_required and state in ("RED", "YELLOW", "UNKNOWN"):
+            state += "_STOP"
+        confidence = max(
+            (float(item.conf) for item in message.objects if item.conf >= 0.0),
+            default=0.0,
+        )
+        self.state_publisher.publish(
+            self.state_message(state, confidence, bool(message.objects), message.header)
+        )
+
+    @staticmethod
+    def state_message(state, confidence, valid, source_header=None):
+        output = TrafficLight()
+        if source_header is not None:
+            output.header = source_header
+        if not output.header.stamp or output.header.stamp == rospy.Time():
+            output.header.stamp = rospy.Time.now()
+        if not output.header.frame_id:
+            output.header.frame_id = "front_camera"
+        output.state = str(state)
+        output.confidence = float(confidence)
+        output.valid = bool(valid)
+        return output
 
     def shutdown(self):
         self.publisher.publish(Bool(data=False))
+        self.state_publisher.publish(self.state_message("UNKNOWN", 0.0, False))
 
 
 def main():

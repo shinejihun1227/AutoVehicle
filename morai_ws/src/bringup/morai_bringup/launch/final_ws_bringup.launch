@@ -10,6 +10,7 @@
   <arg name="morai_host_ip" default="192.168.0.151" />
   <arg name="enable_control" default="false" />
   <arg name="enable_lane_fallback" default="true" />
+  <arg name="enable_stopline_control" default="true" />
   <arg name="enable_roi_camera" default="true" />
   <arg name="enable_roi_lidar" default="true" />
   <arg name="roi_enable_lane" default="true" />
@@ -23,6 +24,7 @@
   <arg name="fallback_entry_delay_sec" default="0.50" />
   <arg name="lane_loss_grace_sec" default="0.25" />
   <arg name="recovery_stable_sec" default="1.0" />
+  <arg name="stopline_topic" default="/perception/camera/stopline" />
 
   <include file="$(find morai_bringup)/launch/perception_control_bringup.launch">
     <arg name="workspace_path" value="$(arg workspace_path)" />
@@ -32,6 +34,7 @@
     <arg name="use_roi_sensor_stack" value="true" />
     <arg name="enable_sensor_quality" value="$(arg enable_lane_fallback)" />
     <arg name="enable_lane_fallback" value="$(arg enable_lane_fallback)" />
+    <arg name="enable_stopline_control" value="$(arg enable_stopline_control)" />
     <arg name="enable_roi_camera" value="$(arg enable_roi_camera)" />
     <arg name="enable_roi_lidar" value="$(arg enable_roi_lidar)" />
     <arg name="roi_camera_stack_root" value="$(arg workspace_path)" />
@@ -39,6 +42,7 @@
     <arg name="roi_enable_yolo" value="$(arg roi_enable_yolo)" />
     <arg name="lane_detection_topic" value="/detection/lane" />
     <arg name="lane_quality_topic" value="/perception/camera/lane_quality" />
+    <arg name="stopline_topic" value="$(arg stopline_topic)" />
     <arg name="fallback_speed_cap_kph" value="$(arg fallback_speed_cap_kph)" />
     <arg name="stop_without_camera" value="$(arg stop_without_camera)" />
     <arg name="lane_assist_confidence" value="$(arg lane_assist_confidence)" />

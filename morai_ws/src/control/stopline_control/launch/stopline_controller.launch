@@ -1,0 +1,28 @@
+<launch>
+  <arg name="enabled" default="true" />
+  <arg name="nominal_command_topic" default="/control/ctrl_cmd" />
+  <arg name="output_command_topic" default="/control/stopline_cmd" />
+  <arg name="stopline_topic" default="/perception/camera/stopline" />
+  <arg name="signal_stop_topic" default="/perception/traffic_light/stop_required" />
+  <arg name="signal_state_topic" default="/perception/traffic_light/state" />
+  <arg name="odom_topic" default="/localization/odometry" />
+
+  <node pkg="stopline_control"
+        type="stopline_controller.py"
+        name="stopline_controller"
+        output="screen">
+    <param name="enabled" value="$(arg enabled)" />
+    <param name="nominal_command_topic" value="$(arg nominal_command_topic)" />
+    <param name="output_command_topic" value="$(arg output_command_topic)" />
+    <param name="stopline_topic" value="$(arg stopline_topic)" />
+    <param name="signal_stop_topic" value="$(arg signal_stop_topic)" />
+    <param name="signal_state_topic" value="$(arg signal_state_topic)" />
+    <param name="odom_topic" value="$(arg odom_topic)" />
+    <param name="longl_cmd_type" value="1" />
+    <param name="max_decel_mps2" value="1.5" />
+    <param name="reaction_time_sec" value="0.3" />
+    <param name="hold_distance_m" value="0.5" />
+    <param name="approach_distance_m" value="20.0" />
+    <param name="trigger_margin_m" value="1.0" />
+  </node>
+</launch>

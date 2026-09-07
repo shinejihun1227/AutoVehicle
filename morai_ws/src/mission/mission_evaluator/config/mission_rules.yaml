@@ -1,0 +1,25 @@
+# 이 파일은 주행 런치에서 자동으로 로드되지 않는다.
+# 대회 운영 제어 노드와 분리된 검증용 mission_evaluator.launch에서만 사용한다.
+start:
+  deadline_sec: 60.0
+  progress_ratio: 0.05
+  start_speed_kph: 0.5
+
+speed:
+  limit_kph: 60.0
+  immediate_penalty_sec: 15.0
+  repeat_interval_sec: 3.0
+
+lane:
+  contact_duration_sec: 3.0
+  repeat_interval_sec: 3.0
+  penalty_sec: 5.0
+
+collision:
+  penalty_sec: 15.0
+  release_timeout_sec: 0.5
+
+regions:
+  # 실제 대회 경로 기준으로 metre 단위를 입력한다. 비어 있으면 예외 없음.
+  highway_exception: []
+  blackout: []

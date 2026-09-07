@@ -1,0 +1,15 @@
+<?xml version="1.0"?>
+<package format="2">
+  <name>mission_evaluator</name>
+  <version>0.1.0</version>
+  <description>대회 미션 패널티 평가용 독립 검증 노드. 주행 제어에는 연결하지 않는다.</description>
+  <maintainer email="team@example.com">MORAI 자율주행팀</maintainer>
+  <license>MIT</license>
+
+  <buildtool_depend>catkin</buildtool_depend>
+  <depend>morai_msgs</depend>
+  <depend>morai_perception_msgs</depend>
+  <depend>nav_msgs</depend>
+  <depend>rospy</depend>
+  <depend>std_msgs</depend>
+</package>

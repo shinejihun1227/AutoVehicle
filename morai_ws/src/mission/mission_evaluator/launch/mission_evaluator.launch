@@ -1,0 +1,36 @@
+<launch>
+  <!-- 실제 대회 주행 launch에서 include하지 않는다. 별도 검증 시에만 실행한다. -->
+  <arg name="workspace_path" default="$(env HOME)/morai_ws" />
+  <arg name="path_file" default="$(arg workspace_path)/data/routes/2026_molit_comp_global_path.txt" />
+  <!-- 0이면 path_file의 x/y 누적 길이를 자동 계산한다. -->
+  <arg name="route_length_m" default="0.0" />
+  <arg name="progress_topic" default="/experimental/curvature_progress" />
+  <arg name="ego_topic" default="/Ego_topic" />
+  <arg name="quality_topic" default="/localization/sensor_quality" />
+  <!-- 차선 경계/바퀴 접촉 판정기가 발행하는 명시적 Bool 입력 계약 -->
+  <arg name="lane_contact_topic" default="/mission/lane_contact" />
+  <arg name="collision_topic" default="/CollisionData" />
+  <arg name="status_topic" default="/mission/status" />
+  <arg name="event_topic" default="/mission/penalty_event" />
+  <arg name="summary_topic" default="/mission/summary" />
+  <arg name="region_topic" default="/mission/current_region" />
+
+  <node pkg="mission_evaluator"
+        type="mission_evaluator_node.py"
+        name="mission_evaluator"
+        output="screen">
+    <rosparam param="rules" file="$(find mission_evaluator)/config/mission_rules.yaml" />
+    <param name="route_length_m" value="$(arg route_length_m)" />
+    <param name="path_file" value="$(arg path_file)" />
+    <param name="progress_topic" value="$(arg progress_topic)" />
+    <param name="ego_topic" value="$(arg ego_topic)" />
+    <param name="quality_topic" value="$(arg quality_topic)" />
+    <param name="lane_contact_topic" value="$(arg lane_contact_topic)" />
+    <param name="collision_topic" value="$(arg collision_topic)" />
+    <param name="status_topic" value="$(arg status_topic)" />
+    <param name="event_topic" value="$(arg event_topic)" />
+    <param name="summary_topic" value="$(arg summary_topic)" />
+    <param name="region_topic" value="$(arg region_topic)" />
+    <param name="rate_hz" value="20.0" />
+  </node>
+</launch>

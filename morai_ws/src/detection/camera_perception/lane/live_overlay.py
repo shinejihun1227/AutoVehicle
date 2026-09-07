@@ -102,6 +102,9 @@ def build_arg_parser():
                     default="/perception/camera/stopline_detected")
     ap.add_argument("--stopline-distance-topic",
                     default="/perception/camera/stopline_distance_m")
+    ap.add_argument("--stopline-topic",
+                    default="/perception/camera/stopline",
+                    help="timestamped morai_perception_msgs/StopLineDetection")
     ap.add_argument("--lane-detection-topic", default="/detection/lane",
                     help="차선 fallback용 morai_perception_msgs/LaneDetection 토픽")
     ap.add_argument("--lane-quality-topic", default="/perception/camera/lane_quality",
@@ -119,17 +122,23 @@ def main(argv=None):
     right_solid_publisher = None
     stopline_detected_publisher = None
     stopline_distance_publisher = None
+    stopline_publisher = None
     lane_detection_publisher = None
     lane_quality_publisher = None
     LaneDetection = None
+    StopLineDetection = None
     String = None
     if args.ros_publish:
         import rospy as rospy_module
-        from morai_perception_msgs.msg import LaneDetection as LaneDetectionMessage
+        from morai_perception_msgs.msg import (
+            LaneDetection as LaneDetectionMessage,
+            StopLineDetection as StopLineDetectionMessage,
+        )
         from std_msgs.msg import Bool, Float64, String as StringMessage
 
         rospy = rospy_module
         LaneDetection = LaneDetectionMessage
+        StopLineDetection = StopLineDetectionMessage
         String = StringMessage
         rospy.init_node("camera_lane_perception", anonymous=False)
         dashed_publisher = rospy.Publisher(
@@ -149,6 +158,9 @@ def main(argv=None):
         )
         stopline_distance_publisher = rospy.Publisher(
             args.stopline_distance_topic, Float64, queue_size=1
+        )
+        stopline_publisher = rospy.Publisher(
+            args.stopline_topic, StopLineDetection, queue_size=1
         )
         lane_detection_publisher = rospy.Publisher(
             args.lane_detection_topic, LaneDetection, queue_size=1
@@ -230,6 +242,20 @@ def main(argv=None):
                                     )
                                 )
                             )
+                            stopline_message = StopLineDetection()
+                            stopline_message.header.stamp = rospy.Time.now()
+                            stopline_message.header.frame_id = "front_camera"
+                            stopline_message.valid = bool(stopline_detected)
+                            stopline_message.distance_m = float(
+                                res.stopline_dist if stopline_detected else 0.0
+                            )
+                            # 현재 pipeline은 별도의 stopline 확률을 제공하지
+                            # 않으므로 유효성 기반 보수값을 사용한다. 후속 모델에서
+                            # confidence가 나오면 이 필드를 바로 교체한다.
+                            stopline_message.confidence = float(
+                                quality["confidence"] if stopline_detected else 0.0
+                            )
+                            stopline_publisher.publish(stopline_message)
                             lane_message = LaneDetection()
                             lane_message.header.stamp = rospy.Time.now()
                             lane_message.header.frame_id = "front_camera"
@@ -306,6 +332,13 @@ def main(argv=None):
                 left_yellow_solid_publisher.publish(Bool(data=False))
                 right_solid_publisher.publish(Bool(data=False))
                 stopline_detected_publisher.publish(Bool(data=False))
+                invalid_stopline = StopLineDetection()
+                invalid_stopline.header.stamp = rospy.Time.now()
+                invalid_stopline.header.frame_id = "front_camera"
+                invalid_stopline.valid = False
+                invalid_stopline.distance_m = 0.0
+                invalid_stopline.confidence = 0.0
+                stopline_publisher.publish(invalid_stopline)
                 invalid_lane = LaneDetection()
                 invalid_lane.header.stamp = rospy.Time.now()
                 invalid_lane.header.frame_id = "front_camera"

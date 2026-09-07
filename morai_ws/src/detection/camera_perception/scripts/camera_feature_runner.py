@@ -58,6 +58,10 @@ def main():
         "--stopline-distance-topic",
         default="/perception/camera/stopline_distance_m",
     )
+    parser.add_argument(
+        "--stopline-topic",
+        default="/perception/camera/stopline",
+    )
     parser.add_argument("--lane-detection-topic", default="/detection/lane")
     parser.add_argument(
         "--lane-quality-topic", default="/perception/camera/lane_quality"
@@ -104,6 +108,7 @@ def main():
                     "--right-solid-lane-topic", args.right_solid_lane_topic,
                     "--stopline-detected-topic", args.stopline_detected_topic,
                     "--stopline-distance-topic", args.stopline_distance_topic,
+                    "--stopline-topic", args.stopline_topic,
                     "--lane-detection-topic", args.lane_detection_topic,
                     "--lane-quality-topic", args.lane_quality_topic,
                 )
