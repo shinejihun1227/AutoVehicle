@@ -12,6 +12,23 @@ live_overlay.py     [2] 실시간 -> 화면 오버레이         detection + viz
 live_output.py      [3] 실시간 -> 값만                  detection 만
 ```
 
+ROS 실행 시 `live_overlay.py --ros-publish`는 기존 차선 종류/정지선 토픽과
+함께 조향 fallback용 표준 결과도 발행한다.
+
+```
+/detection/lane                 morai_perception_msgs/LaneDetection
+  lateral_offset_m              차로 중심 대비 횡오차 (m)
+  heading_error_rad             차선 방향 대비 방위오차 (rad)
+  confidence                    가시성·차선폭·검출길이·시간연속성 종합 점수 (0~1)
+  valid                         보조/fallback 판단에 사용할 수 있는지
+/perception/camera/lane_quality std_msgs/String (상세 진단 JSON)
+```
+
+`confidence`는 모델의 단일 확률값이 아니라 좌우 차선 가시성, 현재 차선 폭
+(`LANE_WIDTH_M=3.3m`), 검출 픽셀/길이, 이전 프레임과의 연속성을 합친 품질
+점수다. 한쪽 차선만 보이는 결과는 `valid`일 수 있지만 점수가 낮아 차선
+fallback 주 제어로는 사용되지 않는다.
+
 **세 스크립트는 각각 독립 실행되지만 검출·후처리는 `LaneDetector.run()` 하나만
 쓴다.** 복사본을 두면 하나만 고치고 나머지를 잊게 되고, 그러면 "집에서 본
 결과"와 "실주행 결과"가 갈린다.

@@ -9,9 +9,9 @@ GPS jump/noise 또는 IMU 급변이 감지되면 차선 결과를 이용해 Pure
 무리하게 주행하지 않고 기본적으로 정지 명령을 만든다. 이 정책은
 stop_without_camera=false로 바꿀 수 있지만 실제 차량 제어 전에는 권장하지 않는다.
 
-이 노드는 /Ego_topic에 의존하지 않는다. blackout 시에도 속도는 nominal CtrlCmd가
-유효하면 그 값을 유지하고, nominal이 끊긴 경우에는 EKF odometry의 속도 또는
-마지막 명령을 사용한다. 카메라만으로 정밀한 종방향 속도를 추정하지는 않는다.
+이 노드는 /Ego_topic에 의존하지 않는다. accel/brake(type 1) 경로에서는
+nominal 명령을 속도 기준으로 유지하고, EKF odometry로 fallback 속도 상한을
+감시한다. 카메라만으로 종방향 속도를 추정하지는 않는다.
 """
 
 from __future__ import annotations
@@ -27,7 +27,7 @@ import rospy
 from morai_msgs.msg import CtrlCmd
 from morai_perception_msgs.msg import LaneDetection, SensorQuality
 from nav_msgs.msg import Odometry
-from std_msgs.msg import String
+from std_msgs.msg import Bool, String
 
 
 NORMAL = "NORMAL"
@@ -35,6 +35,7 @@ GPS_BLACKOUT = "GPS_BLACKOUT"
 GPS_NOISE = "GPS_NOISE"
 IMU_NOISE = "IMU_NOISE"
 SENSOR_DEGRADED = "SENSOR_DEGRADED"
+MPS_TO_KPH = 3.6
 
 
 def clamp(value: float, lower: float, upper: float) -> float:
@@ -72,6 +73,9 @@ class CameraLocalizationFallbackController:
         self.odom_topic = rospy.get_param(
             "~odom_topic", "/localization/odometry"
         )
+        self.intersection_topic = rospy.get_param(
+            "~intersection_topic", "/perception/intersection/detected"
+        )
 
         self.rate_hz = max(1.0, float(rospy.get_param("~rate_hz", 20.0)))
         self.nominal_timeout = max(
@@ -86,8 +90,28 @@ class CameraLocalizationFallbackController:
         self.odom_timeout = max(
             0.05, float(rospy.get_param("~odom_timeout_sec", 0.5))
         )
+        self.intersection_timeout = max(
+            0.05, float(rospy.get_param("~intersection_timeout_sec", 0.5))
+        )
         self.min_lane_confidence = clamp(
-            float(rospy.get_param("~min_lane_confidence", 0.65)), 0.0, 1.0
+            float(rospy.get_param("~min_lane_confidence", 0.55)), 0.0, 1.0
+        )
+        self.lane_fallback_confidence = clamp(
+            float(rospy.get_param("~lane_fallback_confidence", 0.80)),
+            self.min_lane_confidence,
+            1.0,
+        )
+        self.lane_stable_samples = max(
+            1, int(rospy.get_param("~lane_stable_samples", 5))
+        )
+        self.lane_loss_grace_sec = max(
+            0.0, float(rospy.get_param("~lane_loss_grace_sec", 0.25))
+        )
+        self.fallback_entry_delay_sec = max(
+            0.0, float(rospy.get_param("~fallback_entry_delay_sec", 0.50))
+        )
+        self.recovery_stable_sec = max(
+            0.0, float(rospy.get_param("~recovery_stable_sec", 1.0))
         )
         self.lane_filter_window = max(
             1, int(rospy.get_param("~lane_filter_window", 5))
@@ -112,17 +136,37 @@ class CameraLocalizationFallbackController:
         self.fallback_nominal_weight = clamp(
             float(rospy.get_param("~fallback_nominal_weight", 0.25)), 0.0, 1.0
         )
-        self.fallback_speed_cap_mps = max(
+        legacy_speed_cap_mps = max(
             0.0, float(rospy.get_param("~fallback_speed_cap_mps", 2.0))
         )
+        speed_cap_kph = rospy.get_param("~fallback_speed_cap_kph", None)
+        self.fallback_speed_cap_kph = max(
+            0.0,
+            float(speed_cap_kph)
+            if speed_cap_kph is not None
+            else legacy_speed_cap_mps * MPS_TO_KPH,
+        )
+        self.fallback_speed_cap_mps = self.fallback_speed_cap_kph / MPS_TO_KPH
         self.stop_without_camera = bool(
             rospy.get_param("~stop_without_camera", True)
+        )
+        self.longl_cmd_type = int(rospy.get_param("~longl_cmd_type", 1))
+        self.fallback_speed_margin_mps = max(
+            0.0, float(rospy.get_param("~fallback_speed_margin_mps", 0.20))
+        )
+        self.max_decel_mps2 = max(
+            0.1, float(rospy.get_param("~max_decel_mps2", 1.5))
+        )
+        self.fallback_brake_gain = max(
+            0.0, float(rospy.get_param("~fallback_brake_gain", 1.0))
         )
 
         self.last_nominal: Optional[CtrlCmd] = None
         self.last_quality: Optional[SensorQuality] = None
         self.last_lane: Optional[LaneDetection] = None
         self.last_odom: Optional[Odometry] = None
+        self.intersection_detected = False
+        self.last_intersection_time = 0.0
         self.last_nominal_time = 0.0
         self.last_quality_time = 0.0
         self.last_lane_time = 0.0
@@ -130,6 +174,12 @@ class CameraLocalizationFallbackController:
         self.last_output_time = time.monotonic()
         self.last_output_steering = 0.0
         self.last_output_velocity = 0.0
+        self.last_lane_good_time = 0.0
+        self.lane_good_streak = 0
+        self.quality_state_since = time.monotonic()
+        self.last_quality_state = None
+        self.last_mode = "initializing"
+        self.recovery_since = None
 
         self.lateral_history: Deque[float] = deque(maxlen=self.lane_filter_window)
         self.heading_history: Deque[float] = deque(maxlen=self.lane_filter_window)
@@ -146,6 +196,12 @@ class CameraLocalizationFallbackController:
             self.quality_topic, SensorQuality, self.quality_callback, queue_size=10
         )
         rospy.Subscriber(self.odom_topic, Odometry, self.odom_callback, queue_size=10)
+        rospy.Subscriber(
+            self.intersection_topic,
+            Bool,
+            self.intersection_callback,
+            queue_size=1,
+        )
         self.timer = rospy.Timer(
             rospy.Duration(1.0 / self.rate_hz), self.publish_command
         )
@@ -175,15 +231,23 @@ class CameraLocalizationFallbackController:
             if finite(lateral) and finite(heading):
                 self.lateral_history.append(lateral)
                 self.heading_history.append(heading)
+                self.last_lane_good_time = self.last_lane_time
+                self.lane_good_streak += 1
+                return
+        self.lane_good_streak = 0
 
     def odom_callback(self, message: Odometry) -> None:
         self.last_odom = message
         self.last_odom_time = time.monotonic()
 
+    def intersection_callback(self, message: Bool) -> None:
+        self.intersection_detected = bool(message.data)
+        self.last_intersection_time = time.monotonic()
+
     def stop_command(self) -> CtrlCmd:
         command = CtrlCmd()
         if hasattr(command, "longlCmdType"):
-            command.longlCmdType = 2
+            command.longlCmdType = self.longl_cmd_type
         if hasattr(command, "steering"):
             command.steering = 0.0
         if hasattr(command, "velocity"):
@@ -206,6 +270,29 @@ class CameraLocalizationFallbackController:
             and self.heading_history
         )
 
+    def lane_is_primary_usable(self, now: float) -> bool:
+        """차선 주 제어 전환 조건. 보조보다 더 엄격하게 판정한다."""
+        return bool(
+            self.lane_is_usable(now)
+            and self.last_lane.confidence >= self.lane_fallback_confidence
+            and self.lane_good_streak >= self.lane_stable_samples
+        )
+
+    def lane_is_hold_usable(self, now: float) -> bool:
+        """차선이 한두 프레임 끊긴 동안 마지막 조향을 잠시 유지한다."""
+        return bool(
+            self.lateral_history
+            and self.heading_history
+            and self.last_lane_good_time > 0.0
+            and now - self.last_lane_good_time <= self.lane_loss_grace_sec
+        )
+
+    def intersection_is_active(self, now: float) -> bool:
+        return bool(
+            self.intersection_detected
+            and now - self.last_intersection_time <= self.intersection_timeout
+        )
+
     def lane_steering(self) -> float:
         lateral = median(self.lateral_history)
         heading = median(self.heading_history)
@@ -225,7 +312,9 @@ class CameraLocalizationFallbackController:
 
     def fallback_velocity(self) -> float:
         nominal_velocity = self.command_velocity(self.last_nominal)
-        if nominal_velocity is not None:
+        # accel/brake(type 1) 명령에서는 velocity가 0으로 채워진다. 그 값을
+        # 실제 속도로 오인하지 않고 odometry를 우선 사용한다.
+        if nominal_velocity is not None and nominal_velocity > 1e-3:
             return min(nominal_velocity, self.fallback_speed_cap_mps)
         if (
             self.last_odom is not None
@@ -236,6 +325,46 @@ class CameraLocalizationFallbackController:
             if finite(vx) and finite(vy):
                 return min(math.hypot(vx, vy), self.fallback_speed_cap_mps)
         return min(self.last_output_velocity, self.fallback_speed_cap_mps)
+
+    def measured_speed_mps(self) -> Optional[float]:
+        if self.last_odom is None or time.monotonic() - self.last_odom_time > self.odom_timeout:
+            return None
+        vx = float(self.last_odom.twist.twist.linear.x)
+        vy = float(self.last_odom.twist.twist.linear.y)
+        if not finite(vx) or not finite(vy):
+            return None
+        return max(0.0, math.hypot(vx, vy))
+
+    def apply_fallback_speed_cap(self, command: CtrlCmd) -> None:
+        """fallback 속도 제한을 MORAI accel/brake 계약에 맞게 적용한다."""
+        cap = max(0.0, self.fallback_speed_cap_mps)
+        measured = self.measured_speed_mps()
+        if measured is None:
+            return
+
+        command_type = int(getattr(command, "longlCmdType", self.longl_cmd_type))
+        if command_type == 1 and hasattr(command, "accel"):
+            nominal_accel = max(0.0, float(getattr(command, "accel", 0.0)))
+            nominal_brake = max(0.0, float(getattr(command, "brake", 0.0)))
+            if measured >= cap:
+                command.accel = 0.0
+                if measured > cap + self.fallback_speed_margin_mps:
+                    excess = measured - cap
+                    brake = self.fallback_brake_gain * excess / self.max_decel_mps2
+                    command.brake = clamp(max(nominal_brake, brake), 0.0, 1.0)
+                else:
+                    command.brake = clamp(nominal_brake, 0.0, 1.0)
+            else:
+                command.accel = clamp(nominal_accel, 0.0, 1.0)
+                command.brake = clamp(nominal_brake, 0.0, 1.0)
+            if command.brake > 0.0:
+                command.accel = 0.0
+            return
+
+        if hasattr(command, "velocity"):
+            command.velocity = min(
+                max(0.0, float(command.velocity)), cap
+            )
 
     def apply_rate_limit(self, steering: float, now: float) -> float:
         steering = clamp(steering, -self.max_steering_rad, self.max_steering_rad)
@@ -253,7 +382,11 @@ class CameraLocalizationFallbackController:
     def quality_state(self, now: float) -> Tuple[str, str]:
         if self.last_quality is None or now - self.last_quality_time > self.quality_timeout:
             return SENSOR_DEGRADED, "sensor_quality_stale"
-        return str(self.last_quality.state), str(self.last_quality.reason)
+        state = str(self.last_quality.state)
+        if state != self.last_quality_state:
+            self.last_quality_state = state
+            self.quality_state_since = now
+        return state, str(self.last_quality.reason)
 
     def publish_status(
         self,
@@ -274,8 +407,19 @@ class CameraLocalizationFallbackController:
                         "camera_used": camera_used,
                         "lane_usable": lane_usable,
                         "nominal_fresh": nominal_fresh,
+                        "lane_confidence": float(
+                            self.last_lane.confidence
+                            if self.last_lane is not None
+                            else 0.0
+                        ),
+                        "lane_good_streak": self.lane_good_streak,
+                        "lane_primary_usable": self.lane_is_primary_usable(
+                            time.monotonic()
+                        ),
+                        "active_mode": mode,
                         "output_steering_rad": self.last_output_steering,
                         "output_velocity_mps": self.last_output_velocity,
+                        "fallback_speed_cap_kph": self.fallback_speed_cap_kph,
                     },
                     ensure_ascii=False,
                     sort_keys=True,
@@ -291,9 +435,21 @@ class CameraLocalizationFallbackController:
             and now - self.last_nominal_time <= self.nominal_timeout
         )
         lane_usable = self.lane_is_usable(now)
+        lane_primary_usable = self.lane_is_primary_usable(now)
+        lane_fallback_usable = lane_primary_usable or (
+            self.last_mode == "gps_blackout_camera_fallback"
+            and self.lane_is_hold_usable(now)
+        )
 
-        # Quality monitor가 정상이라고 판단하면 기존 경로 제어를 보존한다.
+        # 정상 복귀 후에도 잠시 nominal을 확인한 뒤 경로 주행으로 돌아간다.
         if quality_state == NORMAL:
+            self.recovery_since = getattr(self, "recovery_since", None)
+            if self.last_mode in (
+                "gps_blackout_camera_fallback",
+                "sensor_anomaly_camera_assist",
+                "degraded_nominal_limited",
+            ) and self.recovery_since is None:
+                self.recovery_since = now
             if not nominal_fresh:
                 self.output_pub.publish(self.stop_command())
                 self.last_output_velocity = 0.0
@@ -313,28 +469,123 @@ class CameraLocalizationFallbackController:
             if velocity is not None:
                 self.last_output_velocity = velocity
             self.output_pub.publish(output)
+            self.last_mode = "normal_nominal"
             self.publish_status(
-                "normal_nominal",
+                "recovery_nominal"
+                if self.recovery_since is not None
+                and now - self.recovery_since < self.recovery_stable_sec
+                else "normal_nominal",
                 quality_state,
                 quality_reason,
                 False,
                 lane_usable,
                 True,
             )
+            if (
+                self.recovery_since is not None
+                and now - self.recovery_since >= self.recovery_stable_sec
+            ):
+                self.recovery_since = None
             return
 
-        # 이상 상태에서는 차선이 유효할 때만 camera assist/fallback을 허용한다.
-        if not lane_usable:
+        if quality_state != NORMAL:
+            self.recovery_since = None
+
+        if quality_state == SENSOR_DEGRADED and quality_reason == "sensor_quality_stale":
+            self.output_pub.publish(self.stop_command())
+            self.last_output_steering = 0.0
+            self.last_output_velocity = 0.0
+            self.last_mode = "sensor_quality_stale_stop"
+            self.publish_status(
+                self.last_mode,
+                quality_state,
+                quality_reason,
+                False,
+                lane_usable,
+                nominal_fresh,
+            )
+            return
+
+        # GPS blackout에서는 차선 품질이 fallback 기준을 만족할 때만 차선 주
+        # 제어로 전환한다. 한쪽 차선이나 순간 검출은 주 제어로 사용하지 않는다.
+        if quality_state == GPS_BLACKOUT and lane_fallback_usable:
+            blackout_duration = now - self.quality_state_since
+            if blackout_duration >= self.fallback_entry_delay_sec:
+                # 교차로에서는 차선 중심만으로 route(직진/좌회전/우회전)를
+                # 결정할 수 없으므로 GPS blackout 차선 주행을 금지한다.
+                if self.intersection_is_active(now):
+                    self.output_pub.publish(self.stop_command())
+                    self.last_output_steering = 0.0
+                    self.last_output_velocity = 0.0
+                    self.last_mode = "gps_blackout_intersection_stop"
+                    self.publish_status(
+                        self.last_mode,
+                        quality_state,
+                        "route_decision_unavailable_at_intersection",
+                        False,
+                        lane_fallback_usable,
+                        nominal_fresh,
+                    )
+                    return
+                if not nominal_fresh:
+                    self.output_pub.publish(self.stop_command())
+                    self.last_output_steering = 0.0
+                    self.last_output_velocity = 0.0
+                    self.last_mode = "gps_blackout_nominal_stale_stop"
+                    self.publish_status(
+                        self.last_mode,
+                        quality_state,
+                        "nominal_command_stale_for_accel_brake_reference",
+                        False,
+                        lane_primary_usable,
+                        False,
+                    )
+                    return
+
+                lane_steering = clamp(
+                    self.lane_steering(),
+                    -self.max_steering_rad,
+                    self.max_steering_rad,
+                )
+                nominal_steering = float(self.last_nominal.steering)
+                target_steering = (
+                    self.fallback_nominal_weight * nominal_steering
+                    + (1.0 - self.fallback_nominal_weight) * lane_steering
+                )
+                output = copy.deepcopy(self.last_nominal)
+                if hasattr(output, "longlCmdType"):
+                    output.longlCmdType = self.longl_cmd_type
+                if hasattr(output, "steering"):
+                    output.steering = self.apply_rate_limit(target_steering, now)
+                self.apply_fallback_speed_cap(output)
+                self.last_output_velocity = self.fallback_velocity()
+                self.output_pub.publish(output)
+                self.last_mode = "gps_blackout_camera_fallback"
+                self.publish_status(
+                    self.last_mode,
+                    quality_state,
+                    quality_reason,
+                    True,
+                    lane_fallback_usable,
+                    True,
+                )
+                return
+
+        # GPS blackout에서 차선이 준비되지 않았거나, IMU도 같이 stale이면
+        # 차선 조향을 섣불리 선택하지 않는다. 옵션을 끄면 nominal을 저속으로
+        # 제한할 수 있지만 기본은 정지이다.
+        if quality_state == GPS_BLACKOUT and not lane_fallback_usable:
             if self.stop_without_camera:
                 self.output_pub.publish(self.stop_command())
                 self.last_output_steering = 0.0
                 self.last_output_velocity = 0.0
+                self.last_mode = "gps_blackout_lane_not_ready_stop"
                 self.publish_status(
-                    "degraded_no_camera_stop",
+                    self.last_mode,
                     quality_state,
-                    "camera_lane_unusable",
+                    "camera_lane_not_primary_usable",
                     False,
-                    False,
+                    lane_usable,
                     nominal_fresh,
                 )
                 return
@@ -342,8 +593,9 @@ class CameraLocalizationFallbackController:
             if not nominal_fresh:
                 self.output_pub.publish(self.stop_command())
                 self.last_output_velocity = 0.0
+                self.last_mode = "degraded_nominal_stale_stop"
                 self.publish_status(
-                    "degraded_nominal_stale_stop",
+                    self.last_mode,
                     quality_state,
                     "camera_only_without_speed_reference",
                     False,
@@ -353,16 +605,61 @@ class CameraLocalizationFallbackController:
                 return
 
             output = copy.deepcopy(self.last_nominal)
-            if hasattr(output, "velocity"):
-                output.velocity = min(
-                    max(0.0, float(output.velocity)), self.fallback_speed_cap_mps
-                )
             if hasattr(output, "steering"):
                 output.steering = self.apply_rate_limit(float(output.steering), now)
-            self.last_output_velocity = self.command_velocity(output) or 0.0
+            self.apply_fallback_speed_cap(output)
+            self.last_output_velocity = self.fallback_velocity()
             self.output_pub.publish(output)
+            self.last_mode = "degraded_nominal_limited"
             self.publish_status(
-                "degraded_nominal_limited",
+                self.last_mode,
+                quality_state,
+                quality_reason,
+                False,
+                False,
+                True,
+            )
+            return
+
+        # GPS noise/IMU noise에서는 nominal 경로를 유지하면서 차선 보정만
+        # 적용한다. 차선이 중간 품질이면 보정만 허용하고 fallback은 금지한다.
+        if not lane_usable:
+            if self.stop_without_camera:
+                self.output_pub.publish(self.stop_command())
+                self.last_output_steering = 0.0
+                self.last_output_velocity = 0.0
+                self.last_mode = "degraded_no_camera_stop"
+                self.publish_status(
+                    self.last_mode,
+                    quality_state,
+                    "camera_lane_unusable",
+                    False,
+                    False,
+                    nominal_fresh,
+                )
+                return
+            if not nominal_fresh:
+                self.output_pub.publish(self.stop_command())
+                self.last_output_velocity = 0.0
+                self.last_mode = "degraded_nominal_stale_stop"
+                self.publish_status(
+                    self.last_mode,
+                    quality_state,
+                    "camera_only_without_speed_reference",
+                    False,
+                    False,
+                    False,
+                )
+                return
+            output = copy.deepcopy(self.last_nominal)
+            if hasattr(output, "steering"):
+                output.steering = self.apply_rate_limit(float(output.steering), now)
+            self.apply_fallback_speed_cap(output)
+            self.last_output_velocity = self.fallback_velocity()
+            self.output_pub.publish(output)
+            self.last_mode = "degraded_nominal_limited"
+            self.publish_status(
+                self.last_mode,
                 quality_state,
                 quality_reason,
                 False,
@@ -374,42 +671,35 @@ class CameraLocalizationFallbackController:
         lane_steering = clamp(
             self.lane_steering(), -self.max_steering_rad, self.max_steering_rad
         )
-        if quality_state == GPS_BLACKOUT:
-            # 위치가 사라진 경우에는 카메라를 주 제어로 사용한다. nominal은
-            # 조향의 급격한 변화를 줄이는 보조항으로만 남긴다.
-            if nominal_fresh and hasattr(self.last_nominal, "steering"):
-                nominal_steering = float(self.last_nominal.steering)
-                target_steering = (
-                    self.fallback_nominal_weight * nominal_steering
-                    + (1.0 - self.fallback_nominal_weight) * lane_steering
-                )
-            else:
-                target_steering = lane_steering
-            mode = "gps_blackout_camera_fallback"
-        else:
-            # GPS/IMU noise 또는 recovery는 원래 PP를 유지하면서 camera 보정을
-            # 작게 더한다. 이상이 해제되면 NORMAL 경로로 자동 복귀한다.
-            nominal_steering = (
-                float(self.last_nominal.steering)
-                if nominal_fresh and hasattr(self.last_nominal, "steering")
-                else self.last_output_steering
+        if not nominal_fresh:
+            self.output_pub.publish(self.stop_command())
+            self.last_output_velocity = 0.0
+            self.last_mode = "degraded_nominal_stale_stop"
+            self.publish_status(
+                self.last_mode,
+                quality_state,
+                "nominal_command_stale",
+                True,
+                lane_usable,
+                False,
             )
-            target_steering = nominal_steering + self.camera_assist_gain * lane_steering
-            mode = "sensor_anomaly_camera_assist"
+            return
 
-        output = copy.deepcopy(self.last_nominal) if nominal_fresh else CtrlCmd()
+        # GPS/IMU noise 또는 recovery에서는 원래 PP를 유지하면서 camera 보정을
+        # 작게 더한다. 이상이 해제되면 위 NORMAL 경로로 복귀한다.
+        nominal_steering = float(self.last_nominal.steering)
+        target_steering = nominal_steering + self.camera_assist_gain * lane_steering
+        mode = "sensor_anomaly_camera_assist"
+
+        output = copy.deepcopy(self.last_nominal)
         if hasattr(output, "longlCmdType"):
-            output.longlCmdType = 2
+            output.longlCmdType = self.longl_cmd_type
         if hasattr(output, "steering"):
             output.steering = self.apply_rate_limit(target_steering, now)
-        if not nominal_fresh and hasattr(output, "brake"):
-            output.brake = 0.0
-        if hasattr(output, "velocity"):
-            output.velocity = self.fallback_velocity()
-            self.last_output_velocity = max(0.0, float(output.velocity))
-        else:
-            self.last_output_velocity = self.fallback_velocity()
+        self.apply_fallback_speed_cap(output)
+        self.last_output_velocity = self.fallback_velocity()
         self.output_pub.publish(output)
+        self.last_mode = mode
         self.publish_status(
             mode,
             quality_state,

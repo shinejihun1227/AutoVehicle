@@ -8,6 +8,7 @@
 
   <buildtool_depend>catkin</buildtool_depend>
   <depend>common</depend>
+  <depend>morai_perception_msgs</depend>
   <depend>nav_msgs</depend>
   <depend>rospy</depend>
   <depend>std_msgs</depend>

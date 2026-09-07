@@ -32,6 +32,13 @@
   <arg name="ekf_gyro_noise_std_rad_s" default="0.08" />
   <arg name="ekf_accel_noise_std_m_s2" default="0.8" />
   <arg name="ekf_bias_random_walk" default="0.001" />
+  <arg name="use_sensor_quality_gate" default="false" />
+  <arg name="quality_topic" default="/localization/sensor_quality" />
+  <arg name="enable_gps_jump_gate" default="false" />
+  <arg name="gps_jump_gate_m" default="3.0" />
+  <arg name="gps_speed_gate_mps" default="10.0" />
+  <arg name="enable_gps_innovation_gate" default="false" />
+  <arg name="gps_innovation_gate_m" default="5.0" />
 
   <!-- 1. MORAI GPS·IMU UDP -> /gps, /Imu -->
   <include file="$(find morai_udp_bridge)/launch/morai_udp_bridge.launch">
@@ -82,6 +89,13 @@
     <arg name="gyro_noise_std_rad_s" value="$(arg ekf_gyro_noise_std_rad_s)" />
     <arg name="accel_noise_std_m_s2" value="$(arg ekf_accel_noise_std_m_s2)" />
     <arg name="bias_random_walk" value="$(arg ekf_bias_random_walk)" />
+    <arg name="use_sensor_quality_gate" value="$(arg use_sensor_quality_gate)" />
+    <arg name="quality_topic" value="$(arg quality_topic)" />
+    <arg name="enable_gps_jump_gate" value="$(arg enable_gps_jump_gate)" />
+    <arg name="gps_jump_gate_m" value="$(arg gps_jump_gate_m)" />
+    <arg name="gps_speed_gate_mps" value="$(arg gps_speed_gate_mps)" />
+    <arg name="enable_gps_innovation_gate" value="$(arg enable_gps_innovation_gate)" />
+    <arg name="gps_innovation_gate_m" value="$(arg gps_innovation_gate_m)" />
   </include>
 
   <!-- 6. EKF pose + 경로 -> 조향 및 종방향 CtrlCmd -->

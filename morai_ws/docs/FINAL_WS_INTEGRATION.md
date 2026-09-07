@@ -58,6 +58,12 @@ ROI camera traffic/pedestrian/intersection state
   -> roi_sensor_safety_adapter
   -> /detection/fused_safety_stop
   -> control_mux
+
+ROI camera lane geometry
+  -> /detection/lane (LaneDetection)
+  -> camera_localization_fallback_controller
+  -> /control/camera_fallback_cmd
+  -> control_mux
 ```
 
 ROI LiDAR의 confirmed obstacle은 map 좌표로 들어오므로 adapter가 EKF의 현재 위치와
@@ -71,6 +77,27 @@ yaw를 사용해 `base_link` 기준 전방 corridor로 변환한다. 카메라�
 - 곡률: `1/m`, 물리 가속도 제한: `m/s²`
 - `accel`, `brake`: `0.0~1.0` 정규화 페달
 - 최종 제어: `longlCmdType=1`, accel/brake 직접 제어
+
+## GPS/IMU 품질 기반 차선 fallback
+
+`final_ws_bringup.launch`는 `enable_lane_fallback` 기본값이 `true`다. 실제 MORAI
+제어를 켜기 전에는 `enable_control:=false`로 차선·센서 상태를 먼저 확인한다.
+
+```text
+NORMAL
+  -> 기존 MGeo Pure Pursuit nominal 통과
+GPS_NOISE / IMU_NOISE
+  -> nominal 조향 + 차선 보정
+GPS_BLACKOUT + 차선 confidence 0.80 이상이 5회 연속
+  -> 차선 조향 중심 fallback, 속도 7.2km/h(2.0m/s) 상한
+GPS_BLACKOUT + 차선 불량 또는 nominal stale
+  -> accel=0, brake=1 정지
+```
+
+ROI `live_overlay.py`는 기존 차선 종류·정지선 Bool과 함께 `/detection/lane`을
+발행한다. `confidence`는 좌우 차선 가시성, 차선 폭(3.3m), 검출 길이, 프레임
+연속성을 합친 품질 점수다. 차선 fallback은 한쪽 차선이나 순간 검출을 주 제어로
+사용하지 않는다.
 
 ## 주의사항
 
@@ -87,5 +114,8 @@ rostopic echo /localization/odometry
 rostopic echo /perception/lidar/tracked_obstacles_map
 rostopic echo /detection/fused_safety_stop
 rostopic echo /control/mux_status
+rostopic echo /localization/sensor_quality
+rostopic echo /detection/lane
+rostopic echo /stability/camera_fallback_status
 rostopic echo /ctrl_cmd
 ```

@@ -43,6 +43,7 @@ import numpy as np
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 from lane_detection import CLASS_NAMES, NUM_CLASSES, LaneDetector
+from lane_quality import LaneQualityEstimator
 from lane_viz import draw, draw_bev, draw_mask_only
 
 
@@ -91,6 +92,7 @@ def main(argv=None):
     det = LaneDetector(args.checkpoint, cam_set=args.cam_set,
                        bonnet_mask=False if args.no_bonnet else args.bonnet,
                        device=args.device, track=not args.no_track)
+    quality_estimator = LaneQualityEstimator()
     print(f"[offline] epoch {det.ckpt_info['epoch']} ({det.ckpt_info['backbone']}) "
           f"device={det.device} 보닛 {det.bonnet_source} "
           f"추적 {'끔' if args.no_track else '켬'}")
@@ -126,6 +128,7 @@ def main(argv=None):
                 n_both += (r.ego_left is not None and r.ego_right is not None)
                 n_stop += r.stopline_dist is not None
                 rec = r.as_dict(points=True)
+                rec["quality"] = quality_estimator.update(r)
                 rec["idx"] = idx
                 fp.write(json.dumps(rec, ensure_ascii=False) + "\n")
                 print(f"[{idx}] " + ("  ".join(

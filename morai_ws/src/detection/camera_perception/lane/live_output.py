@@ -48,6 +48,7 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 # **lane_viz 를 import 하지 않는다.** 실주행에서 제어로 값만 보내는 경로라
 # 시각화 코드가 들어올 이유가 없다.
 from lane_detection import LaneDetector, default_checkpoint
+from lane_quality import LaneQualityEstimator
 from morai_camera import DEFAULT_IP, DEFAULT_PORT, CameraStream
 
 
@@ -87,6 +88,7 @@ def main(argv=None):
     pipe = LaneDetector(args.checkpoint, cam_set=args.cam_set,
                         bonnet_mask=False if args.no_bonnet else args.bonnet,
                         device=args.device, track=not args.no_track)
+    quality_estimator = LaneQualityEstimator()
     print(f"[out] epoch {pipe.ckpt_info['epoch']} ({pipe.ckpt_info['backbone']}) "
           f"device={pipe.device} 보닛 {pipe.bonnet_source}", file=sys.stderr)
 
@@ -111,6 +113,7 @@ def main(argv=None):
 
             res = pipe.run(frame)
             payload = res.as_dict(points=args.points)
+            payload["quality"] = quality_estimator.update(res)
             payload["seq"] = seq
             payload["t"] = round(time.time(), 3)
 

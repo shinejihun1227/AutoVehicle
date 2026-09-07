@@ -29,6 +29,7 @@ LaneResult 에서 뽑으므로 "눈으로 본 값"과 "제어가 받은 값"이 
 """
 
 import argparse
+import json
 import os
 import sys
 import time
@@ -41,11 +42,12 @@ sys.path.insert(0, os.path.join(os.path.dirname(os.path.dirname(
     os.path.abspath(__file__))), "src"))
 
 from lane_detection import LaneDetector, default_checkpoint
+from lane_quality import LaneQualityEstimator
 from lane_viz import draw, draw_bev
 from morai_camera import DEFAULT_IP, DEFAULT_PORT, CameraStream
 
 
-def draw_values(vis, res, y=46):
+def draw_values(vis, res, quality=None, y=46):
     """제어로 나가는 값을 HUD 두 번째 띠에 찍는다.
 
     lane_viz.draw() 가 위 46px 를 검은 띠로 쓰므로 그 아래에 이어 붙인다.
@@ -60,6 +62,7 @@ def draw_values(vis, res, y=46):
         "stop " + ("--" if sd is None else f"{sd:.1f}m"),
         "L " + (l.name[:6] if l else "--"),
         "R " + (r.name[:6] if r else "--"),
+        "Q " + ("--" if quality is None else f"{quality['confidence']:.2f}"),
     ))
     cv2.rectangle(vis, (0, y), (vis.shape[1], y + 20), (0, 0, 0), -1)
     # 차로 중심을 못 잡은 프레임은 회색으로 - 값이 없다는 걸 한눈에 본다.
@@ -86,7 +89,7 @@ def build_arg_parser():
     ap.add_argument("--every", type=int, default=1,
                     help="N 프레임마다 추론 (CPU 처럼 느린 환경에서 화면을 부드럽게)")
     ap.add_argument("--ros-publish", action="store_true",
-                    help="점선·양쪽 실선·정지선 결과를 ROS 토픽으로 발행")
+                    help="차선 종류·정지선·LaneDetection 결과를 ROS로 발행")
     ap.add_argument("--dashed-lane-topic",
                     default="/perception/camera/dashed_lane_detected")
     ap.add_argument("--left-solid-lane-topic",
@@ -99,6 +102,10 @@ def build_arg_parser():
                     default="/perception/camera/stopline_detected")
     ap.add_argument("--stopline-distance-topic",
                     default="/perception/camera/stopline_distance_m")
+    ap.add_argument("--lane-detection-topic", default="/detection/lane",
+                    help="차선 fallback용 morai_perception_msgs/LaneDetection 토픽")
+    ap.add_argument("--lane-quality-topic", default="/perception/camera/lane_quality",
+                    help="차선 품질 진단용 std_msgs/String 토픽")
     return ap
 
 
@@ -112,11 +119,18 @@ def main(argv=None):
     right_solid_publisher = None
     stopline_detected_publisher = None
     stopline_distance_publisher = None
+    lane_detection_publisher = None
+    lane_quality_publisher = None
+    LaneDetection = None
+    String = None
     if args.ros_publish:
         import rospy as rospy_module
-        from std_msgs.msg import Bool, Float64
+        from morai_perception_msgs.msg import LaneDetection as LaneDetectionMessage
+        from std_msgs.msg import Bool, Float64, String as StringMessage
 
         rospy = rospy_module
+        LaneDetection = LaneDetectionMessage
+        String = StringMessage
         rospy.init_node("camera_lane_perception", anonymous=False)
         dashed_publisher = rospy.Publisher(
             args.dashed_lane_topic, Bool, queue_size=1
@@ -136,10 +150,17 @@ def main(argv=None):
         stopline_distance_publisher = rospy.Publisher(
             args.stopline_distance_topic, Float64, queue_size=1
         )
+        lane_detection_publisher = rospy.Publisher(
+            args.lane_detection_topic, LaneDetection, queue_size=1
+        )
+        lane_quality_publisher = rospy.Publisher(
+            args.lane_quality_topic, String, queue_size=1
+        )
 
     pipe = LaneDetector(args.checkpoint, cam_set=args.cam_set,
                         bonnet_mask=False if args.no_bonnet else args.bonnet,
                         device=args.device, track=not args.no_track)
+    quality_estimator = LaneQualityEstimator()
     print(f"[live] epoch {pipe.ckpt_info['epoch']} ({pipe.ckpt_info['backbone']}) "
           f"device={pipe.device} 보닛 {pipe.bonnet_source} "
           f"추적 {'끔' if args.no_track else '켬'}")
@@ -170,6 +191,7 @@ def main(argv=None):
                         n_since = 0
                         frame = f
                         res = pipe.run(frame)
+                        quality = quality_estimator.update(res)
                         if rospy is not None:
                             left_dashed = bool(
                                 res.ego_left is not None
@@ -208,6 +230,31 @@ def main(argv=None):
                                     )
                                 )
                             )
+                            lane_message = LaneDetection()
+                            lane_message.header.stamp = rospy.Time.now()
+                            lane_message.header.frame_id = "front_camera"
+                            lane_message.lateral_offset_m = float(
+                                quality["lateral_error"]
+                                if quality["lateral_error"] is not None
+                                else 0.0
+                            )
+                            lane_message.heading_error_rad = float(
+                                quality["heading_error"]
+                                if quality["heading_error"] is not None
+                                else 0.0
+                            )
+                            lane_message.confidence = float(quality["confidence"])
+                            lane_message.valid = bool(quality["valid"])
+                            lane_detection_publisher.publish(lane_message)
+                            lane_quality_publisher.publish(
+                                String(
+                                    data=json.dumps(
+                                        quality,
+                                        ensure_ascii=False,
+                                        sort_keys=True,
+                                    )
+                                )
+                            )
                         now = time.time()
                         dt = now - t_prev
                         t_prev = now
@@ -218,7 +265,7 @@ def main(argv=None):
                 vis = draw(res, frame, pipe, show_mask=show_mask,
                            show_lanes=show_lanes)
                 if show_values:
-                    draw_values(vis, res)
+                    draw_values(vis, res, quality)
                 cv2.putText(vis, f"{fps:.1f} FPS" + ("  [PAUSED]" if paused else ""),
                             (vis.shape[1] - 190, 18), cv2.FONT_HERSHEY_SIMPLEX,
                             0.55, (0, 255, 255), 1)
@@ -259,6 +306,21 @@ def main(argv=None):
                 left_yellow_solid_publisher.publish(Bool(data=False))
                 right_solid_publisher.publish(Bool(data=False))
                 stopline_detected_publisher.publish(Bool(data=False))
+                invalid_lane = LaneDetection()
+                invalid_lane.header.stamp = rospy.Time.now()
+                invalid_lane.header.frame_id = "front_camera"
+                invalid_lane.confidence = 0.0
+                invalid_lane.valid = False
+                lane_detection_publisher.publish(invalid_lane)
+                lane_quality_publisher.publish(
+                    String(
+                        data=json.dumps(
+                            {"valid": False, "confidence": 0.0, "reason": "shutdown"},
+                            ensure_ascii=False,
+                            sort_keys=True,
+                        )
+                    )
+                )
             except rospy.ROSException:
                 pass
         cam.stop()

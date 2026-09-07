@@ -9,11 +9,20 @@
   <arg name="path_file" default="$(arg workspace_path)/data/routes/2026_molit_comp_global_path.txt" />
   <arg name="morai_host_ip" default="192.168.0.151" />
   <arg name="enable_control" default="false" />
+  <arg name="enable_lane_fallback" default="true" />
   <arg name="enable_roi_camera" default="true" />
   <arg name="enable_roi_lidar" default="true" />
   <arg name="roi_enable_lane" default="true" />
   <arg name="roi_enable_yolo" default="true" />
   <arg name="roi_lidar_rviz" default="false" />
+  <arg name="fallback_speed_cap_kph" default="7.2" />
+  <arg name="stop_without_camera" default="true" />
+  <arg name="lane_assist_confidence" default="0.55" />
+  <arg name="lane_fallback_confidence" default="0.80" />
+  <arg name="lane_stable_samples" default="5" />
+  <arg name="fallback_entry_delay_sec" default="0.50" />
+  <arg name="lane_loss_grace_sec" default="0.25" />
+  <arg name="recovery_stable_sec" default="1.0" />
 
   <include file="$(find morai_bringup)/launch/perception_control_bringup.launch">
     <arg name="workspace_path" value="$(arg workspace_path)" />
@@ -21,11 +30,23 @@
     <arg name="morai_host_ip" value="$(arg morai_host_ip)" />
     <arg name="enable_control" value="$(arg enable_control)" />
     <arg name="use_roi_sensor_stack" value="true" />
+    <arg name="enable_sensor_quality" value="$(arg enable_lane_fallback)" />
+    <arg name="enable_lane_fallback" value="$(arg enable_lane_fallback)" />
     <arg name="enable_roi_camera" value="$(arg enable_roi_camera)" />
     <arg name="enable_roi_lidar" value="$(arg enable_roi_lidar)" />
     <arg name="roi_camera_stack_root" value="$(arg workspace_path)" />
     <arg name="roi_enable_lane" value="$(arg roi_enable_lane)" />
     <arg name="roi_enable_yolo" value="$(arg roi_enable_yolo)" />
+    <arg name="lane_detection_topic" value="/detection/lane" />
+    <arg name="lane_quality_topic" value="/perception/camera/lane_quality" />
+    <arg name="fallback_speed_cap_kph" value="$(arg fallback_speed_cap_kph)" />
+    <arg name="stop_without_camera" value="$(arg stop_without_camera)" />
+    <arg name="lane_assist_confidence" value="$(arg lane_assist_confidence)" />
+    <arg name="lane_fallback_confidence" value="$(arg lane_fallback_confidence)" />
+    <arg name="lane_stable_samples" value="$(arg lane_stable_samples)" />
+    <arg name="fallback_entry_delay_sec" value="$(arg fallback_entry_delay_sec)" />
+    <arg name="lane_loss_grace_sec" value="$(arg lane_loss_grace_sec)" />
+    <arg name="recovery_stable_sec" value="$(arg recovery_stable_sec)" />
     <arg name="roi_lidar_rviz" value="$(arg roi_lidar_rviz)" />
     <!-- ROI camera의 ObjectInfo 토픽과 현재 TrafficLight 메시지 토픽을 분리한다. -->
     <arg name="traffic_light_mux_topic" value="/detection/roi_traffic_light_unused" />

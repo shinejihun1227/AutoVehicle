@@ -8,6 +8,8 @@
   <arg name="enable_control" default="false" />
   <arg name="use_curvature_speed_planner" default="true" />
   <arg name="use_roi_sensor_stack" default="false" />
+  <arg name="enable_sensor_quality" default="false" />
+  <arg name="enable_lane_fallback" default="false" />
   <arg name="enable_roi_camera" default="false" />
   <arg name="enable_roi_lidar" default="true" />
   <arg name="roi_camera_stack_root" default="$(arg workspace_path)" />
@@ -20,6 +22,16 @@
   <arg name="roi_lidar_port" default="2001" />
   <arg name="roi_lidar_rviz" default="false" />
   <arg name="roi_lidar_stop_distance_m" default="8.0" />
+  <arg name="lane_detection_topic" default="/detection/lane" />
+  <arg name="lane_quality_topic" default="/perception/camera/lane_quality" />
+  <arg name="fallback_speed_cap_kph" default="7.2" />
+  <arg name="stop_without_camera" default="true" />
+  <arg name="lane_assist_confidence" default="0.55" />
+  <arg name="lane_fallback_confidence" default="0.80" />
+  <arg name="lane_stable_samples" default="5" />
+  <arg name="fallback_entry_delay_sec" default="0.50" />
+  <arg name="lane_loss_grace_sec" default="0.25" />
+  <arg name="recovery_stable_sec" default="1.0" />
   <arg name="traffic_light_mux_topic" default="/detection/traffic_light" />
   <arg name="require_fresh_safety" default="true" />
   <arg name="publish_lidar_static_tf" default="false" />
@@ -39,6 +51,10 @@
     <arg name="enable_control" value="$(arg enable_control)" />
     <arg name="use_curvature_speed_planner" value="$(arg use_curvature_speed_planner)" />
     <arg name="command_topic" value="/control/ctrl_cmd" />
+    <arg name="use_sensor_quality_gate" value="$(arg enable_sensor_quality)" />
+    <arg name="quality_topic" value="/localization/sensor_quality" />
+    <arg name="enable_gps_jump_gate" value="$(arg enable_sensor_quality)" />
+    <arg name="enable_gps_innovation_gate" value="$(arg enable_sensor_quality)" />
   </include>
 
   <group unless="$(arg use_roi_sensor_stack)">
@@ -62,6 +78,8 @@
       <arg name="yolo_port" value="$(arg roi_yolo_port)" />
       <arg name="enable_lane" value="$(arg roi_enable_lane)" />
       <arg name="enable_yolo" value="$(arg roi_enable_yolo)" />
+      <arg name="lane_detection_topic" value="$(arg lane_detection_topic)" />
+      <arg name="lane_quality_topic" value="$(arg lane_quality_topic)" />
     </include>
 
     <!-- ROI 브랜치의 LiDAR clustering·box·tracking·merge-gap 스택. -->
@@ -90,16 +108,85 @@
     </node>
   </group>
 
+  <!-- GPS 상태와 주행 중 GPS/IMU 이상을 감시한다. fallback을 켠 경우에만
+       시작해 기존 단독 주행 런치의 토픽 계약을 보존한다. -->
+  <node if="$(arg enable_sensor_quality)"
+        pkg="stability_stack"
+        type="gps_blackout_detector.py"
+        name="final_ws_gps_blackout_detector"
+        output="screen">
+    <param name="input_topic" value="/gps" />
+    <param name="health_topic" value="/localization/gps_health" />
+    <param name="status_topic" value="/stability/gps_blackout_status" />
+    <param name="blackout_timeout_sec" value="0.5" />
+    <param name="recovery_valid_samples" value="5" />
+  </node>
+
+  <node if="$(arg enable_sensor_quality)"
+        pkg="stability_stack"
+        type="sensor_quality_monitor.py"
+        name="final_ws_sensor_quality_monitor"
+        output="screen">
+    <param name="gps_topic" value="/localization/gps" />
+    <param name="imu_topic" value="/Imu" />
+    <param name="odom_topic" value="/localization/odometry" />
+    <param name="health_topic" value="/localization/gps_health" />
+    <param name="quality_topic" value="/localization/sensor_quality" />
+    <param name="status_topic" value="/stability/sensor_quality_status" />
+  </node>
+
+  <!-- 정상 nominal 명령과 차선 fallback 명령을 하나의 최종 mux 입력으로
+       연결한다. fallback은 accel/brake(type 1)를 유지한다. -->
+  <node if="$(arg enable_lane_fallback)"
+        pkg="stability_stack"
+        type="camera_localization_fallback_controller.py"
+        name="final_ws_camera_localization_fallback"
+        output="screen">
+    <param name="nominal_command_topic" value="/control/ctrl_cmd" />
+    <param name="output_command_topic" value="/control/camera_fallback_cmd" />
+    <param name="lane_topic" value="$(arg lane_detection_topic)" />
+    <param name="quality_topic" value="/localization/sensor_quality" />
+    <param name="odom_topic" value="/localization/odometry" />
+    <param name="intersection_topic" value="/perception/intersection/detected" />
+    <param name="intersection_timeout_sec" value="0.5" />
+    <param name="min_lane_confidence" value="$(arg lane_assist_confidence)" />
+    <param name="lane_fallback_confidence" value="$(arg lane_fallback_confidence)" />
+    <param name="lane_stable_samples" value="$(arg lane_stable_samples)" />
+    <param name="fallback_entry_delay_sec" value="$(arg fallback_entry_delay_sec)" />
+    <param name="lane_loss_grace_sec" value="$(arg lane_loss_grace_sec)" />
+    <param name="recovery_stable_sec" value="$(arg recovery_stable_sec)" />
+    <param name="fallback_speed_cap_kph" value="$(arg fallback_speed_cap_kph)" />
+    <param name="stop_without_camera" value="$(arg stop_without_camera)" />
+    <param name="longl_cmd_type" value="1" />
+    <param name="max_decel_mps2" value="1.5" />
+  </node>
+
   <!-- 5. 단일 최종 제어 명령 발행자 -->
-  <include file="$(find control_mux)/launch/control_mux.launch">
-    <arg name="nominal_command_topic" value="/control/ctrl_cmd" />
-    <arg name="output_command_topic" value="/ctrl_cmd" />
-    <arg name="safety_stop_topic" value="/detection/fused_safety_stop" />
-    <arg name="traffic_light_topic" value="$(arg traffic_light_mux_topic)" />
-    <arg name="require_fresh_safety" value="$(arg require_fresh_safety)" />
-    <arg name="require_fresh_localization" value="true" />
-    <arg name="longl_cmd_type" value="1" />
-  </include>
+  <group unless="$(arg enable_lane_fallback)">
+    <include file="$(find control_mux)/launch/control_mux.launch">
+      <arg name="nominal_command_topic" value="/control/ctrl_cmd" />
+      <arg name="output_command_topic" value="/ctrl_cmd" />
+      <arg name="safety_stop_topic" value="/detection/fused_safety_stop" />
+      <arg name="traffic_light_topic" value="$(arg traffic_light_mux_topic)" />
+      <arg name="require_fresh_safety" value="$(arg require_fresh_safety)" />
+      <arg name="require_fresh_localization" value="true" />
+      <arg name="longl_cmd_type" value="1" />
+    </include>
+  </group>
+
+  <group if="$(arg enable_lane_fallback)">
+    <include file="$(find control_mux)/launch/control_mux.launch">
+      <arg name="nominal_command_topic" value="/control/camera_fallback_cmd" />
+      <arg name="output_command_topic" value="/ctrl_cmd" />
+      <arg name="safety_stop_topic" value="/detection/fused_safety_stop" />
+      <arg name="traffic_light_topic" value="$(arg traffic_light_mux_topic)" />
+      <arg name="require_fresh_safety" value="$(arg require_fresh_safety)" />
+      <!-- GPS blackout 중에는 fallback이 localization stale을 처리한다. -->
+      <arg name="require_fresh_localization" value="false" />
+      <arg name="lane_correction_enabled" value="false" />
+      <arg name="longl_cmd_type" value="1" />
+    </include>
+  </group>
 
   <!-- MORAI가 velodyne TF를 제공하지 않는 경우에만 실제 장착값으로 켠다. -->
   <node if="$(arg publish_lidar_static_tf)"
