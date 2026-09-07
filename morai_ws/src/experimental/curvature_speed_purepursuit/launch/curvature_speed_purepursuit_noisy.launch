@@ -51,12 +51,12 @@
     <param name="duplicate_epsilon_m" value="0.000001" />
     <param name="curvature_half_window_points" value="1" />
     <param name="curvature_smoothing_window" value="5" />
-    <param name="max_speed_mps" value="2.0" />
+    <param name="max_speed_kph" value="7.2" />
     <param name="lateral_accel_limit_mps2" value="1.0" />
     <param name="max_accel_mps2" value="1.0" />
     <param name="max_decel_mps2" value="1.5" />
-    <param name="initial_speed_mps" value="0.0" />
-    <param name="final_speed_mps" value="0.0" />
+    <param name="initial_speed_kph" value="0.0" />
+    <param name="final_speed_kph" value="0.0" />
 
     <!-- Pure Pursuit. -->
     <param name="wheelbase_m" value="3.0" />
@@ -65,7 +65,11 @@
     <param name="goal_tolerance_m" value="1.5" />
     <param name="max_steering_rad" value="0.6981317008" />
     <param name="steering_sign" value="1.0" />
-    <param name="longl_cmd_type" value="2" />
+    <param name="longl_cmd_type" value="1" />
+    <param name="speed_kp" value="0.8" />
+    <param name="speed_ki" value="0.05" />
+    <param name="speed_integral_limit_kph_s" value="10.8" />
+    <param name="speed_error_deadband_kph" value="0.1" />
     <param name="control_rate_hz" value="20.0" />
 
     <!-- Progress search. -->

@@ -30,9 +30,13 @@ class ControlMuxTestPublisher:
         if self.publish_nominal:
             nominal = CtrlCmd()
             if hasattr(nominal, "longlCmdType"):
-                nominal.longlCmdType = 2
+                nominal.longlCmdType = 1
             if hasattr(nominal, "velocity"):
-                nominal.velocity = 1.0
+                nominal.velocity = 0.0
+            if hasattr(nominal, "accel"):
+                nominal.accel = 0.25
+            if hasattr(nominal, "brake"):
+                nominal.brake = 0.0
             if hasattr(nominal, "steering"):
                 nominal.steering = 0.0
             self.nominal_pub.publish(nominal)

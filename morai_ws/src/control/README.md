@@ -22,6 +22,10 @@ MGeo 해석, 대회 경로 생성, 경로 인덱싱, 속도·조향 제어, 안�
 beta_drive CtrlCmd의 필드명은 longlCmdType, accel, brake, steering,
 velocity, acceleration이다. steering은 rad 기준으로 처리한다.
 
+기본 종방향 제어는 `longlCmdType=1` accel/brake 방식이다. 곡률 속도 계획기가
+만든 km/h 기준 목표속도와 `/localization/odometry`의 현재속도 오차를 PI 제어기로 변환해
+`accel` 또는 `brake` 중 하나를 출력한다. type 1에서는 `velocity`를 0으로 둔다.
+
 ## 예정 패키지
 
 - morai_map_path

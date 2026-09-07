@@ -49,6 +49,7 @@ class ControlMux:
         self.lane_correction_gain = float(rospy.get_param("~lane_correction_gain", 0.0))
         self.lane_preview_distance = float(rospy.get_param("~lane_preview_distance_m", 4.0))
         self.max_steering_rad = float(rospy.get_param("~max_steering_rad", math.radians(40.0)))
+        self.longl_cmd_type = int(rospy.get_param("~longl_cmd_type", 1))
 
         self.last_nominal: Optional[CtrlCmd] = None
         self.last_safety: Optional[SafetyStop] = None
@@ -101,7 +102,7 @@ class ControlMux:
     def stop_command(self) -> CtrlCmd:
         command = CtrlCmd()
         if hasattr(command, "longlCmdType"):
-            command.longlCmdType = 2
+            command.longlCmdType = self.longl_cmd_type
         if hasattr(command, "steering"):
             command.steering = 0.0
         if hasattr(command, "velocity"):

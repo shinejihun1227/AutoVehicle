@@ -1,0 +1,33 @@
+<launch>
+  <!--
+    final_ws 통합 실행 진입점.
+    주행은 현재 workspace의 곡률 속도 프로파일 + km/h PI + accel/brake를
+    사용하고, 센서 인식은 ROI dev/merged_code의 LiDAR·카메라 스택을 선택한다.
+    enable_control=false가 기본이므로 토픽 검증 후 true로 전환한다.
+  -->
+  <arg name="workspace_path" default="$(env HOME)/morai_ws" />
+  <arg name="path_file" default="$(arg workspace_path)/data/routes/2026_molit_comp_global_path.txt" />
+  <arg name="morai_host_ip" default="192.168.0.151" />
+  <arg name="enable_control" default="false" />
+  <arg name="enable_roi_camera" default="true" />
+  <arg name="enable_roi_lidar" default="true" />
+  <arg name="roi_enable_lane" default="true" />
+  <arg name="roi_enable_yolo" default="true" />
+  <arg name="roi_lidar_rviz" default="false" />
+
+  <include file="$(find morai_bringup)/launch/perception_control_bringup.launch">
+    <arg name="workspace_path" value="$(arg workspace_path)" />
+    <arg name="path_file" value="$(arg path_file)" />
+    <arg name="morai_host_ip" value="$(arg morai_host_ip)" />
+    <arg name="enable_control" value="$(arg enable_control)" />
+    <arg name="use_roi_sensor_stack" value="true" />
+    <arg name="enable_roi_camera" value="$(arg enable_roi_camera)" />
+    <arg name="enable_roi_lidar" value="$(arg enable_roi_lidar)" />
+    <arg name="roi_camera_stack_root" value="$(arg workspace_path)" />
+    <arg name="roi_enable_lane" value="$(arg roi_enable_lane)" />
+    <arg name="roi_enable_yolo" value="$(arg roi_enable_yolo)" />
+    <arg name="roi_lidar_rviz" value="$(arg roi_lidar_rviz)" />
+    <!-- ROI camera의 ObjectInfo 토픽과 현재 TrafficLight 메시지 토픽을 분리한다. -->
+    <arg name="traffic_light_mux_topic" value="/detection/roi_traffic_light_unused" />
+  </include>
+</launch>

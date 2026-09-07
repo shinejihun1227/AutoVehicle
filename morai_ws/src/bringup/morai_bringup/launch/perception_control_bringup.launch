@@ -6,6 +6,21 @@
   <arg name="morai_host_ip" default="192.168.0.151" />
   <arg name="control_remote_port" default="9093" />
   <arg name="enable_control" default="false" />
+  <arg name="use_curvature_speed_planner" default="true" />
+  <arg name="use_roi_sensor_stack" default="false" />
+  <arg name="enable_roi_camera" default="false" />
+  <arg name="enable_roi_lidar" default="true" />
+  <arg name="roi_camera_stack_root" default="$(arg workspace_path)" />
+  <arg name="roi_camera_ip" default="0.0.0.0" />
+  <arg name="roi_lane_port" default="1101" />
+  <arg name="roi_yolo_port" default="1131" />
+  <arg name="roi_enable_lane" default="true" />
+  <arg name="roi_enable_yolo" default="true" />
+  <arg name="roi_lidar_host_port" default="2000" />
+  <arg name="roi_lidar_port" default="2001" />
+  <arg name="roi_lidar_rviz" default="false" />
+  <arg name="roi_lidar_stop_distance_m" default="8.0" />
+  <arg name="traffic_light_mux_topic" default="/detection/traffic_light" />
   <arg name="require_fresh_safety" default="true" />
   <arg name="publish_lidar_static_tf" default="false" />
   <arg name="lidar_x_m" default="0.0" />
@@ -22,25 +37,68 @@
     <arg name="morai_host_ip" value="$(arg morai_host_ip)" />
     <arg name="control_remote_port" value="$(arg control_remote_port)" />
     <arg name="enable_control" value="$(arg enable_control)" />
+    <arg name="use_curvature_speed_planner" value="$(arg use_curvature_speed_planner)" />
     <arg name="command_topic" value="/control/ctrl_cmd" />
   </include>
 
-  <!-- 2. 카메라 4대 상태, 전방 차선·신호, camera obstacle interface -->
-  <include file="$(find morai_camera_perception)/launch/camera_perception.launch" />
+  <group unless="$(arg use_roi_sensor_stack)">
+    <!-- 2. 현재 workspace의 카메라 4대 상태, 차선·신호, obstacle interface -->
+    <include file="$(find morai_camera_perception)/launch/camera_perception.launch" />
 
-  <!-- 3. LiDAR 전방 ROI 장애물·LiDAR safety_stop -->
-  <include file="$(find lidar_obstacle_detector)/launch/lidar_obstacle_detector.launch" />
+    <!-- 3. 현재 workspace의 LiDAR 전방 ROI 장애물·safety_stop -->
+    <include file="$(find lidar_obstacle_detector)/launch/lidar_obstacle_detector.launch" />
 
-  <!-- 4. camera·LiDAR obstacle fusion 및 fused safety_stop -->
-  <include file="$(find morai_sensor_fusion)/launch/sensor_fusion.launch" />
+    <!-- 4. 현재 workspace의 camera·LiDAR obstacle fusion -->
+    <include file="$(find morai_sensor_fusion)/launch/sensor_fusion.launch" />
+  </group>
+
+  <group if="$(arg use_roi_sensor_stack)">
+    <!-- ROI 브랜치의 카메라 인식 스택. 차선/YOLO 결과는 모니터링과 안전 판단에 사용한다. -->
+    <include if="$(arg enable_roi_camera)"
+             file="$(find camera_perception)/launch/camera_perception.launch">
+      <arg name="camera_stack_root" value="$(arg roi_camera_stack_root)" />
+      <arg name="camera_ip" value="$(arg roi_camera_ip)" />
+      <arg name="lane_port" value="$(arg roi_lane_port)" />
+      <arg name="yolo_port" value="$(arg roi_yolo_port)" />
+      <arg name="enable_lane" value="$(arg roi_enable_lane)" />
+      <arg name="enable_yolo" value="$(arg roi_enable_yolo)" />
+    </include>
+
+    <!-- ROI 브랜치의 LiDAR clustering·box·tracking·merge-gap 스택. -->
+    <include if="$(arg enable_roi_lidar)"
+             file="$(find lidar_perception)/launch/lidar_tracking.launch">
+      <arg name="rviz" value="$(arg roi_lidar_rviz)" />
+      <arg name="bind_ip" value="0.0.0.0" />
+      <arg name="host_port" value="$(arg roi_lidar_host_port)" />
+      <arg name="destination_port" value="$(arg roi_lidar_port)" />
+      <arg name="odometry_topic" value="/localization/odometry" />
+    </include>
+
+    <!-- ROI 센서 메시지를 현재 control_mux의 SafetyStop 계약으로 변환한다. -->
+    <node pkg="morai_sensor_fusion"
+          type="roi_sensor_safety_adapter.py"
+          name="roi_sensor_safety_adapter"
+          output="screen">
+      <param name="lidar_topic" value="/perception/lidar/tracked_obstacles_map" />
+      <param name="odometry_topic" value="/localization/odometry" />
+      <param name="safety_topic" value="/detection/fused_safety_stop" />
+      <param name="stop_distance_m" value="$(arg roi_lidar_stop_distance_m)" />
+      <param name="require_fresh_lidar" value="$(arg enable_roi_lidar)" />
+      <param name="traffic_stop_topic" value="/perception/traffic_light/stop_required" />
+      <param name="pedestrian_stop_topic" value="/perception/pedestrian_crossing/stop_required" />
+      <param name="intersection_stop_topic" value="/perception/intersection/driving_unavailable" />
+    </node>
+  </group>
 
   <!-- 5. 단일 최종 제어 명령 발행자 -->
   <include file="$(find control_mux)/launch/control_mux.launch">
     <arg name="nominal_command_topic" value="/control/ctrl_cmd" />
     <arg name="output_command_topic" value="/ctrl_cmd" />
     <arg name="safety_stop_topic" value="/detection/fused_safety_stop" />
+    <arg name="traffic_light_topic" value="$(arg traffic_light_mux_topic)" />
     <arg name="require_fresh_safety" value="$(arg require_fresh_safety)" />
     <arg name="require_fresh_localization" value="true" />
+    <arg name="longl_cmd_type" value="1" />
   </include>
 
   <!-- MORAI가 velodyne TF를 제공하지 않는 경우에만 실제 장착값으로 켠다. -->

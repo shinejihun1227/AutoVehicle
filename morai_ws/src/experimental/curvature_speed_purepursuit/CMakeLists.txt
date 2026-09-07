@@ -5,6 +5,7 @@ find_package(catkin REQUIRED COMPONENTS
   geometry_msgs
   morai_msgs
   nav_msgs
+  purepursuit_mgeo
   rospy
   std_msgs
 )

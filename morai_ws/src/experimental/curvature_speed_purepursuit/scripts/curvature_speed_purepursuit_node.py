@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
-"""기존 주행 루프와 분리된 곡률 기반 속도 계획 Pure Pursuit.
+"""곡률 기반 목표속도 계획과 accel/brake PI를 사용하는 Pure Pursuit.
 
 기본 동작은 /experimental/* 토픽으로 결과를 미리보기만 하는 것이다.
-publish_command=true일 때에도 기존 /ctrl_cmd가 아니라 별도 command_topic으로
-CtrlCmd를 발행하므로, 기존 Pure Pursuit와 control_mux에 연결되지 않는다.
+publish_command=true이면 command_topic으로 nominal CtrlCmd를 발행하며,
+통합 주행에서는 control_mux의 입력으로 연결한다.
 """
 
 from __future__ import annotations
@@ -19,6 +19,11 @@ from morai_msgs.msg import CtrlCmd
 from nav_msgs.msg import Odometry, Path
 from std_msgs.msg import Bool, Float64
 
+from purepursuit_mgeo.longitudinal_controller import (
+    LongitudinalCommand,
+    MPS_TO_KPH,
+    SpeedPIController,
+)
 from curvature_speed_purepursuit.planner import (
     PathPoint,
     build_speed_profile,
@@ -74,17 +79,35 @@ class CurvatureSpeedPurePursuitNode:
             half_window_points=max(1, half_window),
             smoothing_window=max(1, smoothing_window),
         )
+        legacy_max_speed_mps = float(rospy.get_param("~max_speed_mps", 2.0))
+        max_speed_kph = rospy.get_param("~max_speed_kph", None)
+        if max_speed_kph is None:
+            max_speed_kph = legacy_max_speed_mps * MPS_TO_KPH
+        self.max_speed_kph = max(0.0, float(max_speed_kph))
+
+        legacy_initial_speed_mps = float(
+            rospy.get_param("~initial_speed_mps", 0.0)
+        )
+        initial_speed_kph = rospy.get_param("~initial_speed_kph", None)
+        if initial_speed_kph is None:
+            initial_speed_kph = legacy_initial_speed_mps * MPS_TO_KPH
+
+        legacy_final_speed_mps = float(rospy.get_param("~final_speed_mps", 0.0))
+        final_speed_kph = rospy.get_param("~final_speed_kph", None)
+        if final_speed_kph is None:
+            final_speed_kph = legacy_final_speed_mps * MPS_TO_KPH
+
         self.speed_profile = build_speed_profile(
             self.s_values,
             self.curvatures,
-            max_speed_mps=float(rospy.get_param("~max_speed_mps", 2.0)),
+            max_speed_mps=self.max_speed_kph / MPS_TO_KPH,
             lateral_accel_limit_mps2=float(
                 rospy.get_param("~lateral_accel_limit_mps2", 1.0)
             ),
             max_accel_mps2=float(rospy.get_param("~max_accel_mps2", 1.0)),
             max_decel_mps2=float(rospy.get_param("~max_decel_mps2", 1.5)),
-            initial_speed_mps=float(rospy.get_param("~initial_speed_mps", 0.0)),
-            final_speed_mps=float(rospy.get_param("~final_speed_mps", 0.0)),
+            initial_speed_mps=max(0.0, float(initial_speed_kph)) / MPS_TO_KPH,
+            final_speed_mps=max(0.0, float(final_speed_kph)) / MPS_TO_KPH,
         )
 
         self.wheelbase_m = float(rospy.get_param("~wheelbase_m", 3.0))
@@ -114,7 +137,21 @@ class CurvatureSpeedPurePursuitNode:
         )
         self.publish_command = bool(rospy.get_param("~publish_command", False))
         self.map_frame = rospy.get_param("~map_frame", "map")
-        self.longl_cmd_type = int(rospy.get_param("~longl_cmd_type", 2))
+        self.longl_cmd_type = int(rospy.get_param("~longl_cmd_type", 1))
+        self.speed_kp = max(0.0, float(rospy.get_param("~speed_kp", 0.8)))
+        self.speed_ki = max(0.0, float(rospy.get_param("~speed_ki", 0.05)))
+        self.speed_controller = SpeedPIController(
+            kp=self.speed_kp,
+            ki=self.speed_ki,
+            max_accel_mps2=self.max_accel_mps2,
+            max_decel_mps2=self.max_decel_mps2,
+            integral_limit_kph_s=max(
+                0.0, float(rospy.get_param("~speed_integral_limit_kph_s", 10.8))
+            ),
+            speed_error_deadband_kph=max(
+                0.0, float(rospy.get_param("~speed_error_deadband_kph", 0.1))
+            ),
+        )
 
         self.latest_odom: Optional[Odometry] = None
         self.latest_odom_wall_time: Optional[float] = None
@@ -138,6 +175,12 @@ class CurvatureSpeedPurePursuitNode:
         )
         self.speed_command_pub = rospy.Publisher(
             "/experimental/curvature_speed_command", Float64, queue_size=1
+        )
+        self.accel_command_pub = rospy.Publisher(
+            "/experimental/curvature_accel_command", Float64, queue_size=1
+        )
+        self.brake_command_pub = rospy.Publisher(
+            "/experimental/curvature_brake_command", Float64, queue_size=1
         )
         self.steering_pub = rospy.Publisher(
             "/experimental/curvature_steering", Float64, queue_size=1
@@ -250,20 +293,51 @@ class CurvatureSpeedPurePursuitNode:
         steering = math.atan(self.wheelbase_m * curvature) * self.steering_sign
         return clamp(steering, -self.max_steering_rad, self.max_steering_rad), target, actual_lookahead
 
-    def make_command(self, steering: float, speed_mps: float, stop: bool) -> CtrlCmd:
+    def make_command(
+        self,
+        steering: float,
+        target_speed_kph: float,
+        measured_speed_kph: float,
+        stop: bool,
+        dt: float,
+        pedal: Optional[LongitudinalCommand] = None,
+    ) -> CtrlCmd:
         command = CtrlCmd()
         if hasattr(command, "longlCmdType"):
             command.longlCmdType = self.longl_cmd_type
         if hasattr(command, "steering"):
             command.steering = 0.0 if stop else steering
-        if hasattr(command, "brake"):
-            command.brake = 1.0 if stop else 0.0
-        if hasattr(command, "accel"):
-            command.accel = 0.0
-        if hasattr(command, "acceleration"):
-            command.acceleration = 0.0
-        if hasattr(command, "velocity"):
-            command.velocity = 0.0 if stop else max(0.0, speed_mps)
+
+        if pedal is None:
+            pedal = self.speed_controller.update(
+                target_speed_kph,
+                measured_speed_kph,
+                dt,
+                stop=stop,
+            )
+        if self.longl_cmd_type == 1:
+            if hasattr(command, "brake"):
+                command.brake = pedal.brake
+            if hasattr(command, "accel"):
+                command.accel = pedal.accel
+            if hasattr(command, "acceleration"):
+                command.acceleration = 0.0
+            if hasattr(command, "velocity"):
+                command.velocity = 0.0
+        else:
+            self.speed_controller.reset()
+            if hasattr(command, "brake"):
+                command.brake = 1.0 if stop else 0.0
+            if hasattr(command, "accel"):
+                command.accel = 0.0
+            if hasattr(command, "acceleration"):
+                command.acceleration = 0.0
+            if hasattr(command, "velocity"):
+                command.velocity = (
+                    0.0
+                    if stop
+                    else max(0.0, target_speed_kph) / MPS_TO_KPH
+                )
         return command
 
     def control_callback(self, _event: rospy.timer.TimerEvent) -> None:
@@ -280,10 +354,13 @@ class CurvatureSpeedPurePursuitNode:
             or time.monotonic() - self.latest_odom_wall_time > self.pose_timeout_sec
         ):
             self.command_speed_mps = 0.0
+            self.speed_controller.reset()
             self.speed_command_pub.publish(Float64(0.0))
             self.goal_pub.publish(Bool(False))
             if self.publish_command:
-                self.command_pub.publish(self.make_command(0.0, 0.0, stop=True))
+                self.command_pub.publish(
+                    self.make_command(0.0, 0.0, 0.0, stop=True, dt=1.0 / self.rate_hz)
+                )
             rospy.logwarn_throttle(
                 2.0,
                 "곡률 기반 Pure Pursuit가 %s의 최신 pose를 받지 못해 정지 명령을 발행한다.",
@@ -305,10 +382,11 @@ class CurvatureSpeedPurePursuitNode:
             pose.orientation.z,
             pose.orientation.w,
         )
-        measured_speed = math.hypot(
+        measured_speed_mps = math.hypot(
             self.latest_odom.twist.twist.linear.x,
             self.latest_odom.twist.twist.linear.y,
         )
+        measured_speed_kph = measured_speed_mps * MPS_TO_KPH
 
         projection = self.search_projection(x, y)
         self.last_segment_index = projection.segment_index
@@ -330,7 +408,7 @@ class CurvatureSpeedPurePursuitNode:
             actual_lookahead = 0.0
         else:
             steering, target, actual_lookahead = self.compute_steering(
-                x, y, yaw, measured_speed, progress_s
+                x, y, yaw, measured_speed_mps, progress_s
             )
 
         target_message = PointStamped()
@@ -342,24 +420,47 @@ class CurvatureSpeedPurePursuitNode:
         self.target_pub.publish(target_message)
 
         self.curvature_pub.publish(Float64(curvature))
-        self.speed_limit_pub.publish(Float64(speed_limit))
-        self.speed_command_pub.publish(Float64(command_speed))
+        speed_limit_kph = speed_limit * MPS_TO_KPH
+        command_speed_kph = command_speed * MPS_TO_KPH
+        pedal = self.speed_controller.update(
+            command_speed_kph,
+            measured_speed_kph,
+            dt,
+            stop=stop,
+        )
+        self.speed_limit_pub.publish(Float64(speed_limit_kph))
+        self.speed_command_pub.publish(Float64(command_speed_kph))
+        self.accel_command_pub.publish(Float64(pedal.accel))
+        self.brake_command_pub.publish(Float64(pedal.brake))
         self.steering_pub.publish(Float64(steering))
         self.progress_pub.publish(Float64(progress_s))
         self.goal_pub.publish(Bool(stop))
 
         if self.publish_command:
-            self.command_pub.publish(self.make_command(steering, command_speed, stop))
+            self.command_pub.publish(
+                self.make_command(
+                    steering,
+                    command_speed_kph,
+                    measured_speed_kph,
+                    stop,
+                    dt,
+                    pedal=pedal,
+                )
+            )
 
         rospy.loginfo_throttle(
             2.0,
             "Curvature PP progress=%.1f/%.1fm kappa=%.4f speed_limit=%.2f "
-            "speed_cmd=%.2f lookahead=%.2f steering=%.4f stop=%s",
+            "speed_cmd=%.2f measured=%.2f km/h accel=%.2f brake=%.2f "
+            "lookahead=%.2f steering=%.4f stop=%s",
             progress_s,
             self.total_length_m,
             curvature,
-            speed_limit,
-            command_speed,
+            speed_limit_kph,
+            command_speed_kph,
+            measured_speed_kph,
+            pedal.accel,
+            pedal.brake,
             actual_lookahead,
             steering,
             stop,

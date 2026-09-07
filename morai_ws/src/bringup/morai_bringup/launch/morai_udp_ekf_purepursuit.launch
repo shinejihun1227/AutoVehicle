@@ -12,6 +12,20 @@
   <arg name="enable_control" default="false" />
   <arg name="wheelbase_m" default="3.0" />
   <arg name="command_topic" default="/ctrl_cmd" />
+  <arg name="longl_cmd_type" default="1" />
+  <!-- 권장 주행: 곡률 속도 프로파일 + 목표속도 PI + accel/brake -->
+  <arg name="use_curvature_speed_planner" default="true" />
+  <arg name="target_speed_kph" default="7.2" />
+  <arg name="max_speed_kph" default="7.2" />
+  <arg name="lateral_accel_limit_mps2" default="1.0" />
+  <arg name="max_accel_mps2" default="1.0" />
+  <arg name="max_decel_mps2" default="1.5" />
+  <arg name="initial_speed_kph" default="0.0" />
+  <arg name="final_speed_kph" default="0.0" />
+  <arg name="speed_kp" default="0.8" />
+  <arg name="speed_ki" default="0.05" />
+  <arg name="speed_integral_limit_kph_s" default="10.8" />
+  <arg name="speed_error_deadband_kph" default="0.1" />
   <arg name="ekf_gps_topic" default="/localization/gps" />
   <arg name="ekf_imu_topic" default="/Imu" />
   <arg name="ekf_default_gps_variance_m2" default="1.0" />
@@ -40,6 +54,7 @@
     <arg name="control_remote_port" value="$(arg control_remote_port)" />
     <arg name="control_bind_port" value="$(arg control_source_port)" />
     <arg name="command_topic" value="/ctrl_cmd" />
+    <arg name="longl_cmd_type" value="$(arg longl_cmd_type)" />
   </include>
 
   <!-- 3. 차량 기준점과 센서의 정적 TF -->
@@ -69,12 +84,58 @@
     <arg name="bias_random_walk" value="$(arg ekf_bias_random_walk)" />
   </include>
 
-  <!-- 6. EKF pose + MGeo path -> CtrlCmd -->
-  <include file="$(find purepursuit_mgeo)/launch/purepursuit_mgeo.launch">
-    <arg name="workspace_path" value="$(arg workspace_path)" />
-    <arg name="path_file" value="$(arg path_file)" />
-    <arg name="enable_control" value="$(arg enable_control)" />
-    <arg name="wheelbase_m" value="$(arg wheelbase_m)" />
-    <arg name="command_topic" value="$(arg command_topic)" />
-  </include>
+  <!-- 6. EKF pose + 경로 -> 조향 및 종방향 CtrlCmd -->
+  <group unless="$(arg use_curvature_speed_planner)">
+    <include file="$(find purepursuit_mgeo)/launch/purepursuit_mgeo.launch">
+      <arg name="workspace_path" value="$(arg workspace_path)" />
+      <arg name="path_file" value="$(arg path_file)" />
+      <arg name="enable_control" value="$(arg enable_control)" />
+      <arg name="wheelbase_m" value="$(arg wheelbase_m)" />
+      <arg name="command_topic" value="$(arg command_topic)" />
+      <arg name="longl_cmd_type" value="$(arg longl_cmd_type)" />
+      <arg name="target_speed_kph" value="$(arg target_speed_kph)" />
+      <arg name="speed_kp" value="$(arg speed_kp)" />
+      <arg name="speed_ki" value="$(arg speed_ki)" />
+      <arg name="max_accel_mps2" value="$(arg max_accel_mps2)" />
+      <arg name="max_decel_mps2" value="$(arg max_decel_mps2)" />
+      <arg name="speed_integral_limit_kph_s" value="$(arg speed_integral_limit_kph_s)" />
+      <arg name="speed_error_deadband_kph" value="$(arg speed_error_deadband_kph)" />
+    </include>
+  </group>
+
+  <group if="$(arg use_curvature_speed_planner)">
+    <node pkg="curvature_speed_purepursuit"
+          type="curvature_speed_purepursuit_node.py"
+          name="curvature_speed_purepursuit"
+          output="screen">
+      <param name="path_file" value="$(arg path_file)" />
+      <param name="pose_topic" value="/localization/odometry" />
+      <param name="command_topic" value="$(arg command_topic)" />
+      <param name="publish_command" value="$(arg enable_control)" />
+      <param name="pose_timeout_sec" value="0.5" />
+      <param name="duplicate_epsilon_m" value="0.000001" />
+      <param name="curvature_half_window_points" value="1" />
+      <param name="curvature_smoothing_window" value="5" />
+      <param name="max_speed_kph" value="$(arg max_speed_kph)" />
+      <param name="lateral_accel_limit_mps2" value="$(arg lateral_accel_limit_mps2)" />
+      <param name="max_accel_mps2" value="$(arg max_accel_mps2)" />
+      <param name="max_decel_mps2" value="$(arg max_decel_mps2)" />
+      <param name="initial_speed_kph" value="$(arg initial_speed_kph)" />
+      <param name="final_speed_kph" value="$(arg final_speed_kph)" />
+      <param name="wheelbase_m" value="$(arg wheelbase_m)" />
+      <param name="lookahead_min_m" value="4.0" />
+      <param name="lookahead_gain" value="0.35" />
+      <param name="goal_tolerance_m" value="1.5" />
+      <param name="max_steering_rad" value="0.6981317008" />
+      <param name="steering_sign" value="1.0" />
+      <param name="longl_cmd_type" value="$(arg longl_cmd_type)" />
+      <param name="speed_kp" value="$(arg speed_kp)" />
+      <param name="speed_ki" value="$(arg speed_ki)" />
+      <param name="speed_integral_limit_kph_s" value="$(arg speed_integral_limit_kph_s)" />
+      <param name="speed_error_deadband_kph" value="$(arg speed_error_deadband_kph)" />
+      <param name="control_rate_hz" value="20.0" />
+      <param name="progress_search_window_points" value="250" />
+      <param name="progress_backtrack_tolerance_m" value="2.0" />
+    </node>
+  </group>
 </launch>

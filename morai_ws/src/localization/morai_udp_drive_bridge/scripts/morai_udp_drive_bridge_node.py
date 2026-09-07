@@ -40,6 +40,7 @@ class MoraiUdpDriveBridge:
             rospy.get_param("~max_wheel_angle_rad", math.radians(40.0))
         )
         self.status_use_packet_time = bool(rospy.get_param("~status_use_packet_time", False))
+        self.longl_cmd_type = int(rospy.get_param("~longl_cmd_type", 1))
 
         self.status_pub = rospy.Publisher(self.status_topic, EgoVehicleStatus, queue_size=20)
         rospy.Subscriber(self.command_topic, CtrlCmd, self.command_callback, queue_size=20)
@@ -172,14 +173,21 @@ class MoraiUdpDriveBridge:
         is_fresh = message is not None and time.monotonic() - self.last_command_time <= self.command_timeout_sec
 
         if not is_fresh:
-            packet = build_ego_ctrl_cmd(cmd_type=2, velocity_kmh=0.0, brake=1.0)
+            packet = build_ego_ctrl_cmd(
+                cmd_type=self.longl_cmd_type, velocity_kmh=0.0, brake=1.0
+            )
         else:
-            cmd_type = int(getattr(message, "longlCmdType", 2))
+            cmd_type = int(getattr(message, "longlCmdType", self.longl_cmd_type))
             steering_rad = float(getattr(message, "steering", 0.0))
             steer_normalized = steering_rad / max(self.max_wheel_angle_rad, 1e-6)
+            velocity_kmh = (
+                max(0.0, float(getattr(message, "velocity", 0.0)) * 3.6)
+                if cmd_type == 2
+                else 0.0
+            )
             packet = build_ego_ctrl_cmd(
                 cmd_type=cmd_type,
-                velocity_kmh=max(0.0, float(getattr(message, "velocity", 0.0)) * 3.6),
+                velocity_kmh=velocity_kmh,
                 acceleration_mps2=float(getattr(message, "acceleration", 0.0)),
                 accel=float(getattr(message, "accel", 0.0)),
                 brake=float(getattr(message, "brake", 0.0)),
@@ -196,7 +204,9 @@ class MoraiUdpDriveBridge:
     def shutdown(self) -> None:
         self.stop_event.set()
         try:
-            stop_packet = build_ego_ctrl_cmd(cmd_type=2, velocity_kmh=0.0, brake=1.0)
+            stop_packet = build_ego_ctrl_cmd(
+                cmd_type=self.longl_cmd_type, velocity_kmh=0.0, brake=1.0
+            )
             self.send_socket.sendto(stop_packet, (self.control_remote_ip, self.control_remote_port))
             self.send_socket.close()
         except OSError:

@@ -12,6 +12,7 @@ from morai_msgs.msg import CtrlCmd
 from nav_msgs.msg import Odometry
 from std_msgs.msg import Float64
 
+from purepursuit_mgeo.longitudinal_controller import MPS_TO_KPH, SpeedPIController
 from purepursuit_mgeo.path import MgeoPurePursuit, PathPoint, load_mgeo_path
 
 
@@ -28,14 +29,38 @@ class PurePursuitNode:
 
         path_file = rospy.get_param("~path_file")
         self.points = load_mgeo_path(path_file)
-        self.target_speed = float(rospy.get_param("~target_speed_mps", 2.0))
+        target_speed_kph = rospy.get_param("~target_speed_kph", None)
+        if target_speed_kph is None:
+            # 기존 m/s 파라미터를 사용하는 launch와의 호환성
+            target_speed_kph = float(rospy.get_param("~target_speed_mps", 2.0)) * MPS_TO_KPH
+        self.target_speed_kph = max(0.0, float(target_speed_kph))
         self.max_steering = float(
             rospy.get_param("~max_steering_rad", math.radians(40.0))
         )
         self.rate_hz = float(rospy.get_param("~control_rate_hz", 20.0))
         self.enable_control = bool(rospy.get_param("~enable_control", False))
-        self.longl_cmd_type = int(rospy.get_param("~longl_cmd_type", 2))
+        self.longl_cmd_type = int(rospy.get_param("~longl_cmd_type", 1))
         self.steering_sign = float(rospy.get_param("~steering_sign", 1.0))
+        self.speed_kp = max(0.0, float(rospy.get_param("~speed_kp", 0.8)))
+        self.speed_ki = max(0.0, float(rospy.get_param("~speed_ki", 0.05)))
+        self.max_accel_mps2 = max(
+            1e-6, float(rospy.get_param("~max_accel_mps2", 1.0))
+        )
+        self.max_decel_mps2 = max(
+            1e-6, float(rospy.get_param("~max_decel_mps2", 1.5))
+        )
+        self.speed_controller = SpeedPIController(
+            kp=self.speed_kp,
+            ki=self.speed_ki,
+            max_accel_mps2=self.max_accel_mps2,
+            max_decel_mps2=self.max_decel_mps2,
+            integral_limit_kph_s=max(
+                0.0, float(rospy.get_param("~speed_integral_limit_kph_s", 10.8))
+            ),
+            speed_error_deadband_kph=max(
+                0.0, float(rospy.get_param("~speed_error_deadband_kph", 0.1))
+            ),
+        )
 
         wheelbase = float(rospy.get_param("~wheelbase_m", 3.0))
         lookahead_min = float(rospy.get_param("~lookahead_min_m", 4.0))
@@ -87,7 +112,7 @@ class PurePursuitNode:
             pose.orientation.z,
             pose.orientation.w,
         )
-        speed = math.hypot(
+        speed_mps = math.hypot(
             self.latest_odom.twist.twist.linear.x,
             self.latest_odom.twist.twist.linear.y,
         )
@@ -95,7 +120,7 @@ class PurePursuitNode:
             pose.position.x,
             pose.position.y,
             yaw,
-            speed,
+            speed_mps,
         )
         steering = max(-self.max_steering, min(self.max_steering, steering))
 
@@ -109,7 +134,13 @@ class PurePursuitNode:
         self.steering_preview_pub.publish(Float64(steering))
 
         if self.enable_control:
-            command = self.make_command(steering, stop)
+            command = self.make_command(
+                steering,
+                self.target_speed_kph,
+                speed_mps * MPS_TO_KPH,
+                stop,
+                1.0 / max(self.rate_hz, 1.0),
+            )
             self.command_pub.publish(command)
 
         rospy.loginfo_throttle(
@@ -121,20 +152,52 @@ class PurePursuitNode:
             stop,
         )
 
-    def make_command(self, steering: float, stop: bool) -> CtrlCmd:
+    def make_command(
+        self,
+        steering: float,
+        target_speed_kph: float,
+        measured_speed_kph: float,
+        stop: bool,
+        dt: float,
+    ) -> CtrlCmd:
         command = CtrlCmd()
         if hasattr(command, "longlCmdType"):
             command.longlCmdType = self.longl_cmd_type
         if hasattr(command, "steering"):
             command.steering = 0.0 if stop else steering
-        if hasattr(command, "brake"):
-            command.brake = 1.0 if stop else 0.0
-        if hasattr(command, "accel"):
-            command.accel = 0.0 if stop else 0.0
-        if hasattr(command, "acceleration"):
-            command.acceleration = 0.0 if stop else 0.0
-        if hasattr(command, "velocity"):
-            command.velocity = 0.0 if stop else self.target_speed
+
+        pedal = self.speed_controller.update(
+            target_speed_kph,
+            measured_speed_kph,
+            dt,
+            stop=stop,
+        )
+        if self.longl_cmd_type == 1:
+            if hasattr(command, "brake"):
+                command.brake = pedal.brake
+            if hasattr(command, "accel"):
+                command.accel = pedal.accel
+            if hasattr(command, "acceleration"):
+                # 종방향 type 1에서는 accel/brake 필드를 사용한다.
+                command.acceleration = 0.0
+            if hasattr(command, "velocity"):
+                # type 1에서 velocity는 사용하지 않으며 혼동을 막기 위해 0으로 둔다.
+                command.velocity = 0.0
+        else:
+            # 구형 설정으로 type 2를 명시한 경우에만 속도 명령 호환을 유지한다.
+            self.speed_controller.reset()
+            if hasattr(command, "brake"):
+                command.brake = 1.0 if stop else 0.0
+            if hasattr(command, "accel"):
+                command.accel = 0.0
+            if hasattr(command, "acceleration"):
+                command.acceleration = 0.0
+            if hasattr(command, "velocity"):
+                command.velocity = (
+                    0.0
+                    if stop
+                    else max(0.0, target_speed_kph) / MPS_TO_KPH
+                )
         return command
 
 

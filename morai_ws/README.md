@@ -101,3 +101,20 @@ flowchart LR
 
 기존 Pure Pursuit와 새 곡률 기반 Pure Pursuit를 동시에 실행하지 않습니다. 새 실험은
 `/experimental/*` 토픽을 사용하고, 기존 주행은 `/ctrl_cmd` 체계를 사용합니다.
+
+## final_ws 통합 실행
+
+`final_ws` 브랜치에는 현재 주행팀의 곡률 기반 속도 프로파일·km/h PI·accel/brake·EKF·
+control_mux와 ROI `dev/merged_code`의 카메라·LiDAR 인식 패키지를 함께 넣었습니다.
+주행 제어의 기준은 현재 `curvature_speed_purepursuit`이며, ROI 센서 출력은
+`morai_sensor_fusion/roi_sensor_safety_adapter.py`가 현재 `SafetyStop` 계약으로
+변환합니다. 자세한 연결은 [final_ws 통합 안내](docs/FINAL_WS_INTEGRATION.md)를
+참고합니다.
+
+검증 단계에서는 다음처럼 제어를 끈 상태로 시작합니다.
+
+```bash
+roslaunch morai_bringup final_ws_bringup.launch enable_control:=false
+```
+
+센서 토픽과 안전정지 상태를 확인한 뒤에만 `enable_control:=true`로 전환합니다.

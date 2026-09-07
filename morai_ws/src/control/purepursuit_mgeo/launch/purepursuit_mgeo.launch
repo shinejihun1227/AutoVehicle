@@ -3,6 +3,14 @@
   <arg name="path_file" default="$(arg workspace_path)/data/routes/2026_molit_comp_global_path.txt" />
   <arg name="enable_control" default="false" />
   <arg name="wheelbase_m" default="3.0" />
+  <arg name="target_speed_kph" default="7.2" />
+  <arg name="longl_cmd_type" default="1" />
+  <arg name="speed_kp" default="0.8" />
+  <arg name="speed_ki" default="0.05" />
+  <arg name="max_accel_mps2" default="1.0" />
+  <arg name="max_decel_mps2" default="1.5" />
+  <arg name="speed_integral_limit_kph_s" default="10.8" />
+  <arg name="speed_error_deadband_kph" default="0.1" />
   <!-- 기존 단독 실행 호환. 새 안정성 스택은 /control/ctrl_cmd를 명시한다. -->
   <arg name="command_topic" default="/ctrl_cmd" />
 
@@ -15,12 +23,18 @@
     <param name="command_topic" value="$(arg command_topic)" />
     <param name="lookahead_topic" value="/control/lookahead_point" />
     <param name="wheelbase_m" value="$(arg wheelbase_m)" />
-    <param name="target_speed_mps" value="2.0" />
+    <param name="target_speed_kph" value="$(arg target_speed_kph)" />
     <param name="lookahead_min_m" value="4.0" />
     <param name="lookahead_gain" value="0.35" />
     <param name="goal_tolerance_m" value="1.5" />
     <param name="max_steering_rad" value="0.6981317008" />
-    <param name="longl_cmd_type" value="2" />
+    <param name="longl_cmd_type" value="$(arg longl_cmd_type)" />
+    <param name="speed_kp" value="$(arg speed_kp)" />
+    <param name="speed_ki" value="$(arg speed_ki)" />
+    <param name="max_accel_mps2" value="$(arg max_accel_mps2)" />
+    <param name="max_decel_mps2" value="$(arg max_decel_mps2)" />
+    <param name="speed_integral_limit_kph_s" value="$(arg speed_integral_limit_kph_s)" />
+    <param name="speed_error_deadband_kph" value="$(arg speed_error_deadband_kph)" />
     <param name="enable_control" value="$(arg enable_control)" />
   </node>
 </launch>
