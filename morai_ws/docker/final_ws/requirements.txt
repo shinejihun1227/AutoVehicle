@@ -1,0 +1,14 @@
+# Python 3.8 / ROS Noetic compatibility baseline; not a full transitive lock.
+# best0902.pt records Ultralytics 8.4.138 in its checkpoint metadata.
+torch==2.4.1
+torchvision==0.19.1
+ultralytics==8.4.138
+numpy==1.24.4
+scipy==1.10.1
+opencv-python==4.10.0.84
+matplotlib==3.7.5
+pillow==10.4.0
+PyYAML==6.0.2
+polars==1.8.2
+filelock==3.16.1
+ultralytics-thop==2.1.6

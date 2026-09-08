@@ -21,6 +21,7 @@ import time
 import cv2
 import numpy as np
 from camera_perception.camera_udp import LatestCameraReceiver
+from camera_perception.traffic_signal import traffic_bbox_plausible
 from camera_perception.highway_vehicle import (
     HIGHWAY_VEHICLE_CLASSES,
     highway_vehicle_detected,
@@ -62,6 +63,12 @@ TRAFFIC_KEYWORDS = (
 
 def _parse_traffic_signal(label):
     normalized = label.lower()
+    # A yellow directional/mixed label is still a stop indication. Preserve it
+    # before the left/right branches can discard its colour.
+    if "yellow" in normalized or "amber" in normalized:
+        return "Yellow", "YELLOW", (0, 255, 255)
+    if "red" in normalized and "green" in normalized:
+        return "Unknown", "CONFLICT", (128, 128, 128)
     # GREEN has the highest priority, including ambiguous mixed-label names.
     if "green" in normalized and "left" in normalized:
         return "Green_Left", "GREEN + LEFT", (0, 255, 128)
@@ -185,10 +192,12 @@ def main(ip=IP, port=PORT, base_model_path=BASE_MODEL_PATH,
         message.height = float(height)
         return message
 
-    def object_array(sequence, objects):
+    def object_array(sequence, objects, received_stamp):
         message = ObjectInfoArray()
         message.header = Header(
-            seq=int(sequence), stamp=rospy.Time.now(), frame_id="camera_link"
+            seq=int(sequence),
+            stamp=received_stamp if received_stamp is not None else rospy.Time(),
+            frame_id="camera_link",
         )
         message.objects = list(objects)
         return message
@@ -205,11 +214,14 @@ def main(ip=IP, port=PORT, base_model_path=BASE_MODEL_PATH,
         print(f"[{CAM_NAME}] 경고: 커스텀 모델을 찾지 못해 기본 YOLO만 실행합니다: "
               f"{resolved_custom_path}")
 
-    cam_data = LatestCameraReceiver(ip, port)
+    cam_data = LatestCameraReceiver(ip, port, stamp_clock=rospy.Time.now)
     last_frame_sequence = 0
 
     pending_condition = threading.Condition()
-    pending_frame = {"sequence": 0, "image": None, "received_at": 0.0}
+    pending_frame = {
+        "sequence": 0, "image": None, "received_at": 0.0,
+        "received_stamp": None,
+    }
     result_lock = threading.Lock()
     latest_result = {
         "revision": 0,
@@ -263,9 +275,7 @@ def main(ip=IP, port=PORT, base_model_path=BASE_MODEL_PATH,
             x1, y1, x2, y2 = box.xyxy[0].detach().cpu().tolist()
 
             if any(keyword in normalized for keyword in TRAFFIC_KEYWORDS):
-                if relative_y > 0.65 or aspect_ratio < 1.1:
-                    continue
-                if relative_y >= 0.40 and aspect_ratio < 1.3:
+                if not traffic_bbox_plausible(xc, yc, width, height, image_height):
                     continue
                 class_name, display_text, color = _parse_traffic_signal(label)
                 if class_name is None:
@@ -306,6 +316,7 @@ def main(ip=IP, port=PORT, base_model_path=BASE_MODEL_PATH,
                 sequence = pending_frame["sequence"]
                 image = pending_frame["image"]
                 received_at = pending_frame["received_at"]
+                received_stamp = pending_frame["received_stamp"]
 
             if image is None or sequence <= last_inferred_sequence:
                 continue
@@ -381,7 +392,9 @@ def main(ip=IP, port=PORT, base_model_path=BASE_MODEL_PATH,
                     detection_state["car"] = car_detected
                     detection_state["person"] = person_detected
                 publish_detection_state()
-                obstacle_publisher.publish(object_array(sequence, base_objects))
+                obstacle_publisher.publish(
+                    object_array(sequence, base_objects, received_stamp)
+                )
 
                 if car_detected:
                     rospy.loginfo_throttle(
@@ -418,11 +431,12 @@ def main(ip=IP, port=PORT, base_model_path=BASE_MODEL_PATH,
                         )
 
                     traffic_light_publisher.publish(
-                        object_array(sequence, traffic_objects)
+                        object_array(sequence, traffic_objects, received_stamp)
                     )
                     obstacle_publisher.publish(
                         object_array(
-                            sequence, base_objects + custom_obstacle_objects
+                            sequence, base_objects + custom_obstacle_objects,
+                            received_stamp,
                         )
                     )
 
@@ -449,7 +463,9 @@ def main(ip=IP, port=PORT, base_model_path=BASE_MODEL_PATH,
                             fps=smoothed_fps,
                         )
                 else:
-                    traffic_light_publisher.publish(object_array(sequence, ()))
+                    traffic_light_publisher.publish(
+                        object_array(sequence, (), received_stamp)
+                    )
 
             except Exception as error:
                 rospy.logerr_throttle(1.0, "YOLO inference error: %s", error)
@@ -534,7 +550,8 @@ def main(ip=IP, port=PORT, base_model_path=BASE_MODEL_PATH,
             with pending_condition:
                 pending_frame["sequence"] = frame.sequence
                 pending_frame["image"] = image
-                pending_frame["received_at"] = last_live_frame_at
+                pending_frame["received_at"] = frame.received_at
+                pending_frame["received_stamp"] = frame.received_stamp
                 pending_condition.notify()
 
             now = time.monotonic()

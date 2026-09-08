@@ -1,0 +1,19 @@
+<launch>
+  <arg name="remote_ip" default="192.168.0.151" />
+  <arg name="remote_port" default="9097" />
+  <arg name="progress_topic" default="/experimental/curvature_progress" />
+  <arg name="odometry_topic" default="/localization/odometry" />
+  <arg name="maneuvers_file" default="$(find turn_signal_controller)/config/turn_signal_maneuvers.yaml" />
+
+  <node pkg="turn_signal_controller"
+        type="turn_signal_node.py"
+        name="turn_signal_controller"
+        output="screen">
+    <param name="remote_ip" value="$(arg remote_ip)" />
+    <param name="remote_port" value="$(arg remote_port)" />
+    <param name="progress_topic" value="$(arg progress_topic)" />
+    <param name="odometry_topic" value="$(arg odometry_topic)" />
+    <param name="lead_time_sec" value="5.0" />
+    <rosparam file="$(arg maneuvers_file)" command="load" />
+  </node>
+</launch>

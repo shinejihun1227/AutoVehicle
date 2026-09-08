@@ -29,6 +29,8 @@ class MoraiUdpDriveBridge:
         self.status_port = int(rospy.get_param("~status_port", 909))
         self.status_topic = rospy.get_param("~status_topic", "/Ego_topic")
         self.status_frame_id = rospy.get_param("~status_frame_id", "map")
+        # Read once at startup: dry-run output cannot be enabled at runtime.
+        self.control_output_enabled = bool(rospy.get_param("~control_output_enabled", True))
         self.control_remote_ip = rospy.get_param("~control_remote_ip", "192.168.0.151")
         self.control_remote_port = int(rospy.get_param("~control_remote_port", 9093))
         self.control_bind_ip = rospy.get_param("~control_bind_ip", "0.0.0.0")
@@ -42,20 +44,23 @@ class MoraiUdpDriveBridge:
         self.status_use_packet_time = bool(rospy.get_param("~status_use_packet_time", False))
         self.longl_cmd_type = int(rospy.get_param("~longl_cmd_type", 1))
 
+        self.last_command: Optional[CtrlCmd] = None
+        self.last_command_time = 0.0
+        self.stop_event = threading.Event()
+        self.send_socket = None
+        self.send_timer = None
+
         self.status_pub = rospy.Publisher(self.status_topic, EgoVehicleStatus, queue_size=20)
         rospy.Subscriber(self.command_topic, CtrlCmd, self.command_callback, queue_size=20)
 
-        self.send_socket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-        if self.control_bind_port > 0:
-            self.send_socket.bind((self.control_bind_ip, self.control_bind_port))
+        if self.control_output_enabled:
+            self.send_socket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+            if self.control_bind_port > 0:
+                self.send_socket.bind((self.control_bind_ip, self.control_bind_port))
+            self.send_timer = rospy.Timer(
+                rospy.Duration(1.0 / max(self.send_rate_hz, 1.0)), self.send_timer_callback
+            )
 
-        self.last_command: Optional[CtrlCmd] = None
-        self.last_command_time = 0.0
-        self.send_timer = rospy.Timer(
-            rospy.Duration(1.0 / max(self.send_rate_hz, 1.0)), self.send_timer_callback
-        )
-
-        self.stop_event = threading.Event()
         self.status_thread = threading.Thread(
             target=self.status_receive_loop,
             name="morai-ego-status-receiver",
@@ -65,12 +70,13 @@ class MoraiUdpDriveBridge:
         rospy.on_shutdown(self.shutdown)
 
         rospy.loginfo(
-            "MORAI UDP drive bridge: status bind=%s:%d topic=%s, control remote=%s:%d",
+            "MORAI UDP drive bridge: status bind=%s:%d topic=%s, control remote=%s:%d, output enabled=%s",
             self.status_bind_ip,
             self.status_port,
             self.status_topic,
             self.control_remote_ip,
             self.control_remote_port,
+            self.control_output_enabled,
         )
 
     def status_receive_loop(self) -> None:
@@ -169,6 +175,9 @@ class MoraiUdpDriveBridge:
         self.last_command_time = time.monotonic()
 
     def send_timer_callback(self, _event) -> None:
+        if not self.control_output_enabled or self.send_socket is None or self.stop_event.is_set():
+            return
+
         message = self.last_command
         is_fresh = message is not None and time.monotonic() - self.last_command_time <= self.command_timeout_sec
 
@@ -203,14 +212,20 @@ class MoraiUdpDriveBridge:
 
     def shutdown(self) -> None:
         self.stop_event.set()
+        if self.send_timer is not None:
+            self.send_timer.shutdown()
+        if not self.control_output_enabled or self.send_socket is None:
+            return
+
         try:
             stop_packet = build_ego_ctrl_cmd(
                 cmd_type=self.longl_cmd_type, velocity_kmh=0.0, brake=1.0
             )
             self.send_socket.sendto(stop_packet, (self.control_remote_ip, self.control_remote_port))
-            self.send_socket.close()
         except OSError:
             pass
+        finally:
+            self.send_socket.close()
 
 
 if __name__ == "__main__":

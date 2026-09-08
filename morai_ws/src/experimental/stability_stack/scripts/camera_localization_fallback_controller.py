@@ -2,8 +2,8 @@
 """GPS/IMU 품질에 따라 Pure Pursuit와 전방 차선 제어를 안전하게 전환한다.
 
 정상 상태에서는 곡률 기반 Pure Pursuit 명령을 그대로 통과시킨다.
-GPS jump/noise 또는 IMU 급변이 감지되면 차선 결과를 이용해 Pure Pursuit를
-보조하고, GPS blackout이면 차선 기반 조향을 주 제어로 사용한다.
+GPS blackout 또는 센서 입력이 degraded 상태이면 차선 결과를 이용해
+Pure Pursuit를 보조하고, GPS blackout이면 차선 기반 조향을 주 제어로 사용한다.
 
 카메라가 stale이거나 confidence가 부족한 경우에는 카메라가 없는 상태에서
 무리하게 주행하지 않고 기본적으로 정지 명령을 만든다. 이 정책은
@@ -32,8 +32,6 @@ from std_msgs.msg import Bool, String
 
 NORMAL = "NORMAL"
 GPS_BLACKOUT = "GPS_BLACKOUT"
-GPS_NOISE = "GPS_NOISE"
-IMU_NOISE = "IMU_NOISE"
 SENSOR_DEGRADED = "SENSOR_DEGRADED"
 MPS_TO_KPH = 3.6
 
@@ -446,7 +444,7 @@ class CameraLocalizationFallbackController:
             self.recovery_since = getattr(self, "recovery_since", None)
             if self.last_mode in (
                 "gps_blackout_camera_fallback",
-                "sensor_anomaly_camera_assist",
+                "degraded_camera_assist",
                 "degraded_nominal_limited",
             ) and self.recovery_since is None:
                 self.recovery_since = now
@@ -621,7 +619,7 @@ class CameraLocalizationFallbackController:
             )
             return
 
-        # GPS noise/IMU noise에서는 nominal 경로를 유지하면서 차선 보정만
+        # 센서가 degraded 상태이면 nominal 경로를 유지하면서 차선 보정만
         # 적용한다. 차선이 중간 품질이면 보정만 허용하고 fallback은 금지한다.
         if not lane_usable:
             if self.stop_without_camera:
@@ -685,11 +683,11 @@ class CameraLocalizationFallbackController:
             )
             return
 
-        # GPS/IMU noise 또는 recovery에서는 원래 PP를 유지하면서 camera 보정을
-        # 작게 더한다. 이상이 해제되면 위 NORMAL 경로로 복귀한다.
+        # 센서 degraded 또는 recovery에서는 원래 PP를 유지하면서 camera 보정을
+        # 작게 더한다. 상태가 정상으로 복귀하면 위 NORMAL 경로로 돌아간다.
         nominal_steering = float(self.last_nominal.steering)
         target_steering = nominal_steering + self.camera_assist_gain * lane_steering
-        mode = "sensor_anomaly_camera_assist"
+        mode = "degraded_camera_assist"
 
         output = copy.deepcopy(self.last_nominal)
         if hasattr(output, "longlCmdType"):

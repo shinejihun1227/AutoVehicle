@@ -1,0 +1,50 @@
+# 최종 융합 제어 설정 + 선택적인 경로 조작 계획.
+# 목록이 비어도 MGeo 차로/신호 연결로 교차로 이벤트를 구성한다.
+# 신호등 화살표는 통행 허가이며 경로 자체를 바꾸지는 않는다.
+#
+# start_s_m : 차선 변경 또는 좌/우회전을 시작할 경로 누적거리(m)
+# end_s_m   : 조작이 끝나는 누적거리(m). 최종 fusion에서는 필수
+# direction : LEFT/RIGHT (좌/우, 좌회전/우회전도 허용)
+# kind      : lane_change 또는 turn 등 기록용 분류
+#
+# 실제 대회 경로의 조작 지점을 측정한 뒤 아래 목록에 등록한다.
+# 예시:
+# maneuvers:
+#   - id: lane_change_left_01
+#     kind: lane_change
+#     start_s_m: 120.0
+#     end_s_m: 145.0
+#     direction: LEFT
+#   - id: right_turn_01
+#     kind: turn
+#     start_s_m: 310.0
+#     end_s_m: 340.0
+#     direction: RIGHT
+
+maneuvers: []
+
+# 최종 모드: 지도 연결이 없거나 모호하면 곡률만으로 통행을 허가하지 않는다.
+require_route_signal_context: true
+# YOLO Cam 4 (UDP 1131)의 실제 설정과 map 좌표 정렬을 검증한 뒤 true.
+# lane/cam_set.json은 Cam 1~3 설정이므로 Cam 4 값으로 복사하면 안 된다.
+# 아래 수치는 미입력 표시이며, calibrated=false에서는 교차로 통과하지 않는다.
+signal_camera:
+  calibrated: false
+  width: 0
+  height: 0
+  horizontal_fov_deg: 0.0
+  x: 0.0
+  y: 0.0
+  z: 0.0
+  pitch_deg: 0.0   # 이 모듈의 convention: 광축이 위를 향하면 양수
+  yaw_deg: 0.0     # base_link x전방/y좌측/z위; 좌향 양수
+
+# 아래 곡률 추정은 require_route_signal_context=false 레거시 시험 전용.
+route_preview_m: 30.0
+turn_threshold_deg: 25.0
+max_route_error_m: 3.0
+input_timeout_sec: 0.5
+signal_timeout_sec: 0.8
+# 일반 녹색에서 우회전 허용. 보행자/LiDAR 안전 정지는 항상 별도 우선한다.
+# 적색 우회전은 자동 허용하지 않는다. 별도 규정/미션 정책이 필요하다.
+right_on_green: true

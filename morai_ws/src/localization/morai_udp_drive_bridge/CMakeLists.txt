@@ -11,6 +11,10 @@ catkin_python_setup()
 
 catkin_package()
 
+if(CATKIN_ENABLE_TESTING)
+  catkin_add_nosetests(test)
+endif()
+
 catkin_install_python(PROGRAMS
   scripts/morai_udp_drive_bridge_node.py
   DESTINATION ${CATKIN_PACKAGE_BIN_DESTINATION}

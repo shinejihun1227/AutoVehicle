@@ -1,5 +1,9 @@
 # 새 Docker에서 곡률 기반 주행·GPS blackout 테스트하기
 
+> **final_ws 통합 주행은 [새 Docker 최종 구성 안내](morai_ws/docs/DOCKER_FINAL_WS_FROM_SCRATCH_KO.md)를 사용하세요.**
+> 아래는 이전 곡률 단독 실험 문서입니다. 최종 센서 융합과 정책이 다르며,
+> 현재 코드의 [미해결 사항](morai_ws/docs/KNOWN_ISSUES_FINAL_WS.md)을 해결하기 전 실제 주행하지 않습니다.
+
 이 문서는 `codex/curvature-only-drive` 브랜치의 코드를 Ubuntu 22.04 호스트에서 새 Docker로 처음 구성하고, ROS Noetic·MORAI 메시지·필요 라이브러리 설치부터 곡률 기반 주행과 GPS blackout 대응까지 순서대로 검증하기 위한 실행 문서다.
 
 이 문서의 기본 원칙은 다음과 같다.
@@ -225,7 +229,6 @@ rospack find morai_msgs
 rospack find morai_perception_msgs
 rospack find stability_stack
 rospack find curvature_speed_purepursuit
-rospack find sensor_noise_estimator
 
 rosmsg show morai_msgs/CtrlCmd
 rosmsg show morai_msgs/GPSMessage
@@ -297,7 +300,7 @@ rostopic echo -n 1 /Imu
 
 ## 10. 곡률 기반 주행 preview
 
-이 launch는 카메라·LiDAR·가상 차량·인위적인 noise injector를 사용하지 않는다. 실제 GPS·IMU를 robust filter와 EKF에 넣고, MGeo Global Path의 3점 곡률을 이용해 Pure Pursuit 조향과 목표 속도를 계산한다.
+이 launch는 카메라·LiDAR·가상 차량·인위적인 noise injector를 사용하지 않는다. 실제 GPS·IMU 원본을 EKF에 넣고, MGeo Global Path의 3점 곡률을 이용해 Pure Pursuit 조향과 목표 속도를 계산한다.
 
 터미널 2에서 제어를 끈 상태로 실행한다.
 
@@ -318,8 +321,7 @@ roslaunch stability_stack morai_udp_ekf_curvature_only.launch \
 
 ```bash
 rostopic hz /localization/gps
-rostopic hz /localization/gps_filtered
-rostopic hz /Imu_filtered
+rostopic hz /localization/gps_health
 rostopic hz /localization/odometry
 ```
 
@@ -341,7 +343,7 @@ rostopic echo /experimental/curvature_goal_reached
 - 고곡률 구간에서 목표 속도가 낮아진다.
 - 경로 마지막 점 근처에서 `curvature_goal_reached`가 true가 되고 최종 속도가 0에 수렴한다.
 
-## 11. GPS blackout·센서 이상 처리 확인
+## 11. GPS blackout 처리 확인
 
 현재 `morai_udp_ekf_curvature_only.launch`의 처리 흐름은 다음과 같다.
 
@@ -435,43 +437,13 @@ rostopic info /ctrl_cmd
 
 곡률 주행 launch와 카메라 fallback launch, 기존 Pure Pursuit launch를 동시에 실행하지 않는다. 모두 `/ctrl_cmd` 또는 동일 UDP 포트를 사용하므로 명령이 충돌할 수 있다.
 
-## 13. 실제 센서 noise 측정은 별도 수행
+## 13. 센서 입력 원칙
 
-고정 noise를 넣어 주행하는 대신 실제 MORAI 원본 GPS·IMU의 분포를 측정하려면 주행 launch를 종료한 뒤 다음을 실행한다.
+대회 규정에 따라 GPS·IMU 원본에 인위적인 noise, outlier, dropout을 추가하지 않는다.
+주행 launch는 원본 센서 토픽을 직접 EKF에 연결하고, GPS 패킷 수신 중단 여부만
+blackout 상태로 감시한다.
 
-```bash
-roslaunch sensor_noise_estimator sensor_noise_measurement.launch \
-  csv_path:=/root/AutoVehicle/morai_ws/data/measurements/raw_sensor_noise.csv
-```
-
-확인 토픽:
-
-```bash
-rostopic echo /localization/noise_statistics
-rostopic echo /localization/noise_statistics_json
-rostopic hz /localization/noise_statistics
-```
-
-이 측정 launch는 차량 제어 명령을 발행하지 않는다. 정지선·신호 대기 구간에서 GPS 중심/분산, GPS gap, gyro 정지 평균, IMU 분산을 수집한 뒤 공식 noise 범위와 비교한다.
-
-주행 launch와 동시에 실행하면 GPS·IMU UDP 포트가 중복될 수 있으므로, 측정 전용으로 실행하거나 이미 raw 센서 source가 있는 경우에만 `start_raw_sources:=false`를 사용한다.
-
-## 14. 인위적인 noise filter 성능 시험은 선택 사항
-
-아래 launch는 고정된 noise injector를 포함하는 실험용 구성이다.
-
-```bash
-roslaunch stability_stack morai_udp_ekf_curvature_stability.launch \
-  workspace_path:=/root/AutoVehicle/morai_ws \
-  path_file:=/root/AutoVehicle/morai_ws/data/routes/2026_molit_comp_global_path.txt \
-  morai_host_ip:=192.168.0.148 \
-  enable_sensor_noise:=true \
-  enable_control:=false
-```
-
-공식 MORAI noise 범위가 확정되기 전에는 실제 주행 결과의 대표값으로 사용하지 않는다. 이 구성은 필터가 인위적인 noise·outlier·dropout을 얼마나 완화하는지 확인하는 A/B 실험용이다.
-
-## 15. 빌드·주행 합격 기준
+## 14. 빌드·주행 합격 기준
 
 다음 항목을 모두 기록하면 1차 통합 테스트를 완료한 것으로 본다.
 
@@ -480,7 +452,7 @@ roslaunch stability_stack morai_udp_ekf_curvature_stability.launch \
 [ ] rospack find morai_msgs 성공
 [ ] rosmsg show CtrlCmd/GPSMessage/EgoVehicleStatus 성공
 [ ] /gps, /Imu 수신 주기 정상
-[ ] /localization/gps_filtered, /Imu_filtered 발행 정상
+[ ] /localization/gps, /Imu 발행 정상
 [ ] /localization/odometry 발행 정상
 [ ] 직선·좌회전·우회전에서 곡률/조향 부호 정상
 [ ] 고곡률 구간에서 속도 제한이 동작함
@@ -491,7 +463,7 @@ roslaunch stability_stack morai_udp_ekf_curvature_stability.launch \
 [ ] 주행 로그·blackout 시간·복구 시간 저장
 ```
 
-## 16. 대표 오류 해결
+## 15. 대표 오류 해결
 
 ### `Could not find a package configuration file ... morai_msgs`
 

@@ -35,9 +35,11 @@ class CameraStream:
         frame, seq = cam.latest()          # 아직 없으면 (None, -1)
     """
 
-    def __init__(self, ip=DEFAULT_IP, port=DEFAULT_PORT):
+    def __init__(self, ip=DEFAULT_IP, port=DEFAULT_PORT, stamp_clock=None):
         self.ip, self.port = ip, port
+        self._stamp_clock = stamp_clock
         self._frame = None
+        self._source_frame = None
         self._seq = -1
         self._lock = threading.Lock()
         self._stop = threading.Event()
@@ -58,6 +60,17 @@ class CameraStream:
                 return None, -1
             return self._frame.copy(), self._seq
 
+    def latest_with_metadata(self):
+        """Return a matched (decoded image, CameraFrame) snapshot atomically.
+
+        The metadata retains receipt time before decoding. ``latest()`` keeps
+        its existing (image, sequence) interface for non-ROS consumers.
+        """
+        with self._lock:
+            if self._frame is None:
+                return None, None
+            return self._frame.copy(), self._source_frame
+
     def wait_first(self, timeout=10.0):
         t0 = time.time()
         while time.time() - t0 < timeout:
@@ -67,7 +80,9 @@ class CameraStream:
         return False
 
     def _worker(self):
-        receiver = LatestCameraReceiver(self.ip, self.port)
+        receiver = LatestCameraReceiver(
+            self.ip, self.port, stamp_clock=self._stamp_clock
+        )
         sequence = 0
         try:
             while not self._stop.is_set():
@@ -83,6 +98,7 @@ class CameraStream:
                 with self._lock:
                     self._frame = image
                     self._seq = sequence
+                    self._source_frame = frame
         except (AttributeError, ValueError, OSError, cv2.error) as ex:
             print(f"[camera] 복구 가능한 오류: {ex}")
         finally:

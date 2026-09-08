@@ -2,8 +2,8 @@
 
 ## 목적
 
-`morai_udp_ekf_curvature_camera_fallback.launch`는 인위적인 GPS/IMU noise topic을
-사용하지 않고, MORAI에서 들어오는 센서 상태를 감시하면서 이상 상황에서만 전방
+`morai_udp_ekf_curvature_camera_fallback.launch`는 GPS/IMU 입력을 변형하지 않고,
+MORAI에서 들어오는 센서 상태를 감시하면서 이상 상황에서만 전방
 카메라 차선 결과를 주행 명령에 연결한다.
 
 정상 상태에서는 기존 곡률 기반 Pure Pursuit를 그대로 사용한다.
@@ -39,8 +39,7 @@ control_mux → /ctrl_cmd → MORAI
 | 상태 | 조향 | 속도 |
 |---|---|---|
 | `NORMAL` | Pure Pursuit 그대로 | 곡률 속도 프로파일 그대로 |
-| `GPS_NOISE` | Pure Pursuit + 작은 차선 보정 | nominal 속도 유지, 상한 적용 |
-| `IMU_NOISE` | Pure Pursuit + 차선 보정 | nominal 속도 유지, 상한 적용 |
+| `SENSOR_DEGRADED` | Pure Pursuit + 작은 차선 보정 | nominal 속도 유지, 상한 적용 |
 | `GPS_BLACKOUT` | 차선 조향을 주 제어로 사용 | nominal 또는 EKF 속도, 상한 적용 |
 | 차선 stale/낮은 confidence | fallback 사용 안 함 | 기본 정지 |
 
@@ -49,26 +48,16 @@ control_mux → /ctrl_cmd → MORAI
 조향을 유지하는 방식이다. 따라서 카메라가 보이지 않으면 자동으로 정지하는 것이
 기본값이다.
 
-## 주행 중 이상 판정
+## 주행 중 상태 판정
 
 `sensor_quality_monitor.py`는 다음을 확인한다.
 
 - GPS 수신 timeout 및 `GpsHealth` blackout 상태
-- 연속 GPS 위치의 물리적으로 큰 jump 또는 비정상 step speed
-- GPS 변환 위치와 EKF 위치의 잔차
-- IMU 연속 샘플 간 gyro/accel 급변
-- 각 이상 상태를 일정 샘플 이상 확인한 뒤 진입
-- 정상 샘플이 연속으로 들어오면 anomaly 상태 해제
+- GPS·IMU 입력 freshness
+- GPS recovery 상태
 
-새 통합 launch의 EKF에는 별도의 입력 gate도 활성화되어 있다. 한 샘플의 GPS
-jump와 EKF 상태 대비 큰 GPS innovation은 `sensor_quality`가 한 주기 늦게 갱신되어도
-즉시 update에서 제외한다. 이 gate는 인위적인 noise를 생성하거나 정상 GPS를
-필터링하는 기능이 아니라, 물리적으로 불가능한 측정이 상태를 오염시키는 것을
-막는 장치다.
-
-GPS/IMU 공식 노이즈 범위를 아직 모르므로 threshold는 노이즈를 가정해 넣은 값이
-아니다. 오검출 방지를 위한 초기 이상 감지 gate이며, MORAI 공식 범위와 실제 로그를
-확보한 뒤 조정해야 한다.
+센서 값 자체에는 인위적인 noise를 추가하지 않는다. EKF는 원본 GPS·IMU를 직접
+사용하고, GPS blackout 상태일 때만 GPS update를 중지한다.
 
 ## 실행
 

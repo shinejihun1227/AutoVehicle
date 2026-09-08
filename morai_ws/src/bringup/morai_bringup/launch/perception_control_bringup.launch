@@ -10,7 +10,11 @@
   <arg name="use_roi_sensor_stack" default="false" />
   <arg name="enable_sensor_quality" default="false" />
   <arg name="enable_lane_fallback" default="false" />
-  <arg name="enable_stopline_control" default="true" />
+  <arg name="enable_stopline_control" default="$(arg use_roi_sensor_stack)" />
+  <arg name="stopline_front_reference_offset_m" default="3.845" />
+  <arg name="stopline_hold_distance_m" default="0.5" />
+  <arg name="stopline_max_decel_mps2" default="1.5" />
+  <arg name="stopline_planning_decel_mps2" default="1.0" />
   <arg name="enable_roi_camera" default="false" />
   <arg name="enable_roi_lidar" default="true" />
   <arg name="roi_camera_stack_root" default="$(arg workspace_path)" />
@@ -37,6 +41,15 @@
   <arg name="lane_loss_grace_sec" default="0.25" />
   <arg name="recovery_stable_sec" default="1.0" />
   <arg name="traffic_light_mux_topic" default="/detection/traffic_light" />
+  <arg name="enable_turn_signal" default="false" />
+  <arg name="enable_maneuver_fusion" default="false" />
+  <arg name="turn_signal_lead_time_sec" default="5.0" />
+  <arg name="turn_signal_remote_port" default="9097" />
+  <arg name="turn_signal_maneuvers_file" default="$(find turn_signal_controller)/config/turn_signal_maneuvers.yaml" />
+  <arg name="signal_mgeo_path" default="$(find camera_perception)/lane/mgeo/R_KR_PR_K-city_2025" />
+  <arg name="max_speed_kph" default="7.2" />
+  <arg name="turn_signal_progress_topic" default="/experimental/curvature_progress" />
+  <arg name="turn_signal_odometry_topic" default="/localization/odometry" />
   <arg name="require_fresh_safety" default="true" />
   <arg name="publish_lidar_static_tf" default="false" />
   <arg name="lidar_x_m" default="0.0" />
@@ -54,6 +67,8 @@
     <arg name="control_remote_port" value="$(arg control_remote_port)" />
     <arg name="enable_control" value="$(arg enable_control)" />
     <arg name="use_curvature_speed_planner" value="$(arg use_curvature_speed_planner)" />
+    <arg name="max_speed_kph" value="$(arg max_speed_kph)" />
+    <arg name="target_speed_kph" value="$(arg max_speed_kph)" />
     <arg name="command_topic" value="/control/ctrl_cmd" />
     <arg name="use_sensor_quality_gate" value="$(arg enable_sensor_quality)" />
     <arg name="quality_topic" value="/localization/sensor_quality" />
@@ -85,6 +100,8 @@
       <arg name="lane_detection_topic" value="$(arg lane_detection_topic)" />
       <arg name="lane_quality_topic" value="$(arg lane_quality_topic)" />
       <arg name="stopline_topic" value="$(arg stopline_topic)" />
+      <arg name="traffic_light_stop_topic" value="$(arg stopline_signal_topic)" />
+      <arg name="traffic_light_state_topic" value="$(arg stopline_signal_state_topic)" />
     </include>
 
     <!-- ROI 브랜치의 LiDAR clustering·box·tracking·merge-gap 스택. -->
@@ -107,13 +124,19 @@
       <param name="safety_topic" value="/detection/fused_safety_stop" />
       <param name="stop_distance_m" value="$(arg roi_lidar_stop_distance_m)" />
       <param name="require_fresh_lidar" value="$(arg enable_roi_lidar)" />
-      <param name="traffic_stop_topic" value="/perception/traffic_light/stop_required" />
+      <param name="require_fresh_camera_stops" value="$(eval arg('enable_roi_camera') and arg('roi_enable_yolo'))" />
+      <param name="require_source_stamps" value="true" />
+      <param name="front_reference_offset_m" value="$(arg stopline_front_reference_offset_m)" />
+      <!-- Signal stopping belongs to the stopline wrapper when enabled.
+           Its death/stale output is covered by fallback/mux command timeouts. -->
+      <param if="$(arg enable_stopline_control)" name="traffic_stop_topic" value="" />
+      <param unless="$(arg enable_stopline_control)" name="traffic_stop_topic" value="$(arg stopline_signal_topic)" />
       <param name="pedestrian_stop_topic" value="/perception/pedestrian_crossing/stop_required" />
       <param name="intersection_stop_topic" value="/perception/intersection/driving_unavailable" />
     </node>
   </group>
 
-  <!-- GPS 상태와 주행 중 GPS/IMU 이상을 감시한다. fallback을 켠 경우에만
+  <!-- GPS 상태와 주행 중 GPS/IMU 입력 freshness를 감시한다. fallback을 켠 경우에만
        시작해 기존 단독 주행 런치의 토픽 계약을 보존한다. -->
   <node if="$(arg enable_sensor_quality)"
         pkg="stability_stack"
@@ -133,7 +156,8 @@
         type="stopline_controller.py"
         name="final_ws_stopline_controller"
         output="screen">
-    <param name="enabled" value="$(arg enable_stopline_control)" />
+    <!-- Fusion owns the stop-line core downstream of lane fallback. -->
+    <param name="enabled" value="$(eval arg('enable_stopline_control') and not arg('enable_maneuver_fusion'))" />
     <param name="nominal_command_topic" value="/control/ctrl_cmd" />
     <param name="output_command_topic" value="/control/stopline_cmd" />
     <param name="stopline_topic" value="$(arg stopline_topic)" />
@@ -141,9 +165,11 @@
     <param name="signal_state_topic" value="$(arg stopline_signal_state_topic)" />
     <param name="odom_topic" value="/localization/odometry" />
     <param name="longl_cmd_type" value="1" />
-    <param name="max_decel_mps2" value="1.5" />
+    <param name="max_decel_mps2" value="$(arg stopline_max_decel_mps2)" />
+    <param name="planning_decel_mps2" value="$(arg stopline_planning_decel_mps2)" />
+    <param name="front_reference_offset_m" value="$(arg stopline_front_reference_offset_m)" />
     <param name="reaction_time_sec" value="0.3" />
-    <param name="hold_distance_m" value="0.5" />
+    <param name="hold_distance_m" value="$(arg stopline_hold_distance_m)" />
     <param name="approach_distance_m" value="20.0" />
     <param name="trigger_margin_m" value="1.0" />
     <param name="status_topic" value="/control/stopline_status" />
@@ -156,10 +182,48 @@
         output="screen">
     <param name="gps_topic" value="/localization/gps" />
     <param name="imu_topic" value="/Imu" />
-    <param name="odom_topic" value="/localization/odometry" />
     <param name="health_topic" value="/localization/gps_health" />
     <param name="quality_topic" value="/localization/sensor_quality" />
     <param name="status_topic" value="/stability/sensor_quality_status" />
+  </node>
+
+  <!-- 차선 변경/좌우회전 시작 5초 전 MORAI 방향지시등을 켠다. -->
+  <node if="$(eval arg('enable_turn_signal') and not arg('enable_maneuver_fusion'))"
+        pkg="turn_signal_controller"
+        type="turn_signal_node.py"
+        name="final_ws_turn_signal_controller"
+        output="screen">
+    <param name="remote_ip" value="$(arg morai_host_ip)" />
+    <param name="remote_port" value="$(arg turn_signal_remote_port)" />
+    <param name="progress_topic" value="$(arg turn_signal_progress_topic)" />
+    <param name="odometry_topic" value="$(arg turn_signal_odometry_topic)" />
+    <param name="lead_time_sec" value="$(arg turn_signal_lead_time_sec)" />
+    <rosparam file="$(arg turn_signal_maneuvers_file)" command="load" />
+  </node>
+
+  <node if="$(arg enable_maneuver_fusion)"
+        pkg="turn_signal_controller" type="maneuver_fusion_node.py"
+        name="final_ws_maneuver_fusion" output="screen">
+    <rosparam file="$(arg turn_signal_maneuvers_file)" command="load" />
+    <param name="path_file" value="$(arg path_file)" />
+    <param name="signal_mgeo_path" value="$(arg signal_mgeo_path)" />
+    <param name="nominal_command_topic" value="$(eval '/control/camera_fallback_cmd' if arg('enable_lane_fallback') else '/control/stopline_cmd')" />
+    <param name="output_command_topic" value="/control/maneuver_cmd" />
+    <param name="signal_topic" value="/perception/traffic_light/directional_state" />
+    <param name="stopline_topic" value="$(arg stopline_topic)" />
+    <param name="odometry_topic" value="$(arg turn_signal_odometry_topic)" />
+    <param name="safety_topic" value="/detection/fused_safety_stop" />
+    <param name="require_fresh_safety" value="$(arg require_fresh_safety)" />
+    <param name="require_sensor_quality" value="$(arg enable_sensor_quality)" />
+    <param name="require_fresh_camera_stream" value="$(eval arg('enable_roi_camera') and arg('roi_enable_lane') and arg('roi_enable_yolo'))" />
+    <param name="front_reference_offset_m" value="$(arg stopline_front_reference_offset_m)" />
+    <param name="hold_distance_m" value="$(arg stopline_hold_distance_m)" />
+    <param name="max_decel_mps2" value="$(arg stopline_max_decel_mps2)" />
+    <param name="planning_decel_mps2" value="$(arg stopline_planning_decel_mps2)" />
+    <param name="lamp_output_enabled" value="$(eval arg('enable_control') and arg('enable_turn_signal'))" />
+    <param name="remote_ip" value="$(arg morai_host_ip)" />
+    <param name="remote_port" value="$(arg turn_signal_remote_port)" />
+    <param name="lead_time_sec" value="$(arg turn_signal_lead_time_sec)" />
   </node>
 
   <!-- 정상 nominal 명령과 차선 fallback 명령을 하나의 최종 mux 입력으로
@@ -191,7 +255,7 @@
   <!-- 5. 단일 최종 제어 명령 발행자 -->
   <group unless="$(arg enable_lane_fallback)">
     <include file="$(find control_mux)/launch/control_mux.launch">
-      <arg name="nominal_command_topic" value="/control/stopline_cmd" />
+      <arg name="nominal_command_topic" value="$(eval '/control/maneuver_cmd' if arg('enable_maneuver_fusion') else '/control/stopline_cmd')" />
       <arg name="output_command_topic" value="/ctrl_cmd" />
       <arg name="safety_stop_topic" value="/detection/fused_safety_stop" />
       <arg name="traffic_light_topic" value="$(arg traffic_light_mux_topic)" />
@@ -203,7 +267,7 @@
 
   <group if="$(arg enable_lane_fallback)">
     <include file="$(find control_mux)/launch/control_mux.launch">
-      <arg name="nominal_command_topic" value="/control/camera_fallback_cmd" />
+      <arg name="nominal_command_topic" value="$(eval '/control/maneuver_cmd' if arg('enable_maneuver_fusion') else '/control/camera_fallback_cmd')" />
       <arg name="output_command_topic" value="/ctrl_cmd" />
       <arg name="safety_stop_topic" value="/detection/fused_safety_stop" />
       <arg name="traffic_light_topic" value="$(arg traffic_light_mux_topic)" />

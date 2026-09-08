@@ -1,5 +1,12 @@
 # final_ws 통합 안내
 
+최종 실행에는 신호 방향·경로·정지선·LiDAR 안전 결과를 연결한 `maneuver_fusion`이
+기본 활성화된다. 앞범퍼 정지 목표는 0.5m이며 방향지시등은 최소 5초 선행 점등한다.
+현재 제어 연결과 실행 설정은 [신호·정지선 융합 안내](MANEUVER_SENSOR_FUSION.md)를 참고한다.
+MGeo 경로별 신호 연결과 Cam4 영상 투영을 기본 사용한다. Cam4 보정값이 미확인되어
+`signal_camera.calibrated=false` 상태에서는 교차로 통행을 허가하지 않는다.
+시나리오 JSON 로드·네트워크·3km/h 시험은 [시나리오 주행 시험 가이드](SCENARIO_DRIVING_TEST_KO.md)를 따른다.
+
 ## 통합 기준
 
 `final_ws`는 다음 두 소스를 하나의 `morai_ws` catkin workspace로 합친다.
@@ -86,7 +93,7 @@ yaw를 사용해 `base_link` 기준 전방 corridor로 변환한다. 카메라�
 ```text
 NORMAL
   -> 기존 MGeo Pure Pursuit nominal 통과
-GPS_NOISE / IMU_NOISE
+SENSOR_DEGRADED
   -> nominal 조향 + 차선 보정
 GPS_BLACKOUT + 차선 confidence 0.80 이상이 5회 연속
   -> 차선 조향 중심 fallback, 속도 7.2km/h(2.0m/s) 상한

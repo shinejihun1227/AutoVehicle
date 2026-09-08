@@ -6,6 +6,10 @@
   <arg name="signal_stop_topic" default="/perception/traffic_light/stop_required" />
   <arg name="signal_state_topic" default="/perception/traffic_light/state" />
   <arg name="odom_topic" default="/localization/odometry" />
+  <arg name="front_reference_offset_m" default="3.845" />
+  <arg name="hold_distance_m" default="0.5" />
+  <arg name="max_decel_mps2" default="1.5" />
+  <arg name="planning_decel_mps2" default="1.0" />
 
   <node pkg="stopline_control"
         type="stopline_controller.py"
@@ -19,9 +23,11 @@
     <param name="signal_state_topic" value="$(arg signal_state_topic)" />
     <param name="odom_topic" value="$(arg odom_topic)" />
     <param name="longl_cmd_type" value="1" />
-    <param name="max_decel_mps2" value="1.5" />
+    <param name="max_decel_mps2" value="$(arg max_decel_mps2)" />
+    <param name="planning_decel_mps2" value="$(arg planning_decel_mps2)" />
+    <param name="front_reference_offset_m" value="$(arg front_reference_offset_m)" />
     <param name="reaction_time_sec" value="0.3" />
-    <param name="hold_distance_m" value="0.5" />
+    <param name="hold_distance_m" value="$(arg hold_distance_m)" />
     <param name="approach_distance_m" value="20.0" />
     <param name="trigger_margin_m" value="1.0" />
   </node>

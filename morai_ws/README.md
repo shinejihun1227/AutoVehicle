@@ -1,5 +1,10 @@
 # MORAI 통합 작업공간
 
+> 현재 `final_ws`는 구현 백업본이며 주행 승인본이 아닙니다.
+> [미해결 안전 문제와 검증 조건](docs/KNOWN_ISSUES_FINAL_WS.md)을 먼저 확인하세요.
+
+새 환경 설치와 최종 실행은 [Docker 구성·주행 시험 안내](docs/DOCKER_FINAL_WS_FROM_SCRATCH_KO.md)를 사용합니다.
+
 이 폴더를 앞으로 사용하는 단일 기준 저장소로 정합니다. 기존 `ros_ws*`,
 `run+camera`, `running` 폴더의 코드는 정리 대상이며, 필요한 개념과 설정은
 이 폴더의 문서로만 관리합니다.
@@ -94,13 +99,14 @@ flowchart LR
 ## 현재 권장 실행 순서
 
 1. `localization_purepursuit.launch`를 `enable_control=false`로 실행해 GPS·IMU·EKF를 확인한다.
-2. 실제 `/localization/odometry`를 입력으로 `curvature_speed_purepursuit_noisy.launch`를
+2. 실제 `/localization/odometry`를 입력으로 `curvature_speed_purepursuit.launch`를
    `publish_command=false`로 실행한다.
 3. 카메라·LiDAR·안전정지·control mux를 `perception_control_bringup.launch`에서 확인한다.
 4. 모든 검증이 끝난 뒤에만 실제 MORAI 제어 명령을 연결한다.
 
-기존 Pure Pursuit와 새 곡률 기반 Pure Pursuit를 동시에 실행하지 않습니다. 새 실험은
-`/experimental/*` 토픽을 사용하고, 기존 주행은 `/ctrl_cmd` 체계를 사용합니다.
+기존 Pure Pursuit와 새 곡률 기반 Pure Pursuit를 동시에 실행하지 않습니다. 센서
+입력은 MORAI 원본 토픽을 사용하며, 미리보기 결과는 `/experimental/*` 토픽으로
+확인할 수 있습니다.
 
 ## final_ws 통합 실행
 

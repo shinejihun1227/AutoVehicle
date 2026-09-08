@@ -49,19 +49,28 @@ from lib.define.Camera import Camera
 
 @dataclass(frozen=True)
 class CameraFrame:
-    """Immutable snapshot of one complete MORAI JPEG frame."""
+    """Immutable JPEG and its local receive times, before decode/inference.
+
+    ``received_at`` is monotonic time at receipt of the completing UDP packet.
+    ``received_stamp`` comes from the optional caller clock (e.g. ROS Time.now).
+    MORAI sec/nsec remain metadata: they need not share the caller's clock.
+    """
 
     sequence: int
     sec: int
     nsec: int
     index: int
     jpeg_data: bytes
+    received_at: float = 0.0
+    received_stamp: object = None
 
 
 class LatestCameraReceiver:
     """Receive MORAI camera UDP data without accumulating stale frames."""
 
-    def __init__(self, ip, port, receive_buffer_bytes=4 * 1024 * 1024):
+    def __init__(self, ip, port, receive_buffer_bytes=4 * 1024 * 1024,
+                 stamp_clock=None):
+        self._stamp_clock = stamp_clock
         self._latest_frame = None
         self._sequence = 0
         self._closed = False
@@ -109,6 +118,10 @@ class LatestCameraReceiver:
                 continue
 
             now = time.monotonic()
+            # Sample the caller's clock at receive, before JPEG assembly and
+            # all downstream waiting/decode/inference. Never substitute MORAI
+            # sec/nsec or a later publication time for this observation time.
+            received_stamp = self._stamp_clock() if self._stamp_clock else None
             # A long packet gap means any partial JPEG from before the gap is
             # no longer trustworthy. Drop it instead of joining two frames.
             if (
@@ -146,13 +159,15 @@ class LatestCameraReceiver:
 
             with self._condition:
                 self._sequence += 1
-                self._last_frame_at = time.monotonic()
+                self._last_frame_at = now
                 self._latest_frame = CameraFrame(
                     sequence=self._sequence,
                     sec=int(self._packet.image.sec),
                     nsec=int(self._packet.image.nsec),
                     index=int(self._packet.image.index),
                     jpeg_data=jpeg_data,
+                    received_at=now,
+                    received_stamp=received_stamp,
                 )
                 self._condition.notify_all()
 

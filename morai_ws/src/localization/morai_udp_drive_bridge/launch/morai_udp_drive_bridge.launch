@@ -4,6 +4,7 @@
   <arg name="status_port" default="909" />
   <arg name="status_topic" default="/Ego_topic" />
   <arg name="status_frame_id" default="map" />
+  <arg name="control_output_enabled" default="true" />
   <arg name="control_remote_ip" default="192.168.0.151" />
   <!-- MORAI Network Settings의 Cmd Control Destination Port와 맞춘다. -->
   <arg name="control_remote_port" default="9093" />
@@ -21,6 +22,7 @@
     <param name="status_port" value="$(arg status_port)" />
     <param name="status_topic" value="$(arg status_topic)" />
     <param name="status_frame_id" value="$(arg status_frame_id)" />
+    <param name="control_output_enabled" type="bool" value="$(arg control_output_enabled)" />
     <param name="control_remote_ip" value="$(arg control_remote_ip)" />
     <param name="control_remote_port" value="$(arg control_remote_port)" />
     <param name="control_bind_ip" value="$(arg control_bind_ip)" />

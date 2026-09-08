@@ -177,7 +177,10 @@ def main(argv=None):
           f"device={pipe.device} 보닛 {pipe.bonnet_source} "
           f"추적 {'끔' if args.no_track else '켬'}")
 
-    cam = CameraStream(args.ip, args.port).start()
+    cam = CameraStream(
+        args.ip, args.port,
+        stamp_clock=rospy.Time.now if rospy is not None else None,
+    ).start()
     print(f"[live] {args.ip}:{args.port} 대기 중...")
     if not cam.wait_first(timeout=15.0):
         raise SystemExit("카메라 프레임이 안 옵니다. 시뮬레이터와 IP/포트를 확인하세요.")
@@ -195,7 +198,8 @@ def main(argv=None):
     try:
         while rospy is None or not rospy.is_shutdown():
             if not paused:
-                f, seq = cam.latest()
+                f, source_frame = cam.latest_with_metadata()
+                seq = source_frame.sequence if source_frame is not None else -1
                 if f is not None and seq != last_seq:
                     last_seq = seq
                     n_since += 1
@@ -205,6 +209,13 @@ def main(argv=None):
                         res = pipe.run(frame)
                         quality = quality_estimator.update(res)
                         if rospy is not None:
+                            # Unknown/zero receive stamps stay unknown. Decode,
+                            # frame skipping and inference must not renew age.
+                            frame_stamp = (
+                                source_frame.received_stamp
+                                if source_frame.received_stamp is not None
+                                else rospy.Time()
+                            )
                             left_dashed = bool(
                                 res.ego_left is not None
                                 and res.ego_left.is_dashed
@@ -243,21 +254,24 @@ def main(argv=None):
                                 )
                             )
                             stopline_message = StopLineDetection()
-                            stopline_message.header.stamp = rospy.Time.now()
-                            stopline_message.header.frame_id = "front_camera"
+                            stopline_message.header.seq = seq
+                            stopline_message.header.stamp = frame_stamp
+                            # Pipeline distance is measured from the BEV ego
+                            # origin; front/bumper offsets belong to control.
+                            stopline_message.header.frame_id = "base_link"
                             stopline_message.valid = bool(stopline_detected)
                             stopline_message.distance_m = float(
                                 res.stopline_dist if stopline_detected else 0.0
                             )
-                            # 현재 pipeline은 별도의 stopline 확률을 제공하지
-                            # 않으므로 유효성 기반 보수값을 사용한다. 후속 모델에서
-                            # confidence가 나오면 이 필드를 바로 교체한다.
-                            stopline_message.confidence = float(
-                                quality["confidence"] if stopline_detected else 0.0
+                            # Detector binary validity proxy (1/0), NOT a
+                            # calibrated probability or lane-quality score.
+                            stopline_message.confidence = (
+                                1.0 if stopline_detected else 0.0
                             )
                             stopline_publisher.publish(stopline_message)
                             lane_message = LaneDetection()
-                            lane_message.header.stamp = rospy.Time.now()
+                            lane_message.header.seq = seq
+                            lane_message.header.stamp = frame_stamp
                             lane_message.header.frame_id = "front_camera"
                             lane_message.lateral_offset_m = float(
                                 quality["lateral_error"]
@@ -333,14 +347,13 @@ def main(argv=None):
                 right_solid_publisher.publish(Bool(data=False))
                 stopline_detected_publisher.publish(Bool(data=False))
                 invalid_stopline = StopLineDetection()
-                invalid_stopline.header.stamp = rospy.Time.now()
-                invalid_stopline.header.frame_id = "front_camera"
+                # Shutdown is not a camera observation: leave stamp unknown.
+                invalid_stopline.header.frame_id = "base_link"
                 invalid_stopline.valid = False
                 invalid_stopline.distance_m = 0.0
                 invalid_stopline.confidence = 0.0
                 stopline_publisher.publish(invalid_stopline)
                 invalid_lane = LaneDetection()
-                invalid_lane.header.stamp = rospy.Time.now()
                 invalid_lane.header.frame_id = "front_camera"
                 invalid_lane.confidence = 0.0
                 invalid_lane.valid = False

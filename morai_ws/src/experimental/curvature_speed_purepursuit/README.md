@@ -3,8 +3,8 @@
 기본 실행은 기존 `purepursuit_mgeo`, `control_mux`, `/ctrl_cmd`와 분리된
 미리보기 모드다. 통합 launch에서 선택하면 이 패키지가 nominal 제어기로 연결된다.
 
-기존 주행 코드를 보존한 채 곡률 주행과 localization 입력 노이즈 내성을 함께
-시험할 수 있도록 구성되어 있다.
+기존 주행 코드를 보존한 채 곡률 기반 주행 제어를 독립적으로 시험할 수 있도록
+구성되어 있다. 센서 입력은 MORAI에서 들어온 원본 토픽을 그대로 사용한다.
 
 ## 처리 내용
 
@@ -40,49 +40,6 @@ roslaunch curvature_speed_purepursuit curvature_speed_purepursuit.launch \
 /experimental/curvature_goal_reached
 ```
 
-## 노이즈 포함 실제 localization 미리보기
-
-노이즈 포함 시험에서는 다음 순서로 데이터가 흐른다.
-
-```text
-raw odometry
-  -> artificial white noise + bias random walk + dropout
-  -> noisy odometry
-  -> median + EMA + jump/speed/yaw rejection
-  -> filtered odometry
-  -> curvature-speed Pure Pursuit
-  -> /experimental/curvature_ctrl_cmd
-```
-
-실행 명령:
-
-```bash
-roslaunch curvature_speed_purepursuit curvature_speed_purepursuit_noisy.launch \
-  path_file:=/home/<user>/morai_ws/data/routes/2026_molit_comp_global_path.txt \
-  input_topic:=/localization/odometry
-```
-
-기본값은 `publish_command=false`이므로 실험 명령을 발행하지 않는다. 결과 확인이
-끝난 뒤에만 다음처럼 별도 명령 토픽 발행을 켤 수 있다.
-
-```bash
-roslaunch curvature_speed_purepursuit curvature_speed_purepursuit_noisy.launch \
-  publish_command:=true
-```
-
-노이즈 시험 관련 토픽은 다음과 같다.
-
-```text
-/experimental/curvature_noisy_odometry
-/experimental/curvature_filtered_odometry
-/experimental/curvature_noise_filter_status
-/experimental/curvature_ctrl_cmd
-```
-
-주의: 이 노이즈 노드는 `/gps`, `/Imu`의 원시 센서 노이즈를 재현하는 것이 아니라
-곡률 제어기에 들어가는 `nav_msgs/Odometry` 입력의 noise robustness를 시험한다.
-실제 GPS/IMU/EKF 단계의 노이즈 검증은 기존 `stability_stack` 실험과 별도로 수행한다.
-
 ## 주요 파라미터
 
 ```text
@@ -99,28 +56,11 @@ curvature_smoothing_window    곡률 median window
 lookahead_min_m               최소 lookahead
 lookahead_gain                속도에 따른 lookahead 증가량
 final_speed_mps               마지막 종료점 목표속도
-pose_timeout_sec              filtered odometry가 끊겼을 때 정지하는 시간
+pose_timeout_sec              odometry가 끊겼을 때 정지하는 시간
 ```
 
-노이즈/필터 launch 파라미터:
-
-```text
-position_noise_std_m          위치 white noise 표준편차
-yaw_noise_std_rad             yaw white noise 표준편차
-velocity_noise_std_mps        속도 white noise 표준편차
-position_bias_random_walk_m_sqrt_s  위치 bias random walk 세기
-yaw_bias_random_walk_rad_sqrt_s     yaw bias random walk 세기
-velocity_bias_random_walk_mps_sqrt_s 속도 bias random walk 세기
-dropout_probability           측정 dropout 확률
-median_window_size            median 필터 창 크기
-ema_alpha                     EMA 반응 비율
-max_position_jump_m           위치 jump 거부 기준
-max_measurement_speed_mps     측정 위치로 계산한 속도 거부 기준(위치 noise 차분을 고려해 초기값 50)
-max_yaw_jump_rad              yaw jump 거부 기준
-```
-
-현재 값은 동작 확인을 위한 초기 시험값이다. 실제 센서 주기와 차량 속도,
-GPS/IMU 오차 수준에 맞춰 노이즈 크기와 rejection threshold를 조정해야 한다.
+현재 값은 동작 확인을 위한 초기 시험값이다. 실제 차량의 경로·속도·조향 방향에
+맞춰 제어 파라미터를 조정해야 한다.
 
 속도 입력·목표속도·속도 모니터링 토픽은 km/h 단위다. 곡률은 1/m,
 경로의 거리와 가속도 제한은 각각 m, m/s² 단위를 사용하며 내부 물리 계산 전에

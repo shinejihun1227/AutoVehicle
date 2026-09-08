@@ -123,14 +123,7 @@ class LocalEnuEkf:
     def gps_update_allowed(self) -> bool:
         if not self.quality_fresh():
             return True
-        return not bool(
-            self.latest_quality.gps_blackout or self.latest_quality.gps_noisy
-        )
-
-    def imu_prediction_allowed(self) -> bool:
-        if not self.quality_fresh():
-            return True
-        return not bool(self.latest_quality.imu_noisy)
+        return not bool(self.latest_quality.gps_blackout)
 
     def imu_callback(self, msg: Imu) -> None:
         stamp = stamp_seconds(msg.header.stamp)
@@ -154,13 +147,6 @@ class LocalEnuEkf:
         self.last_imu_stamp = stamp
         if not 0.0001 < dt <= 0.25:
             rospy.logwarn_throttle(5.0, "IMU dt가 비정상이라 예측을 건너뛴다: %.6f", dt)
-            return
-
-        if not self.imu_prediction_allowed():
-            rospy.logwarn_throttle(
-                2.0,
-                "sensor_quality가 IMU noise를 판정하여 해당 IMU prediction을 건너뛴다.",
-            )
             return
 
         self.predict(
@@ -224,7 +210,7 @@ class LocalEnuEkf:
         if not self.gps_update_allowed():
             rospy.logwarn_throttle(
                 2.0,
-                "sensor_quality가 GPS blackout/noise를 판정하여 GPS update를 건너뛴다.",
+                "sensor_quality가 GPS blackout을 판정하여 GPS update를 건너뛴다.",
             )
             return
 

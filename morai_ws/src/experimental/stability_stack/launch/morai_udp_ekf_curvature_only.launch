@@ -5,8 +5,7 @@
     MORAI UDP
       -> /gps, /Imu
       -> GPS 변환 /localization/gps
-      -> GPS robust filter /localization/gps_filtered
-      -> IMU robust filter /Imu_filtered
+      -> raw GPS/IMU
       -> ENU EKF /localization/odometry
       -> 곡률 기반 속도 계획 + Pure Pursuit
          /control/curvature_only_cmd
@@ -15,7 +14,7 @@
       -> control_mux /ctrl_cmd
       -> MORAI UDP 제어
 
-    이 파일에는 카메라, LiDAR, 가상차량, 인위적 센서 노이즈 생성기를 포함하지 않는다.
+    이 파일에는 카메라, LiDAR, 가상차량, 센서 노이즈 생성기·필터를 포함하지 않는다.
     한 바퀴 주행을 기준으로 경로의 마지막 점에 도달하면 정지하도록 설정한다.
     enable_control=false가 기본값이므로 먼저 토픽을 확인한 뒤 true로 실행한다.
 
@@ -36,7 +35,7 @@
   <arg name="imu_port" default="4001" />
   <arg name="ego_status_port" default="909" />
 
-  <!-- 실제 MORAI 센서 데이터만 사용한다. 고정 노이즈를 삽입하지 않는다. -->
+  <!-- 실제 MORAI 센서 데이터만 사용한다. 센서 입력을 변형하지 않는다. -->
   <arg name="enable_control" default="false" />
   <arg name="gps_blackout_timeout_sec" default="0.5" />
   <arg name="gps_recovery_valid_samples" default="5" />
@@ -86,33 +85,7 @@
     <arg name="gps_xyz_z" value="1.2" />
   </include>
 
-  <!-- 5. 실제 GPS·IMU 데이터의 spike·jump 완화 -->
-  <node pkg="stability_stack"
-        type="imu_robust_filter.py"
-        name="curvature_only_imu_robust_filter"
-        output="screen">
-    <param name="input_topic" value="/Imu" />
-    <param name="output_topic" value="/Imu_filtered" />
-    <param name="status_topic" value="/stability/curvature_only_imu_filter_status" />
-    <param name="ema_alpha" value="0.35" />
-    <param name="max_gyro_jump_rad_s" value="2.0" />
-    <param name="max_accel_jump_m_s2" value="10.0" />
-    <param name="filter_orientation_yaw" value="true" />
-    <param name="max_yaw_jump_rad" value="0.7853981634" />
-  </node>
-
-  <node pkg="stability_stack"
-        type="gps_robust_filter.py"
-        name="curvature_only_gps_robust_filter"
-        output="screen">
-    <param name="input_topic" value="/localization/gps" />
-    <param name="output_topic" value="/localization/gps_filtered" />
-    <param name="max_position_jump_m" value="5.0" />
-    <param name="max_speed_mps" value="15.0" />
-    <param name="median_window_size" value="3" />
-  </node>
-
-  <!-- 6. 원본 /gps 수신 중단과 status=0 감시 -->
+  <!-- 5. 원본 /gps 수신 중단과 status=0 감시 -->
   <node pkg="stability_stack"
         type="gps_blackout_detector.py"
         name="curvature_only_gps_blackout_detector"
@@ -124,24 +97,21 @@
     <param name="recovery_valid_samples" value="$(arg gps_recovery_valid_samples)" />
   </node>
 
-  <!-- 7. filtered GPS + filtered IMU -> ENU EKF -->
+  <!-- 6. raw GPS + raw IMU -> ENU EKF -->
   <include file="$(find ekf_local_enu)/launch/ekf_local_enu.launch">
-    <arg name="gps_topic" value="/localization/gps_filtered" />
-    <arg name="imu_topic" value="/Imu_filtered" />
+    <arg name="gps_topic" value="/localization/gps" />
+    <arg name="imu_topic" value="/Imu" />
     <arg name="default_gps_variance_m2" value="1.0" />
     <arg name="default_yaw_std_deg" value="8.0" />
     <arg name="gyro_noise_std_rad_s" value="0.08" />
     <arg name="accel_noise_std_m_s2" value="0.8" />
     <arg name="bias_random_walk" value="0.001" />
     <arg name="use_sensor_quality_gate" value="false" />
-    <arg name="enable_gps_jump_gate" value="true" />
-    <arg name="gps_jump_gate_m" value="5.0" />
-    <arg name="gps_speed_gate_mps" value="15.0" />
-    <arg name="enable_gps_innovation_gate" value="true" />
-    <arg name="gps_innovation_gate_m" value="8.0" />
+    <arg name="enable_gps_jump_gate" value="false" />
+    <arg name="enable_gps_innovation_gate" value="false" />
   </include>
 
-  <!-- 8. EKF pose -> 곡률 기반 속도 계획 + Pure Pursuit -->
+  <!-- 7. EKF pose -> 곡률 기반 속도 계획 + Pure Pursuit -->
   <node pkg="curvature_speed_purepursuit"
         type="curvature_speed_purepursuit_node.py"
         name="curvature_only_purepursuit"
@@ -178,7 +148,7 @@
     <param name="progress_backtrack_tolerance_m" value="2.0" />
   </node>
 
-  <!-- 9. GPS blackout/recovery 중 조향 변화와 속도 변화를 안정화 -->
+  <!-- 8. GPS blackout/recovery 중 조향 변화와 속도 변화를 안정화 -->
   <node pkg="stability_stack"
         type="gps_blackout_stability_controller.py"
         name="curvature_only_blackout_stability_controller"
@@ -195,7 +165,7 @@
     <param name="max_velocity_rate_mps2" value="1.0" />
   </node>
 
-  <!-- 10. 최종 제어 중재: /control/curvature_only_stable_cmd -> /ctrl_cmd -->
+  <!-- 9. 최종 제어 중재: /control/curvature_only_stable_cmd -> /ctrl_cmd -->
   <include file="$(find control_mux)/launch/control_mux.launch">
     <arg name="nominal_command_topic" value="/control/curvature_only_stable_cmd" />
     <arg name="output_command_topic" value="/ctrl_cmd" />

@@ -11,6 +11,12 @@
   <arg name="enable_control" default="false" />
   <arg name="enable_lane_fallback" default="true" />
   <arg name="enable_stopline_control" default="true" />
+  <!-- Rear-axle base_link -> front bumper: wheelbase 3.000 + overhang 0.845.
+       Recalibrate if the simulator/BEV origin is not the rear axle. -->
+  <arg name="stopline_front_reference_offset_m" default="3.845" />
+  <arg name="stopline_hold_distance_m" default="0.5" />
+  <arg name="stopline_max_decel_mps2" default="1.5" />
+  <arg name="stopline_planning_decel_mps2" default="1.0" />
   <arg name="enable_roi_camera" default="true" />
   <arg name="enable_roi_lidar" default="true" />
   <arg name="roi_enable_lane" default="true" />
@@ -25,6 +31,13 @@
   <arg name="lane_loss_grace_sec" default="0.25" />
   <arg name="recovery_stable_sec" default="1.0" />
   <arg name="stopline_topic" default="/perception/camera/stopline" />
+  <arg name="enable_turn_signal" default="$(arg enable_control)" />
+  <arg name="enable_maneuver_fusion" default="true" />
+  <arg name="turn_signal_lead_time_sec" default="5.0" />
+  <arg name="turn_signal_remote_port" default="9097" />
+  <arg name="turn_signal_maneuvers_file" default="$(find turn_signal_controller)/config/turn_signal_maneuvers.yaml" />
+  <arg name="signal_mgeo_path" default="$(find camera_perception)/lane/mgeo/R_KR_PR_K-city_2025" />
+  <arg name="max_speed_kph" default="7.2" />
 
   <include file="$(find morai_bringup)/launch/perception_control_bringup.launch">
     <arg name="workspace_path" value="$(arg workspace_path)" />
@@ -35,6 +48,10 @@
     <arg name="enable_sensor_quality" value="$(arg enable_lane_fallback)" />
     <arg name="enable_lane_fallback" value="$(arg enable_lane_fallback)" />
     <arg name="enable_stopline_control" value="$(arg enable_stopline_control)" />
+    <arg name="stopline_front_reference_offset_m" value="$(arg stopline_front_reference_offset_m)" />
+    <arg name="stopline_hold_distance_m" value="$(arg stopline_hold_distance_m)" />
+    <arg name="stopline_max_decel_mps2" value="$(arg stopline_max_decel_mps2)" />
+    <arg name="stopline_planning_decel_mps2" value="$(arg stopline_planning_decel_mps2)" />
     <arg name="enable_roi_camera" value="$(arg enable_roi_camera)" />
     <arg name="enable_roi_lidar" value="$(arg enable_roi_lidar)" />
     <arg name="roi_camera_stack_root" value="$(arg workspace_path)" />
@@ -52,6 +69,13 @@
     <arg name="lane_loss_grace_sec" value="$(arg lane_loss_grace_sec)" />
     <arg name="recovery_stable_sec" value="$(arg recovery_stable_sec)" />
     <arg name="roi_lidar_rviz" value="$(arg roi_lidar_rviz)" />
+    <arg name="enable_turn_signal" value="$(arg enable_turn_signal)" />
+    <arg name="enable_maneuver_fusion" value="$(arg enable_maneuver_fusion)" />
+    <arg name="turn_signal_lead_time_sec" value="$(arg turn_signal_lead_time_sec)" />
+    <arg name="turn_signal_remote_port" value="$(arg turn_signal_remote_port)" />
+    <arg name="turn_signal_maneuvers_file" value="$(arg turn_signal_maneuvers_file)" />
+    <arg name="signal_mgeo_path" value="$(arg signal_mgeo_path)" />
+    <arg name="max_speed_kph" value="$(arg max_speed_kph)" />
     <!-- ROI camera의 ObjectInfo 토픽과 현재 TrafficLight 메시지 토픽을 분리한다. -->
     <arg name="traffic_light_mux_topic" value="/detection/roi_traffic_light_unused" />
   </include>

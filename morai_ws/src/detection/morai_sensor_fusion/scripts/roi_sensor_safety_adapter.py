@@ -50,6 +50,10 @@ class RoiSensorSafetyAdapter:
         self.require_fresh_lidar = bool(
             rospy.get_param("~require_fresh_lidar", True)
         )
+        self.require_fresh_camera_stops = bool(rospy.get_param("~require_fresh_camera_stops", False))
+        self.require_source_stamps = bool(rospy.get_param("~require_source_stamps", False))
+        self.front_reference_offset_m = float(rospy.get_param("~front_reference_offset_m", 0.0))
+        self.camera_updated = {}
 
         self.latest_lidar: Optional[LidarObstacleArray] = None
         self.latest_odom: Optional[Odometry] = None
@@ -77,6 +81,7 @@ class RoiSensorSafetyAdapter:
         ):
             topic = rospy.get_param(parameter, "")
             if topic:
+                self.camera_updated[key] = None
                 rospy.Subscriber(
                     topic,
                     Bool,
@@ -95,15 +100,25 @@ class RoiSensorSafetyAdapter:
         )
 
     def lidar_callback(self, message: LidarObstacleArray) -> None:
+        if self.require_source_stamps and not self.source_fresh(message):
+            return
         self.latest_lidar = message
         self.last_lidar_at = time.monotonic()
 
     def odom_callback(self, message: Odometry) -> None:
+        if self.require_source_stamps and not self.source_fresh(message):
+            return
         self.latest_odom = message
         self.last_odom_at = time.monotonic()
 
     def _camera_stop_callback(self, message: Bool, key: str) -> None:
         self.camera_stops[key] = bool(message.data)
+        self.camera_updated[key] = time.monotonic()
+
+    def source_fresh(self, message):
+        age = rospy.get_time() - message.header.stamp.to_sec()
+        return (message.header.stamp.to_sec() > 0 and -0.05 <= age <= self.input_timeout_sec
+                and message.header.frame_id == "map")
 
     def nearest_forward_obstacle(self) -> Optional[float]:
         if self.latest_lidar is None or self.latest_odom is None:
@@ -120,10 +135,17 @@ class RoiSensorSafetyAdapter:
             dy = float(obstacle.center_y_map) - float(pose.position.y)
             forward_x = cos_yaw * dx + sin_yaw * dy
             lateral_y = -sin_yaw * dx + cos_yaw * dy
-            obstacle_half_width = max(0.0, float(obstacle.width)) * 0.5
+            # Rotated box extents: compare obstacle FRONT FACE to ego bumper,
+            # not center-to-origin distance (which misses long crossing cars).
+            relative_yaw = float(getattr(obstacle, "yaw", yaw)) - yaw
+            half_length = max(0.0, float(getattr(obstacle, "length", 0.0))) * 0.5
+            half_width = max(0.0, float(obstacle.width)) * 0.5
+            obstacle_half_width = abs(math.sin(relative_yaw)) * half_length + abs(math.cos(relative_yaw)) * half_width
+            obstacle_half_length = abs(math.cos(relative_yaw)) * half_length + abs(math.sin(relative_yaw)) * half_width
             corridor_half_width = self.forward_half_width_m + obstacle_half_width
-            if 0.0 < forward_x <= self.stop_distance_m and abs(lateral_y) <= corridor_half_width:
-                distance = math.hypot(forward_x, lateral_y)
+            bumper_gap = forward_x - obstacle_half_length - self.front_reference_offset_m
+            if forward_x + obstacle_half_length > 0.0 and bumper_gap <= self.stop_distance_m and abs(lateral_y) <= corridor_half_width:
+                distance = max(0.0, bumper_gap)
                 if nearest is None or distance < nearest:
                     nearest = distance
         return nearest
@@ -133,16 +155,21 @@ class RoiSensorSafetyAdapter:
         lidar_fresh = (
             self.latest_lidar is not None
             and now - self.last_lidar_at <= self.input_timeout_sec
+            and (not self.require_source_stamps or self.source_fresh(self.latest_lidar))
         )
         odom_fresh = (
             self.latest_odom is not None
             and now - self.last_odom_at <= self.input_timeout_sec
+            and (not self.require_source_stamps or self.source_fresh(self.latest_odom))
         )
         nearest = self.nearest_forward_obstacle() if lidar_fresh and odom_fresh else None
 
         camera_reason = next(
             (name for name, active in self.camera_stops.items() if active), None
         )
+        if camera_reason is None and self.require_fresh_camera_stops:
+            camera_reason = next((name + "_stale" for name, updated in self.camera_updated.items()
+                                  if updated is None or not 0 <= now - updated <= self.input_timeout_sec), None)
         stop_required = nearest is not None or camera_reason is not None
         reason = "fused_clear"
         confidence = 0.0

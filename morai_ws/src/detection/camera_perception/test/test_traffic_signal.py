@@ -4,10 +4,18 @@ from camera_perception.traffic_signal import (
     TrafficSignalStopLatch,
     traffic_signal_has_green,
     traffic_signal_requires_stop,
+    traffic_bbox_plausible,
 )
 
 
 class TrafficSignalTest(unittest.TestCase):
+    def test_oblique_and_lower_signal_boxes_survive_to_route_association(self):
+        self.assertTrue(traffic_bbox_plausible(600., 400., 8., 30., 480))
+        self.assertTrue(traffic_bbox_plausible(50., 90., 30., 8., 480))
+        for values in ((-1., 100., 8., 30., 480), (30., 100., 0., 30., 480),
+                       (30., float("nan"), 8., 30., 480), (30., 500., 8., 30., 480)):
+            self.assertFalse(traffic_bbox_plausible(*values))
+
     def test_stops_for_red_only_and_all_yellow_variants(self):
         for class_name in (
             "Red",

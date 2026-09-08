@@ -16,7 +16,6 @@ catkin_package()
 
 catkin_install_python(PROGRAMS
   scripts/curvature_speed_purepursuit_node.py
-  scripts/curvature_odometry_noise_filter_node.py
   DESTINATION ${CATKIN_PACKAGE_BIN_DESTINATION}
 )
 

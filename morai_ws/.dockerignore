@@ -1,0 +1,12 @@
+**/.git
+**/__pycache__
+**/*.pyc
+**/*.bag
+**/*.bag.active
+**/.env
+build
+devel
+install
+logs
+.ros
+src/common/morai_msgs

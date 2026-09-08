@@ -14,6 +14,9 @@
   <exec_depend>ekf_local_enu</exec_depend>
   <exec_depend>purepursuit_mgeo</exec_depend>
   <exec_depend>control_mux</exec_depend>
+  <exec_depend>stopline_control</exec_depend>
+  <exec_depend>turn_signal_controller</exec_depend>
+  <exec_depend>curvature_speed_purepursuit</exec_depend>
   <exec_depend>common</exec_depend>
   <exec_depend>camera_perception</exec_depend>
   <exec_depend>lidar_perception</exec_depend>

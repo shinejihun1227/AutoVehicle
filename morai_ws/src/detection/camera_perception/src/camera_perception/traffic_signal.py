@@ -8,6 +8,47 @@ YELLOW_SIGNAL_KEYWORDS = ("yellow", "amber")
 TURN_SIGNAL_KEYWORDS = ("left", "right", "arrow", "좌회전", "우회전")
 
 
+def traffic_bbox_plausible(x, y, width, height, image_height):
+    """Only reject invalid boxes; oblique/vertical heads need not be wide.
+
+    Shape or screen centre is not evidence that a light belongs to our lane.
+    The final controller associates boxes with projected route-linked heads.
+    """
+    return (all(isinstance(v, (int, float)) and math.isfinite(v)
+                for v in (x, y, width, height, image_height))
+            and image_height > 0 and width >= 2 and height >= 2
+            and x >= 0 and 0 <= y <= image_height)
+
+
+def directional_observation(objects, min_confidence=0.5):
+    """Preserve one directional class; conflicting signal heads are UNKNOWN.
+
+    Combined classes (e.g. Red_Left) must describe one detected signal head.
+    Never merge a red head with an unrelated green/arrow head into permission.
+    Bare Left/Right mean the model's illuminated arrow classes; generic Arrow
+    has no direction and cannot authorize a maneuver.
+    """
+    supported = {"RED", "YELLOW", "GREEN", "LEFT", "RIGHT", "GREEN_LEFT",
+                 "GREEN_RIGHT", "RED_LEFT", "RED_RIGHT"}
+    evidence = {}
+    for item in objects:
+        try:
+            score = float(item.conf)
+        except (ValueError, TypeError):
+            continue
+        if not math.isfinite(score) or not min_confidence <= score <= 1.0:
+            continue
+        name = str(item.class_name).strip().upper().replace(" ", "_")
+        if "YELLOW" in name or "AMBER" in name:
+            name = "YELLOW"
+        if name not in supported:
+            name = "UNKNOWN"
+        evidence[name] = max(evidence.get(name, 0.0), score)
+    if len(evidence) != 1 or "UNKNOWN" in evidence:
+        return "UNKNOWN", 0.0
+    return next(iter(evidence.items()))
+
+
 def traffic_signal_has_green(class_names):
     """GREEN 계열 클래스가 하나라도 있으면 True를 반환한다."""
 

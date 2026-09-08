@@ -47,7 +47,7 @@
   <arg name="camera_pitch_deg" default="2.0" />
   <arg name="camera_roll_deg" default="0.0" />
 
-  <!-- 노이즈 시 camera fallback에 사용할 보수적 속도 상한이다. -->
+  <!-- GPS blackout 시 camera fallback에 사용할 보수적 속도 상한이다. -->
   <arg name="fallback_speed_cap_mps" default="2.0" />
   <arg name="stop_without_camera" default="true" />
 
@@ -95,7 +95,7 @@
     <arg name="gps_xyz_z" value="1.2" />
   </include>
 
-  <!-- 5. raw GPS + raw IMU -> map/base_link EKF. synthetic noise/filter 없음. -->
+  <!-- 5. raw GPS + raw IMU -> map/base_link EKF. 입력 변형 없음. -->
   <include file="$(find ekf_local_enu)/launch/ekf_local_enu.launch">
     <arg name="gps_topic" value="/localization/gps" />
     <arg name="imu_topic" value="/Imu" />
@@ -112,7 +112,7 @@
     <arg name="bias_random_walk" value="0.001" />
   </include>
 
-  <!-- 6. GPS 수신 상태와 주행 중 sensor anomaly를 각각 감시한다. -->
+  <!-- 6. GPS 수신 상태와 센서 입력 freshness를 각각 감시한다. -->
   <node pkg="stability_stack" type="gps_blackout_detector.py"
         name="camera_fallback_gps_blackout_detector" output="screen">
     <param name="input_topic" value="/gps" />
@@ -130,11 +130,6 @@
     <param name="health_topic" value="/localization/gps_health" />
     <param name="quality_topic" value="/localization/sensor_quality" />
     <param name="status_topic" value="/stability/sensor_quality_status" />
-    <param name="gps_jump_threshold_m" value="3.0" />
-    <param name="gps_step_speed_threshold_mps" value="10.0" />
-    <param name="gps_residual_threshold_m" value="2.0" />
-    <param name="imu_gyro_diff_threshold_rad_s" value="0.8" />
-    <param name="imu_accel_diff_threshold_m_s2" value="6.0" />
   </node>
 
   <!-- 7. 지도 기반 곡률 속도 Pure Pursuit: 정상 명령을 별도 토픽으로 발행 -->

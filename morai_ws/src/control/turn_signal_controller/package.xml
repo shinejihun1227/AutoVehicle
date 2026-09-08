@@ -1,0 +1,19 @@
+<?xml version="1.0"?>
+<package format="2">
+  <name>turn_signal_controller</name>
+  <version>0.1.0</version>
+  <description>경로 조작 계획에 따라 MORAI 방향지시등을 제어한다.</description>
+  <maintainer email="team@example.com">MORAI 자율주행팀</maintainer>
+  <license>MIT</license>
+
+  <buildtool_depend>catkin</buildtool_depend>
+  <depend>rospy</depend>
+  <depend>std_msgs</depend>
+  <depend>nav_msgs</depend>
+  <depend>morai_msgs</depend>
+  <depend>morai_perception_msgs</depend>
+  <depend>common</depend>
+  <exec_depend>stopline_control</exec_depend>
+  <exec_depend>curvature_speed_purepursuit</exec_depend>
+  <test_depend>python3-nose</test_depend>
+</package>

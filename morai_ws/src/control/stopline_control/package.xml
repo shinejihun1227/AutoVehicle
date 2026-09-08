@@ -12,4 +12,5 @@
   <depend>nav_msgs</depend>
   <depend>rospy</depend>
   <depend>std_msgs</depend>
+  <test_depend>python3-nose</test_depend>
 </package>

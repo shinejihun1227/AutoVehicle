@@ -8,7 +8,7 @@ catkin_python_setup()
 catkin_package(CATKIN_DEPENDS common morai_perception_msgs nav_msgs rospy std_msgs)
 
 if(CATKIN_ENABLE_TESTING)
-  catkin_add_nosetests(test/test_lane_quality.py)
+  catkin_add_nosetests(test)
 endif()
 
 catkin_install_python(PROGRAMS

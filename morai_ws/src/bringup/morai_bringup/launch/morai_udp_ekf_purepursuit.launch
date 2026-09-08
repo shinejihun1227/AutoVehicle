@@ -53,6 +53,7 @@
 
   <!-- 2. MORAI EgoVehicleStatus 수신 + CtrlCmd UDP 송신 -->
   <include file="$(find morai_udp_drive_bridge)/launch/morai_udp_drive_bridge.launch">
+    <arg name="control_output_enabled" value="$(arg enable_control)" />
     <arg name="status_bind_ip" value="$(arg bind_ip)" />
     <arg name="status_port" value="$(arg ego_status_port)" />
     <arg name="status_topic" value="/Ego_topic" />

@@ -387,6 +387,7 @@ class MergeGapNode:
             "valid": True,
             "algorithm": "euclidean_bbox_kalman_hungarian_dynamic_gap",
             "left": assessments["left"],
+            "right": assessments["right"],
         }
         if self.highway_gate_required:
             payload["highway_environment"] = True
