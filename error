@@ -1,3 +1,8 @@
+rostopic echo -n 1 /Ego_topic
+rostopic echo -n 1 /localization/odometry
+rostopic echo -n 1 /experimental/curvature_speed_command
+rostopic echo -n 1 /ctrl_cmd
+
 ss -lun | grep ':1911'
 rosparam get /morai_udp_drive_bridge/status_port
 
