@@ -43,3 +43,56 @@ source "$HOME/morai_native_env.sh"
 timeout 5s rostopic echo -n 1 /ctrl_cmd
 timeout 5s rostopic echo -n 1 /control/mux_status
 timeout 5s rostopic echo -n 1 /control/maneuver_status
+
+
+ㅡㅡㅡ
+
+set -e
+
+source /opt/ros/noetic/setup.bash
+
+if [ -f "$HOME/morai-final-venv/bin/activate" ]; then
+  source "$HOME/morai-final-venv/bin/activate"
+fi
+
+export MORAI_WS="$HOME/AutoVehicle/morai_ws"
+
+# 주행 코드와 수정된 검사 도구 업데이트
+cd "$HOME/AutoVehicle"
+git pull --ff-only origin final_ws
+
+# 별도 메시지 저장소를 대회용 브랜치로 전환
+cd "$MORAI_WS/src/common/morai_msgs"
+
+if [ -n "$(git status --porcelain)" ]; then
+  echo "morai_msgs에 로컬 수정이 있습니다. 수정 내용을 보관한 뒤 진행하세요."
+  exit 1
+fi
+
+git fetch origin refs/heads/beta_drive:refs/remotes/origin/beta_drive
+git switch beta_drive
+git merge --ff-only origin/beta_drive
+git branch --show-current
+
+# 메시지와 주행 패키지 재빌드
+cd "$MORAI_WS"
+catkin_make -j2 -l2 --force-cmake \
+  -DPYTHON_EXECUTABLE="$(command -v python3)"
+
+source "$MORAI_WS/devel/setup.bash"
+
+# 실제 로딩되는 메시지 필드 검사
+python3 "$MORAI_WS/docker/final_ws/check_morai_messages.py"
+)
+마지막에 **MORAI_MESSAGES_OK**가 나오면 메시지 형식 검사를 통과한 것입니다. 중간에 실패하면 그 오류부터 해결해야 합니다.
+3. 검사 통과 후 주행을 다시 실행합니다.
+source "$HOME/morai_native_env.sh"
+
+roslaunch morai_bringup final_ws_native_no_lamps.launch \
+  enable_control:=true \
+  morai_host_ip:=192.168.0.161 \
+  ego_status_port:=1911 \
+  control_remote_port:=9093 \
+  max_speed_kph:=30.0 \
+  fallback_speed_cap_kph:=3.0 \
+  turn_signal_maneuvers_file:="$HOME/morai-native-config/turn_signal_maneuvers.yaml"
