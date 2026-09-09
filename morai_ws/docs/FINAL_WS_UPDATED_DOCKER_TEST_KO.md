@@ -83,8 +83,8 @@ GPU 모델 검사는 마지막 명령에 `--gpus all`을 docker 옵션으로 추
 Python 인자로 `--device cuda`를 추가한다. 회귀 시험 성공 표시는 `REGRESSION_PASS`,
 모델 smoke 성공 표시는 `OFFLINE_SMOKE_PASS`다.
 
-보완 시점 로컬 회귀 결과는 350개 통과(카메라 67, 정지선 54, 회전/신호 184,
-음영/센서 41, 곡률 4)다. 시험은 합성 차선/경로와 대체 ROS 입력을 사용하므로,
+보완 시점 로컬 회귀 결과는 359개 통과(카메라 67, 정지선 54, 회전/신호 190,
+음영/센서 41, 곡률 7)다. 시험은 합성 차선/경로와 대체 ROS 입력을 사용하므로,
 실제 영상 정확도·MORAI 차량 응답은 아래 센서/주행 단계에서 확인한다.
 
 ## 4. 센서 네트워크와 컨테이너 설정
@@ -139,6 +139,7 @@ xvfb-run -a -s '-screen 0 1920x1080x24' \
   workspace_path:="$MORAI_WS" morai_host_ip:="$MORAI_HOST_IP" \
   turn_signal_maneuvers_file:=/opt/morai-config/turn_signal_maneuvers.yaml \
   enable_control:=false enable_turn_signal:=false \
+  lateral_accel_limit_mps2:=1.0 \
   max_speed_kph:=3.0 fallback_speed_cap_kph:=3.0 roi_lidar_rviz:=false
 ```
 
@@ -189,6 +190,7 @@ xvfb-run -a -s '-screen 0 1920x1080x24' \
   workspace_path:="$MORAI_WS" morai_host_ip:="$MORAI_HOST_IP" \
   turn_signal_maneuvers_file:=/opt/morai-config/turn_signal_maneuvers.yaml \
   enable_control:=true enable_turn_signal:=true \
+  lateral_accel_limit_mps2:=1.0 \
   max_speed_kph:=3.0 fallback_speed_cap_kph:=3.0 \
   lane_stable_samples:=5 lane_stable_sec:=0.20 lane_control_timeout_sec:=0.15 \
   blackout_max_duration_sec:=15.0 blackout_max_distance_m:=30.0 \
@@ -207,8 +209,13 @@ xvfb-run -a -s '-screen 0 1920x1080x24' \
 | 음영 중 차선 품질 저하/영상 중단 | 가속 0·제동, 마지막 확정 영상 0.25초 이후 정지 |
 | GPS 복구 | 1초 연속 정상 확인 후 경로 조향으로 전환 |
 
-위 시험 명령은 전체 최고속도 3km/h다. 설정 파일의 좌회전 15/우회전 10km/h는
-추가 상한이므로 전체 최고속도를 올리지 않는다. GPS 음영에서 새 좌우회전이나
+위 시험 명령은 전체 최고속도 3km/h다. 좌회전 15/우회전 10km/h의 방향별 상한은
+제거했다. 모든 방향이 공통 `lateral_accel_limit_mps2`로 곡률 속도를 계산하며,
+`max_speed_kph`가 전체 최고속도를 제한한다. 두 launch 인자가 nominal과 fusion에
+동시에 전달된다. 이전 설정 파일의 `turn_left_speed_kph`, `turn_right_speed_kph`,
+`turn_lateral_accel_mps2`는 무시하고 경고하므로 삭제한다. 곡률 제한의 계산값은
+`turn_curve_speed_kph`, 최종 접근 상한은 `turn_speed_limit_kph`에서 확인한다.
+GPS 음영에서 새 좌우회전이나
 차선 변경을 허용하지 않으며, 교차로 접근·15초/30m 초과·IMU/속도 소실이면 정지한다.
 합성 dropout은 3절 오프라인 시험에서 재현한다. 주행 토픽에 가짜 정상 상태나
 가짜 녹색을 발행해 통과시키는 방식은 사용하지 않는다.

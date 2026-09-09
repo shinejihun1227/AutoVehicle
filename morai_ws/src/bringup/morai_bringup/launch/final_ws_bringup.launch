@@ -46,6 +46,8 @@
   <arg name="turn_signal_maneuvers_file" default="$(find turn_signal_controller)/config/turn_signal_maneuvers.yaml" />
   <arg name="signal_mgeo_path" default="$(find camera_perception)/lane/mgeo/R_KR_PR_K-city_2025" />
   <arg name="max_speed_kph" default="7.2" />
+  <!-- One lateral-acceleration budget for straight roads and both turn directions. -->
+  <arg name="lateral_accel_limit_mps2" default="1.0" />
 
   <include file="$(find morai_bringup)/launch/perception_control_bringup.launch">
     <arg name="workspace_path" value="$(arg workspace_path)" />
@@ -91,6 +93,7 @@
     <arg name="turn_signal_maneuvers_file" value="$(arg turn_signal_maneuvers_file)" />
     <arg name="signal_mgeo_path" value="$(arg signal_mgeo_path)" />
     <arg name="max_speed_kph" value="$(arg max_speed_kph)" />
+    <arg name="lateral_accel_limit_mps2" value="$(arg lateral_accel_limit_mps2)" />
     <!-- ROI camera의 ObjectInfo 토픽과 현재 TrafficLight 메시지 토픽을 분리한다. -->
     <arg name="traffic_light_mux_topic" value="/detection/roi_traffic_light_unused" />
   </include>

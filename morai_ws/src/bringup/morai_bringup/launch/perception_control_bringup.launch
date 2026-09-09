@@ -55,6 +55,7 @@
   <arg name="turn_signal_maneuvers_file" default="$(find turn_signal_controller)/config/turn_signal_maneuvers.yaml" />
   <arg name="signal_mgeo_path" default="$(find camera_perception)/lane/mgeo/R_KR_PR_K-city_2025" />
   <arg name="max_speed_kph" default="7.2" />
+  <arg name="lateral_accel_limit_mps2" default="1.0" />
   <arg name="turn_signal_progress_topic" default="/experimental/curvature_progress" />
   <arg name="turn_signal_odometry_topic" default="/localization/odometry" />
   <arg name="require_fresh_safety" default="true" />
@@ -75,6 +76,7 @@
     <arg name="enable_control" value="$(arg enable_control)" />
     <arg name="use_curvature_speed_planner" value="$(arg use_curvature_speed_planner)" />
     <arg name="max_speed_kph" value="$(arg max_speed_kph)" />
+    <arg name="lateral_accel_limit_mps2" value="$(arg lateral_accel_limit_mps2)" />
     <arg name="target_speed_kph" value="$(arg max_speed_kph)" />
     <arg name="command_topic" value="/control/ctrl_cmd" />
     <arg name="use_sensor_quality_gate" value="$(arg enable_sensor_quality)" />
@@ -214,6 +216,8 @@
         pkg="turn_signal_controller" type="maneuver_fusion_node.py"
         name="final_ws_maneuver_fusion" output="screen">
     <rosparam file="$(arg turn_signal_maneuvers_file)" command="load" />
+    <param name="max_speed_kph" value="$(arg max_speed_kph)" />
+    <param name="lateral_accel_limit_mps2" value="$(arg lateral_accel_limit_mps2)" />
     <param name="path_file" value="$(arg path_file)" />
     <param name="signal_mgeo_path" value="$(arg signal_mgeo_path)" />
     <param name="nominal_command_topic" value="$(eval '/control/camera_fallback_cmd' if arg('enable_lane_fallback') else '/control/stopline_cmd')" />

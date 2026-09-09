@@ -56,10 +56,10 @@ signal_timeout_sec: 0.8
 right_on_green: true
 
 # 좌·우회전은 기존 경로 조향을 유지하며 속도/자세 제한을 추가한다.
-# 검증 전 초기 튜닝값: MORAI에서 실제 제동 응답과 경로 오차를 확인한다.
-turn_left_speed_kph: 15.0
-turn_right_speed_kph: 10.0
-turn_lateral_accel_mps2: 1.2
+# 속도는 좌/우 구분 없이 sqrt(횡가속도 한계 / abs(곡률))로 계산한다.
+# 공통 max_speed_kph, lateral_accel_limit_mps2는 final_ws launch 인자로 설정한다.
+# 두 값은 nominal 곡률 속도 계획과 fusion에 함께 전달된다.
+# 검증 전 초기 자세 튜닝값: MORAI에서 실제 응답과 경로 오차를 확인한다.
 turn_max_heading_error_deg: 60.0
 turn_max_lateral_error_m: 1.5
 # 경로 종료 위치와 출구 방향 정렬을 함께 확인한 뒤 방향지시등을 끈다.

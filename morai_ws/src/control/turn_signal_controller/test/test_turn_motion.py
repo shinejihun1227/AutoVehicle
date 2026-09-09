@@ -9,6 +9,7 @@ import math
 import sys
 from types import SimpleNamespace as NS
 import unittest
+import xml.etree.ElementTree as ET
 from unittest.mock import Mock, patch
 
 import test_maneuver_fusion as fixtures
@@ -25,7 +26,7 @@ class TurnMotionTest(unittest.TestCase):
     def planner(self, sign=1, **config):
         points = fixtures.turn_path(sign)
         self.s = cumulative_arc_lengths(points)
-        return TurnMotionPlanner(points, self.s, **config)
+        return TurnMotionPlanner(points, self.s, **dict({"max_speed_kph": 40.}, **config))
 
     def event(self, direction="LEFT", **values):
         return dict(id="turn", kind="turn", direction=direction, start=90., end=125.,
@@ -41,18 +42,64 @@ class TurnMotionTest(unittest.TestCase):
             self.assertEqual(signal_permits(state, "RIGHT", True),
                              state in right | {"GREEN", "GREEN_LEFT"}, state)
 
-    def test_turn_speed_caps_and_tighter_bend_limit(self):
-        for sign, direction, expected in ((1, "LEFT", 15.), (-1, "RIGHT", 10.)):
+    def test_mirrored_turns_have_same_curvature_speed_and_braking(self):
+        results = []
+        for sign, direction in ((1, "LEFT"), (-1, "RIGHT")):
             planner = self.planner(sign)
             p, _ = interpolate_by_s(planner.points, self.s, 110.)
             result = planner.evaluate(self.event(direction, committed=True), 110., 6.,
                                       p.x, p.y, planner.heading(110.), 87.)
-            self.assertLessEqual(result.speed_limit_kph, expected + 1e-9)
+            self.assertAlmostEqual(result.speed_limit_kph, 3.6 * math.sqrt(15.), delta=.15)
             self.assertGreater(result.brake, 0.)
             self.assertEqual(result.accel_limit, 0.)
-        planner = self.planner(lateral_accel_mps2=.4)
+            results.append(result)
+        self.assertAlmostEqual(results[0].speed_limit_kph, results[1].speed_limit_kph)
+        self.assertAlmostEqual(results[0].brake, results[1].brake)
+        planner = self.planner(lateral_accel_limit_mps2=.4)
         result = planner.evaluate(self.event(), 87., 0., 87., 0., 0., 87.)
         self.assertLess(result.curve_speed_kph, 10.)
+
+    def test_radius_controls_speed_without_directional_plateaus(self):
+        limits = []
+        for radius in (5., 15., 40.):
+            points = [fixtures.PathPoint(float(x), 0.) for x in range(101)]
+            # Dense circle samples keep the analytic-radius oracle distinct
+            # from corners introduced by a coarse polygon approximation.
+            points += [fixtures.PathPoint(100. + radius * math.sin(math.radians(i / 10.)),
+                                          radius * (1. - math.cos(math.radians(i / 10.)))) for i in range(1, 901)]
+            points += [fixtures.PathPoint(100. + radius, radius + i) for i in range(1, 21)]
+            planner = TurnMotionPlanner(points, cumulative_arc_lengths(points), max_speed_kph=80.)
+            event = dict(self.event(), end=100. + radius * math.pi / 2.)
+            motion = planner.evaluate(event, 87., 0., 87., 0., 0., 87.)
+            self.assertAlmostEqual(motion.curve_speed_kph, 3.6 * math.sqrt(radius), delta=.15)
+            self.assertAlmostEqual(motion.speed_limit_kph, motion.curve_speed_kph)
+            limits.append(motion.speed_limit_kph)
+        self.assertTrue(limits[0] < limits[1] < limits[2])
+        self.assertGreater(limits[2], 15.)
+
+    def test_common_maximum_limits_both_turn_and_approach_but_not_raw_curvature_diagnostic(self):
+        planner = self.planner(max_speed_kph=7.2)
+        for progress in (50., 87.):
+            motion = planner.evaluate(self.event(), progress, 3., progress, 0., 0., 87.)
+            self.assertEqual(motion.speed_limit_kph, 7.2)
+            self.assertGreater(motion.curve_speed_kph, 7.2)
+            self.assertGreater(motion.brake, 0.)
+
+    def test_straight_geometry_has_no_curvature_limit_but_obeys_overall_maximum(self):
+        points = [fixtures.PathPoint(float(x), 0.) for x in range(141)]
+        planner = TurnMotionPlanner(points, cumulative_arc_lengths(points), max_speed_kph=20.)
+        for direction in ("LEFT", "RIGHT"):
+            motion = planner.evaluate(self.event(direction), 87., 0., 87., 0., 0., 87.)
+            self.assertIsNone(motion.curve_speed_kph)
+            self.assertEqual(motion.curvature_abs_m_inv, 0.)
+            self.assertEqual(motion.speed_limit_kph, 20.)
+
+    def test_zero_overall_maximum_commands_deceleration(self):
+        planner = self.planner(max_speed_kph=0.)
+        motion = planner.evaluate(self.event(), 70., 1., 70., 0., 0., 87.)
+        self.assertEqual(motion.speed_limit_kph, 0.)
+        self.assertEqual(motion.accel_limit, 0.)
+        self.assertGreater(motion.brake, 0.)
 
     def test_green_turn_is_prebraked_before_entry(self):
         planner = self.planner()
@@ -104,7 +151,8 @@ class TurnMotionTest(unittest.TestCase):
         for q in (None, NS(x=0., y=0., z=0., w=0.), NS(x=0., y=0., z=float("nan"), w=1.)):
             self.assertIsNone(quaternion_yaw(q))
         self.assertAlmostEqual(quaternion_yaw(NS(x=0., y=0., z=math.sin(.4), w=math.cos(.4))), .8)
-        for config in ({"left_speed_kph": 0.}, {"right_speed_kph": float("nan")},
+        for config in ({"max_speed_kph": -1.}, {"max_speed_kph": float("nan")},
+                       {"lateral_accel_limit_mps2": 0.}, {"lateral_accel_limit_mps2": float("nan")},
                        {"exit_heading_error_deg": 90.}, {"exit_lateral_error_m": 2.}):
             with self.assertRaises(ValueError):
                 self.planner(**config)
@@ -115,6 +163,35 @@ class TurnNodeMotionTest(unittest.TestCase):
         self.case = fixtures.StrictFusionTest()
         self.case.setUp()
         self.c, self.node = self.case.fixture, self.case.node
+
+    def test_old_directional_parameters_cannot_override_shared_curvature_tuning(self):
+        self.c.params.update({"~turn_left_speed_kph": 1., "~turn_right_speed_kph": 2.,
+                              "~turn_lateral_accel_mps2": 9.,
+                              "~max_speed_kph": 30., "~lateral_accel_limit_mps2": .8})
+        node = self.c.module.ManeuverFusionNode()
+        self.assertEqual(node.turn_motion.max_speed_kph, 30.)
+        self.assertEqual(node.turn_motion.lateral_accel_limit_mps2, .8)
+        self.assertEqual(self.c.ros.logwarn.call_count, 3)
+        limits = [node.turn_motion.evaluate(dict(self.case.context, kind="turn", direction=direction),
+                                            87., 0., 87., 0., 0., 87.).curve_speed_kph
+                  for direction in ("LEFT", "RIGHT")]
+        self.assertAlmostEqual(limits[0], limits[1])
+        self.assertAlmostEqual(limits[0], 3.6 * math.sqrt(.8 * 15.), delta=.15)
+
+    def test_launch_shares_speed_parameters_between_nominal_and_fusion(self):
+        root = fixtures.SOURCE / "bringup/morai_bringup/launch"
+        final = ET.parse(root / "final_ws_bringup.launch").getroot()
+        perception = ET.parse(root / "perception_control_bringup.launch").getroot()
+        nominal = ET.parse(root / "morai_udp_ekf_purepursuit.launch").getroot()
+        fusion = perception.find("node[@name='final_ws_maneuver_fusion']")
+        controller = nominal.find(".//node[@name='curvature_speed_purepursuit']")
+        include = perception.find("include[@file='$(find morai_bringup)/launch/morai_udp_ekf_purepursuit.launch']")
+        for key in ("max_speed_kph", "lateral_accel_limit_mps2"):
+            expected = "$(arg " + key + ")"
+            self.assertEqual(final.find("include/arg[@name='" + key + "']").get("value"), expected)
+            self.assertEqual(include.find("arg[@name='" + key + "']").get("value"), expected)
+            self.assertEqual(fusion.find("param[@name='" + key + "']").get("value"), expected)
+            self.assertEqual(controller.find("param[@name='" + key + "']").get("value"), expected)
 
     def test_heading_fault_cannot_use_existing_arrow_permission(self):
         self.case.authorize()
@@ -177,12 +254,13 @@ class TurnNodeMotionTest(unittest.TestCase):
     def drive(self, sign, direction):
         self.node.points = fixtures.turn_path(sign)
         self.node.s_values = cumulative_arc_lengths(self.node.points)
-        self.node.turn_motion = TurnMotionPlanner(self.node.points, self.node.s_values)
+        self.node.turn_motion = TurnMotionPlanner(self.node.points, self.node.s_values, max_speed_kph=40.)
         self.case.context["direction"] = direction
         pp = self.load_actual_steering(self.node.points, self.node.s_values)
         x, y, yaw, speed, dt = 85.655, 0., 0., 0., .05
         committed = False
         worst_lateral, peak_turn_speed, apex_steering = 0., 0., []
+        peak_apex_speed = 0.
         saw_hold = saw_permission = False
         for _ in range(1800):
             projection = nearest_projection(pp.points, pp.s_values, x, y)
@@ -215,6 +293,7 @@ class TurnNodeMotionTest(unittest.TestCase):
                 worst_lateral = max(worst_lateral, projection.distance_m)
                 if 106. < projection.progress_s < 117.:
                     apex_steering.append(output.steering)
+                    peak_apex_speed = max(peak_apex_speed, speed)
             if status["completed_event_id"]:
                 break
             next_speed = max(0., speed + (output.accel - 1.5 * output.brake) * dt)
@@ -231,7 +310,8 @@ class TurnNodeMotionTest(unittest.TestCase):
         self.assertLess(abs(math.degrees(yaw) - sign * 90.), 15.)
         self.assertTrue(apex_steering)
         self.assertTrue(all(value * sign > 0 for value in apex_steering))
-        self.assertLessEqual(peak_turn_speed * 3.6, (15. if sign > 0 else 10.) + .5)
+        self.assertLessEqual(peak_apex_speed * 3.6, 3.6 * math.sqrt(15.) + .5)
+        self.assertLessEqual(peak_turn_speed * 3.6, self.node.turn_motion.max_speed_kph)
         return dict(direction=direction, exit_yaw_deg=math.degrees(yaw),
                     max_lateral_error_m=worst_lateral, max_turn_speed_kph=peak_turn_speed * 3.6,
                     elapsed_sec=self.c.now - 100., signal_lost_after_entry=True)

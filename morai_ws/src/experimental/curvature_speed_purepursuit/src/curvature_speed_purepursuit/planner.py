@@ -245,6 +245,21 @@ def profile_value_at_s(
     return float(values[index] + ratio * (values[index + 1] - values[index]))
 
 
+def curvature_speed_mps(
+    curvature: float, lateral_accel_limit_mps2: float, curvature_epsilon: float = 1e-6,
+) -> Optional[float]:
+    """Unsigned curvature sets speed through a_y = v^2 * |kappa|.
+
+    None means a straight segment has no curvature speed restriction. The
+    caller must still apply the overall speed limit and stopping constraints.
+    """
+    if (not all(math.isfinite(v) for v in (curvature, lateral_accel_limit_mps2, curvature_epsilon))
+            or lateral_accel_limit_mps2 <= 0 or curvature_epsilon <= 0):
+        raise ValueError("Curvature must be finite and lateral acceleration/epsilon positive")
+    magnitude = abs(curvature)
+    return None if magnitude <= curvature_epsilon else math.sqrt(lateral_accel_limit_mps2 / magnitude)
+
+
 def build_speed_profile(
     s_values: Sequence[float],
     curvatures: Sequence[float],
@@ -272,12 +287,8 @@ def build_speed_profile(
 
     profile: List[float] = []
     for curvature in curvatures:
-        magnitude = abs(float(curvature))
-        if magnitude <= curvature_epsilon:
-            curve_speed = max_speed
-        else:
-            curve_speed = math.sqrt(lateral_limit / magnitude)
-        profile.append(min(max_speed, curve_speed))
+        curve_speed = curvature_speed_mps(float(curvature), lateral_limit, curvature_epsilon)
+        profile.append(max_speed if curve_speed is None else min(max_speed, curve_speed))
 
     profile[-1] = min(profile[-1], max(0.0, float(final_speed_mps)))
     if initial_speed_mps is not None:

@@ -2,6 +2,7 @@
 import os
 import sys
 import unittest
+import math
 
 
 PACKAGE_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
@@ -14,10 +15,30 @@ from curvature_speed_purepursuit.planner import (  # noqa: E402
     cumulative_arc_lengths,
     curvature_profile,
     three_point_curvature,
+    curvature_speed_mps,
 )
 
 
 class PlannerTest(unittest.TestCase):
+    def test_curvature_speed_depends_on_radius_not_turn_direction(self):
+        for radius in (5., 15., 40.):
+            for direction in (-1., 1.):
+                self.assertAlmostEqual(curvature_speed_mps(direction / radius, 1.), math.sqrt(radius))
+        self.assertIsNone(curvature_speed_mps(0., 1.))
+        self.assertAlmostEqual(curvature_speed_mps(.1, .5), math.sqrt(5.))
+
+    def test_invalid_curvature_cannot_create_a_permissive_speed(self):
+        for curvature, lateral in ((float("nan"), 1.), (float("inf"), 1.), (.1, 0.), (.1, -1.), (.1, float("nan"))):
+            with self.assertRaises(ValueError):
+                curvature_speed_mps(curvature, lateral)
+
+    def test_nominal_speed_profile_uses_same_budget_on_straights_and_mirrored_bends(self):
+        s = [i * 10. for i in range(11)]
+        for curvature in (0., 1. / 15., -1. / 15.):
+            profile = build_speed_profile(s, [curvature] * 11, 10., 1., 1., 1., final_speed_mps=10.)
+            expected = 10. if curvature == 0. else math.sqrt(15.)
+            self.assertTrue(all(abs(speed - expected) < 1e-9 for speed in profile))
+
     def test_clean_keeps_one_lap_endpoint(self):
         points = [
             PathPoint(0.0, 0.0, 0.0),

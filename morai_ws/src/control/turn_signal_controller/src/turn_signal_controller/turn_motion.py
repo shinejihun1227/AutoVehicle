@@ -8,7 +8,7 @@ import math
 from bisect import bisect_left, bisect_right
 from dataclasses import dataclass
 
-from curvature_speed_purepursuit.planner import interpolate_by_s, three_point_curvature
+from curvature_speed_purepursuit.planner import interpolate_by_s, three_point_curvature, curvature_speed_mps
 from stopline_control.core import Decision, clamp, finite
 
 
@@ -39,6 +39,7 @@ class TurnMotion:
     exit_ready: bool = False
     accel_limit: float = 1.0
     brake: float = 0.0
+    curvature_abs_m_inv: object = None
 
     def constrain(self, decision):
         """Keep stop/permission state and strengthen longitudinal limits only."""
@@ -52,15 +53,16 @@ class TurnMotion:
 
 
 class TurnMotionPlanner:
-    def __init__(self, points, s_values, left_speed_kph=15., right_speed_kph=10.,
-                 lateral_accel_mps2=1.2, max_heading_error_deg=60.,
+    def __init__(self, points, s_values, max_speed_kph=7.2,
+                 lateral_accel_limit_mps2=1.0, max_heading_error_deg=60.,
                  max_lateral_error_m=1.5, exit_heading_error_deg=15.,
                  exit_lateral_error_m=.75, exit_overrun_m=3.,
                  planning_decel_mps2=1., max_decel_mps2=1.5, reaction_time_sec=.3):
         config = locals().copy()
         for key in ("self", "points", "s_values"):
             config.pop(key)
-        if (not all(finite(v) and v > 0 for v in config.values())
+        if (not all(finite(v) and (v >= 0 if k == "max_speed_kph" else v > 0)
+                    for k, v in config.items())
                 or not exit_heading_error_deg <= max_heading_error_deg < 90.
                 or exit_lateral_error_m > max_lateral_error_m
                 or planning_decel_mps2 > max_decel_mps2):
@@ -105,12 +107,14 @@ class TurnMotionPlanner:
         lo = max(0, bisect_left(self.sample_s, start) - 1)
         hi = min(len(self.sample_s), bisect_right(self.sample_s, event["end"]) + 1)
         curvature = max(self.curvature[lo:hi], default=0.)
-        limit = (self.left_speed_kph if event["direction"] == "LEFT" else self.right_speed_kph) / 3.6
-        if curvature > 1e-6:
-            limit = min(limit, math.sqrt(self.lateral_accel_mps2 / curvature))
+        # Same calculation and tuning as the nominal straight/curve planner.
+        # LEFT/RIGHT affect signal permission and alignment, never speed caps.
+        curve_speed = curvature_speed_mps(curvature, self.lateral_accel_limit_mps2)
+        maximum = self.max_speed_kph / 3.6
+        limit = maximum if curve_speed is None else min(maximum, curve_speed)
         remaining = max(0., crossing_s - progress)
         effective = max(0., remaining - speed * self.reaction_time_sec)
-        target = math.sqrt(limit * limit + 2. * self.planning_decel_mps2 * effective)
+        target = min(maximum, math.sqrt(limit * limit + 2. * self.planning_decel_mps2 * effective))
         accel_limit = clamp((target - speed) * 3.6 * .2, 0., 1.)
         brake = 0.
         if speed > limit:
@@ -119,7 +123,10 @@ class TurnMotionPlanner:
                 brake = clamp(required / self.max_decel_mps2, 0., 1.)
             elif remaining <= .05:
                 brake = clamp((speed - limit) / self.max_decel_mps2, 0., 1.)
+        if speed > maximum:
+            brake = max(brake, clamp((speed - maximum) / self.max_decel_mps2, 0., 1.))
         if brake > 0 or fault:
             accel_limit = 0.
-        return TurnMotion(phase, fault, target * 3.6, limit * 3.6, heading_error,
-                          lateral, exit_error, exit_ready, accel_limit, 1. if fault else brake)
+        return TurnMotion(phase, fault, target * 3.6,
+                          None if curve_speed is None else curve_speed * 3.6, heading_error,
+                          lateral, exit_error, exit_ready, accel_limit, 1. if fault else brake, curvature)

@@ -124,12 +124,17 @@ class ManeuverFusionNode:
             signal_timeout_sec=self.signal_timeout,
         )
         self.core = StopLineControllerCore(**self.core_params)
-        turn_defaults = dict(left_speed_kph=15., right_speed_kph=10., lateral_accel_mps2=1.2,
-                             max_heading_error_deg=60., max_lateral_error_m=1.5,
+        turn_defaults = dict(max_heading_error_deg=60., max_lateral_error_m=1.5,
                              exit_heading_error_deg=15., exit_lateral_error_m=.75,
                              exit_overrun_m=3.)
+        for old_parameter in ("turn_left_speed_kph", "turn_right_speed_kph", "turn_lateral_accel_mps2"):
+            if rospy.get_param("~" + old_parameter, None) is not None:
+                rospy.logwarn("%s is obsolete and ignored; use shared max_speed_kph and lateral_accel_limit_mps2",
+                              old_parameter)
         self.turn_motion = TurnMotionPlanner(self.points, self.s_values,
             **{key: float(rospy.get_param("~turn_" + key, value)) for key, value in turn_defaults.items()},
+            max_speed_kph=float(rospy.get_param("~max_speed_kph", 7.2)),
+            lateral_accel_limit_mps2=float(rospy.get_param("~lateral_accel_limit_mps2", 1.0)),
             planning_decel_mps2=self.core.planning_decel_mps2,
             max_decel_mps2=self.core.max_decel_mps2,
             reaction_time_sec=self.core.reaction_time_sec)
@@ -938,6 +943,9 @@ class ManeuverFusionNode:
                 "turn_phase": ("TURNING" if committed and motion.phase == "APPROACH" else motion.phase),
                 "turn_speed_limit_kph": motion.speed_limit_kph,
                 "turn_curve_speed_kph": motion.curve_speed_kph,
+                "turn_curvature_abs_m_inv": motion.curvature_abs_m_inv,
+                "max_speed_kph": self.turn_motion.max_speed_kph,
+                "lateral_accel_limit_mps2": self.turn_motion.lateral_accel_limit_mps2,
                 "turn_heading_error_deg": motion.heading_error_deg,
                 "turn_lateral_error_m": motion.lateral_error_m,
                 "turn_exit_heading_error_deg": motion.exit_heading_error_deg,
