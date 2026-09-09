@@ -1,13 +1,15 @@
-rostopic echo -n 1 /detection/fused_safety_stop
-rostopic echo -n 1 /control/mux_status
-rostopic echo -n 1 /control/maneuver_status
-특히 다음을 확인해야 합니다.
-stop_required: true
-reason: roi_lidar_stale
-이면 LiDAR 토픽 이름은 존재하지만 최신 유효 데이터가 들어오지 않는 상태입니다. rostopic info에서 publisher가 보이는 것만으로는 실제 데이터가 정상이라는 뜻이 아닙니다.
-상위 제어 명령도 비교해 보세요.
-rostopic echo -n 1 /control/ctrl_cmd
-rostopic echo -n 1 /control/stopline_cmd
-rostopic echo -n 1 /control/camera_fallback_cmd
-rostopic echo -n 1 /control/maneuver_cmd
-rostopic echo -n 1 /ctrl_cmd
+source "$HOME/morai_native_env.sh"
+
+rostopic info /gps
+rostopic info /localization/gps
+rostopic info /Imu
+rostopic info /localization/odometry
+
+rosnode ping -c 2 /curvature_speed_purepursuit
+rosparam get /curvature_speed_purepursuit/publish_command
+rostopic info /control/ctrl_cmd
+그리고 메시지 수신도 확인하세요.
+rostopic echo -n 1 /gps
+rostopic echo -n 1 /Imu
+rostopic echo -n 1 /localization/gps
+rostopic echo -n 1 /localization/odometry
