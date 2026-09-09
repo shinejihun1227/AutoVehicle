@@ -1,0 +1,34 @@
+# 1. 업데이트 — 기존 launch는 Ctrl+C로 종료
+cd "$HOME/AutoVehicle"
+git pull --ff-only origin final_ws
+source "$HOME/morai_native_env.sh"
+# 2. 정지선·신호·곡률·GPS 음영 오프라인 테스트
+python "$MORAI_WS/docker/final_ws/run_regression.py" \
+  --workspace "$MORAI_WS"
+# 3. 센서 관찰 — 차량 제어 OFF
+roslaunch morai_bringup final_ws_native_no_lamps.launch \
+  enable_control:=false
+# 4. 관찰 launch를 Ctrl+C로 종료한 뒤 주행
+# Cam4 보정이 완료된 개인 설정 파일 사용
+roslaunch morai_bringup final_ws_native_no_lamps.launch \
+  enable_control:=true \
+  morai_host_ip:=192.168.0.161 \
+  ego_status_port:=1911 \
+  max_speed_kph:=30.0 \
+  fallback_speed_cap_kph:=3.0 \
+  turn_signal_maneuvers_file:="$HOME/morai-native-config/turn_signal_maneuvers.yaml"
+# 5. 새 터미널 — 센서와 인식 결과 확인
+source "$HOME/morai_native_env.sh"
+
+rostopic echo -n 1 /Ego_topic
+rostopic echo -n 1 /localization/sensor_quality
+rostopic echo -n 1 /detection/lane
+rostopic echo -n 1 /perception/camera/stopline
+rostopic echo -n 1 /perception/traffic_light/directional_state
+# 6. 주행 판단 실시간 확인 — Ctrl+C로 종료
+rostopic echo /control/maneuver_status
+# 7. GPS 음영 차선 제어 상태 확인 — Ctrl+C로 종료
+rostopic echo /stability/camera_fallback_status
+
+
+오후 11:35
