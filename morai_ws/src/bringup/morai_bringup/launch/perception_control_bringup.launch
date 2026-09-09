@@ -4,6 +4,7 @@
   <arg name="workspace_path" default="$(env HOME)/morai_ws" />
   <arg name="path_file" default="$(arg workspace_path)/data/routes/2026_molit_comp_global_path.txt" />
   <arg name="morai_host_ip" default="192.168.0.151" />
+  <arg name="ego_status_port" default="909" />
   <arg name="control_remote_port" default="9093" />
   <arg name="enable_control" default="false" />
   <arg name="use_curvature_speed_planner" default="true" />
@@ -49,6 +50,7 @@
   <arg name="recovery_stable_sec" default="1.0" />
   <arg name="traffic_light_mux_topic" default="/detection/traffic_light" />
   <arg name="enable_turn_signal" default="false" />
+  <arg name="test_without_turn_signals" default="false" />
   <arg name="enable_maneuver_fusion" default="false" />
   <arg name="turn_signal_lead_time_sec" default="5.0" />
   <arg name="turn_signal_remote_port" default="9097" />
@@ -72,6 +74,7 @@
     <arg name="workspace_path" value="$(arg workspace_path)" />
     <arg name="path_file" value="$(arg path_file)" />
     <arg name="morai_host_ip" value="$(arg morai_host_ip)" />
+    <arg name="ego_status_port" value="$(arg ego_status_port)" />
     <arg name="control_remote_port" value="$(arg control_remote_port)" />
     <arg name="enable_control" value="$(arg enable_control)" />
     <arg name="use_curvature_speed_planner" value="$(arg use_curvature_speed_planner)" />
@@ -199,7 +202,7 @@
   </node>
 
   <!-- 차선 변경/좌우회전 시작 5초 전 MORAI 방향지시등을 켠다. -->
-  <node if="$(eval arg('enable_turn_signal') and not arg('enable_maneuver_fusion'))"
+  <node if="$(eval arg('enable_turn_signal') and not arg('enable_maneuver_fusion') and not arg('test_without_turn_signals'))"
         pkg="turn_signal_controller"
         type="turn_signal_node.py"
         name="final_ws_turn_signal_controller"
@@ -239,7 +242,8 @@
     <param name="accel_rise_rate_per_sec" value="$(arg stopline_accel_rise_rate_per_sec)" />
     <param name="max_decel_mps2" value="$(arg stopline_max_decel_mps2)" />
     <param name="planning_decel_mps2" value="$(arg stopline_planning_decel_mps2)" />
-    <param name="lamp_output_enabled" value="$(eval arg('enable_control') and arg('enable_turn_signal'))" />
+    <param name="test_without_turn_signals" value="$(arg test_without_turn_signals)" />
+    <param name="lamp_output_enabled" value="$(eval arg('enable_control') and arg('enable_turn_signal') and not arg('test_without_turn_signals'))" />
     <param name="remote_ip" value="$(arg morai_host_ip)" />
     <param name="remote_port" value="$(arg turn_signal_remote_port)" />
     <param name="lead_time_sec" value="$(arg turn_signal_lead_time_sec)" />

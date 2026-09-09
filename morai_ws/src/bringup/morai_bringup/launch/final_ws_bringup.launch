@@ -8,6 +8,8 @@
   <arg name="workspace_path" default="$(env HOME)/morai_ws" />
   <arg name="path_file" default="$(arg workspace_path)/data/routes/2026_molit_comp_global_path.txt" />
   <arg name="morai_host_ip" default="192.168.0.151" />
+  <arg name="ego_status_port" default="909" />
+  <arg name="control_remote_port" default="9093" />
   <arg name="enable_control" default="false" />
   <arg name="enable_lane_fallback" default="true" />
   <arg name="enable_stopline_control" default="true" />
@@ -39,7 +41,9 @@
   <arg name="lane_loss_grace_sec" default="0.25" />
   <arg name="recovery_stable_sec" default="1.0" />
   <arg name="stopline_topic" default="/perception/camera/stopline" />
-  <arg name="enable_turn_signal" default="$(arg enable_control)" />
+  <!-- Opt-in simulator test: no lamp UDP or 5-second indicator lead gate. -->
+  <arg name="test_without_turn_signals" default="false" />
+  <arg name="enable_turn_signal" default="$(eval arg('enable_control') and not arg('test_without_turn_signals'))" />
   <arg name="enable_maneuver_fusion" default="true" />
   <arg name="turn_signal_lead_time_sec" default="5.0" />
   <arg name="turn_signal_remote_port" default="9097" />
@@ -53,6 +57,8 @@
     <arg name="workspace_path" value="$(arg workspace_path)" />
     <arg name="path_file" value="$(arg path_file)" />
     <arg name="morai_host_ip" value="$(arg morai_host_ip)" />
+    <arg name="ego_status_port" value="$(arg ego_status_port)" />
+    <arg name="control_remote_port" value="$(arg control_remote_port)" />
     <arg name="enable_control" value="$(arg enable_control)" />
     <arg name="use_roi_sensor_stack" value="true" />
     <arg name="enable_sensor_quality" value="$(arg enable_lane_fallback)" />
@@ -87,6 +93,7 @@
     <arg name="recovery_stable_sec" value="$(arg recovery_stable_sec)" />
     <arg name="roi_lidar_rviz" value="$(arg roi_lidar_rviz)" />
     <arg name="enable_turn_signal" value="$(arg enable_turn_signal)" />
+    <arg name="test_without_turn_signals" value="$(arg test_without_turn_signals)" />
     <arg name="enable_maneuver_fusion" value="$(arg enable_maneuver_fusion)" />
     <arg name="turn_signal_lead_time_sec" value="$(arg turn_signal_lead_time_sec)" />
     <arg name="turn_signal_remote_port" value="$(arg turn_signal_remote_port)" />
