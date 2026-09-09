@@ -109,12 +109,15 @@ CUDA 결과가 `True`여야 GPU를 쓸 수 있다. 지원 wheel 조합의 출처
 그 패키지를 `$MORAI_WS/src/common/morai_msgs`에 복사한다. 같은 이름의 패키지는
 workspace 안에 **한 개만** 둔다. `.msg` 파일은 빌드하면 Python 메시지 클래스로 생성된다.
 
-기존 메시지 패키지가 없다면 아래 공식 ROS1 저장소를 사용하고, 생성된 메시지 형식을
-현재 MORAI SDK와 대조한다. 최신 기본 브랜치가 모든 MORAI 버전과 맞는다는 뜻은 아니다.
+이 대회는 [공식 ROS1 메시지의 beta_drive 브랜치](https://github.com/MORAI-Autonomous/MORAI-ROS_morai_msgs/tree/beta_drive)를 사용한다.
+이전 안내의 브랜치 없는 clone은 잘못된 안내였다. `main`의 `front_steer`와
+`front_steer_angle`은 현재 코드가 사용하는 `steering`과 `wheel_angle` 계약과 다르다.
+import 성공만으로 호환 여부를 확인할 수 없다. 기존 메시지 폴더가 없다면 다음을 실행한다.
 
 ```bash
 export MORAI_WS="$HOME/AutoVehicle/morai_ws"
-git clone https://github.com/MORAI-Autonomous/MORAI-ROS_morai_msgs.git \
+git clone --branch beta_drive --single-branch \
+  https://github.com/MORAI-Autonomous/MORAI-ROS_morai_msgs.git \
   "$MORAI_WS/src/common/morai_msgs"
 git -C "$MORAI_WS/src/common/morai_msgs" rev-parse HEAD
 test -f "$MORAI_WS/src/common/morai_msgs/msg/CtrlCmd.msg"
@@ -122,36 +125,79 @@ test -f "$MORAI_WS/src/common/morai_msgs/msg/EgoVehicleStatus.msg"
 test -f "$MORAI_WS/src/common/morai_msgs/msg/GPSMessage.msg"
 ```
 
-위 clone은 해당 폴더가 없을 때만 실행한다. 대회에서 지정한 SDK 커밋이 있다면
-그 커밋으로 맞춘 다음 빌드한다. ROS2용 메시지 저장소를 사용하지 않는다.
+위 clone은 해당 폴더가 없을 때만 실행한다. 2026-09-10에 확인한 `beta_drive` HEAD는
+`45c6baf148f2327f4c9fefd48262f25bdfe4b567`이다. 대회가 별도 커밋을 지정하면 그 커밋을 사용한다.
+
+**이미 기본 브랜치로 clone했다면** 모든 주행 launch를 Ctrl+C로 종료한 뒤 다음을 실행한다.
+`AutoVehicle`은 `final_ws`, 그 안의 별도 저장소 `morai_msgs`는 `beta_drive`다.
+메시지 저장소에 로컬 수정이 있으면 아래 블록은 변경하지 않고 종료한다. 수정본은
+`src` 밖에 보관한 후 진행하며 `reset --hard`로 덮어쓰지 않는다.
 
 ```bash
+(
+set -e
+export MORAI_WS="$HOME/AutoVehicle/morai_ws"
+MORAI_MSGS_DIR="$MORAI_WS/src/common/morai_msgs"
+git -C "$MORAI_MSGS_DIR" status --short
+if [ -n "$(git -C "$MORAI_MSGS_DIR" status --porcelain)" ]; then
+  echo 'morai_msgs에 로컬 수정이 있습니다. 보관 후 진행하세요.'
+  exit 1
+fi
+git -C "$MORAI_MSGS_DIR" fetch origin refs/heads/beta_drive:refs/remotes/origin/beta_drive
+if git -C "$MORAI_MSGS_DIR" show-ref --verify --quiet refs/heads/beta_drive; then
+  git -C "$MORAI_MSGS_DIR" switch beta_drive
+else
+  git -C "$MORAI_MSGS_DIR" switch --track -c beta_drive origin/beta_drive
+fi
+git -C "$MORAI_MSGS_DIR" merge --ff-only origin/beta_drive
+git -C "$MORAI_MSGS_DIR" branch --show-current
+)
+```
+
+브랜치 전환 성공 후 **메시지를 다시 빌드한다.** 기존 시스템 Python 환경을 사용한다면
+venv가 없어도 되지만 빌드와 실행의 Python은 같아야 한다. 아래 블록은 실패 시
+그 뒤의 확인을 실행하지 않으며, 바깥 터미널은 종료하지 않는다.
+
+```bash
+(
+set -e
 source /opt/ros/noetic/setup.bash
-source "$HOME/morai-final-venv/bin/activate"
+export MORAI_WS="$HOME/AutoVehicle/morai_ws"
+if [ -f "$HOME/morai-final-venv/bin/activate" ]; then
+  source "$HOME/morai-final-venv/bin/activate"
+fi
 cd "$MORAI_WS"
-catkin_make -j2 -l2 -DPYTHON_EXECUTABLE="$VIRTUAL_ENV/bin/python3"
+catkin_make -j2 -l2 --force-cmake -DPYTHON_EXECUTABLE="$(command -v python3)"
 source "$MORAI_WS/devel/setup.bash"
 rospack find morai_msgs
 rospack find morai_bringup
 rosmsg show morai_msgs/CtrlCmd
 rosmsg show morai_msgs/EgoVehicleStatus
 rosmsg show morai_perception_msgs/StopLineDetection
-python -c 'import rospy, cv2, torch, ultralytics; from morai_msgs.msg import CtrlCmd, GPSMessage, EgoVehicleStatus; from common.msg import ObjectInfoArray; print("IMPORT_OK")'
+python3 docker/final_ws/check_morai_messages.py
+python3 -c 'import rospy, cv2, torch, ultralytics; from common.msg import ObjectInfoArray; print("IMPORT_OK")'
+)
 ```
 
 `catkin_make`는 `src`가 아닌 `morai_ws`에서 실행한다. Windows의 `build/devel`이나
 이전에 다른 경로에서 빌드한 결과를 복사하지 않는다. 이후 실행도 빌드한 것과 같은
-venv에서 한다. 기존 `.bashrc`가 다른 workspace를 source한다면 새 터미널에서 아래 환경을
+Python 환경에서 한다. 기존 `.bashrc`가 다른 workspace를 source한다면 새 터미널에서 아래 환경을
 마지막에 source하고 `rospack find morai_bringup`이 새 clone을 가리키는지 확인한다.
+`MORAI_MESSAGES_OK`가 출력되고 `CtrlCmd`에 `steering`, `EgoVehicleStatus`에
+`wheel_angle`이 보여야 한다. 여전히 `front_steer`가 보이면 실행 중인 구버전 노드,
+다른 workspace의 생성 메시지 또는 빌드 실패를 확인한다. 브랜치 변경 전에 실행한
+노드는 재빌드 후 반드시 다시 시작한다. 필드 검사 성공은 센서 수신이나 주행 성공을 의미하지 않는다.
 
 ## 4. 매 터미널에서 사용할 환경 파일 만들기
 
 ```bash
 cat > "$HOME/morai_native_env.sh" <<'EOF'
-source /opt/ros/noetic/setup.bash
-source "$HOME/morai-final-venv/bin/activate"
+source /opt/ros/noetic/setup.bash || return 1
+if [ -f "$HOME/morai-final-venv/bin/activate" ]; then
+  source "$HOME/morai-final-venv/bin/activate" || return 1
+fi
 export MORAI_WS="$HOME/AutoVehicle/morai_ws"
-source "$MORAI_WS/devel/setup.bash"
+source "$MORAI_WS/devel/setup.bash" || return 1
 export ROS_MASTER_URI=http://192.168.0.200:11311
 export ROS_IP=192.168.0.200
 unset ROS_HOSTNAME
@@ -425,8 +471,9 @@ cd "$HOME/AutoVehicle"
 git status --short
 git pull --ff-only origin final_ws
 cd "$MORAI_WS"
-catkin_make -j2 -l2 -DPYTHON_EXECUTABLE="$VIRTUAL_ENV/bin/python3"
+catkin_make -j2 -l2 -DPYTHON_EXECUTABLE="$(command -v python3)"
 source "$MORAI_WS/devel/setup.bash"
+python3 "$MORAI_WS/docker/final_ws/check_morai_messages.py"
 ```
 
 | 증상 | 확인할 부분 |

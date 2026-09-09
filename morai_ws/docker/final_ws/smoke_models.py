@@ -15,6 +15,10 @@ def main():
     parser.add_argument("--device", choices=("cpu", "cuda"), default="cpu")
     args = parser.parse_args()
 
+    from check_morai_messages import main as check_messages
+    if check_messages():
+        return 1
+
     import cv2
     import numpy as np
     import scipy
@@ -58,4 +62,4 @@ def main():
 
 
 if __name__ == "__main__":
-    main()
+    sys.exit(main())
