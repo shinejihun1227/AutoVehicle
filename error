@@ -1,3 +1,10 @@
+rosparam get /morai_udp_drive_bridge/control_output_enabled
+rosparam get /morai_udp_drive_bridge/control_remote_ip
+rosparam get /morai_udp_drive_bridge/control_remote_port
+
+rostopic info /ctrl_cmd
+rostopic echo -n 1 /Ego_topic
+
 rostopic echo -n 1 /experimental/curvature_speed_limit
 rostopic echo -n 1 /experimental/curvature_speed_command
 rostopic echo -n 1 /experimental/curvature_value
