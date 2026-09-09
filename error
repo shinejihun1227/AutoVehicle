@@ -1,3 +1,19 @@
+rostopic echo -n 1 /detection/fused_safety_stop
+rostopic echo -n 1 /control/mux_status
+
+rosparam get /roi_sensor_safety_adapter/require_fresh_lidar
+rosparam get /roi_sensor_safety_adapter/require_fresh_camera_stops
+
+
+rostopic echo -n 1 /detection/lane
+rostopic echo -n 1 /perception/camera/person_detected
+rostopic echo -n 1 /perception/intersection/driving_unavailable
+rostopic echo -n 1 /perception/traffic_light/stop_required
+
+
+
+
+
 source "$HOME/morai_native_env.sh"
 
 rostopic info /gps
