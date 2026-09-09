@@ -13,3 +13,36 @@ rostopic echo -n 1 /gps
 rostopic echo -n 1 /Imu
 rostopic echo -n 1 /localization/gps
 rostopic echo -n 1 /localization/odometry
+
+
+rostopic echo -n 1 /experimental/curvature_speed_command
+rostopic echo -n 1 /experimental/curvature_accel_command
+rostopic echo -n 1 /experimental/curvature_brake_command
+rostopic echo -n 1 /experimental/curvature_goal_reached
+
+
+rostopic echo -n 1 /detection/fused_safety_stop
+rostopic echo -n 1 /control/mux_status
+rostopic echo -n 1 /control/maneuver_status
+
+
+source "$HOME/morai_native_env.sh"
+
+roslaunch morai_bringup final_ws_bringup.launch \
+workspace_path:="$HOME/AutoVehicle/morai_ws" \
+path_file:="$HOME/AutoVehicle/morai_ws/data/routes/2026_molit_comp_global_path.txt" \
+enable_control:=true \
+morai_host_ip:=192.168.0.161 \
+ego_status_port:=1911 \
+control_remote_port:=9093 \
+enable_roi_camera:=true \
+enable_roi_lidar:=false \
+roi_enable_lane:=true \
+roi_enable_yolo:=true \
+enable_lane_fallback:=true \
+enable_maneuver_fusion:=true \
+enable_turn_signal:=false \
+test_without_turn_signals:=true \
+max_speed_kph:=30.0 \
+fallback_speed_cap_kph:=3.0 \
+turn_signal_maneuvers_file:="$HOME/morai-native-config/turn_signal_maneuvers.yaml"
