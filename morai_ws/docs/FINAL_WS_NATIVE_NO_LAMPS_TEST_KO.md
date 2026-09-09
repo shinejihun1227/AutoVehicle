@@ -315,7 +315,7 @@ turn_signal_maneuvers_file:=$HOME/morai-native-config/turn_signal_maneuvers.yaml
 파일명에 `turn_signal`이 남아 있어도 이 YAML에는 **경로와 도로 신호등의 연결·보정**이
 포함되어 있다. 방향지시등을 제외한다는 이유로 해당 패키지나 YAML 전체를 삭제하면 안 된다.
 
-## 9. MORAI 저속 주행 시험 명령과 확인 항목
+## 9. MORAI 주행 시험 명령과 확인 항목
 
 관찰 launch를 Ctrl+C로 종료한 뒤, MORAI 시작 위치·차량 방향을 대회 경로에 맞추고
 외부 UDP 차량 제어 모드를 선택한다. Cam4와 좌표 보정, 오프라인 검사 결과를 확인한다.
@@ -334,8 +334,8 @@ roslaunch morai_bringup final_ws_native_no_lamps.launch \
 
 SSH라면 7절처럼 `roslaunch` 앞에 `xvfb-run -a -s '-screen 0 1920x1080x24'`를 붙인다.
 이 launch가 필요한 인식·측위·제어 노드를 함께 시작하므로 개별 실행파일을 중복 실행하지 않는다.
-자동 적용값은 MORAI `.161`, Ego 수신 `1911`, 램프 제외, 최고속도·음영 상한 `3km/h`,
-공통 횡가속도 한계 `1m/s²`다.
+자동 적용값은 MORAI `.161`, Ego 수신 `1911`, 램프 제외, 정상 주행 최고속도 `30km/h`,
+GPS 음영 차선 주행 상한 `3km/h`, 공통 횡가속도 한계 `1m/s²`다.
 
 **터미널 2에서 진단을 보며 한 항목씩 시험한다:**
 
@@ -359,7 +359,8 @@ SSH라면 7절처럼 `roslaunch` 앞에 `xvfb-run -a -s '-screen 0 1920x1080x24'
 회전 속도는 좌회전 15/우회전 10 같은 고정값이 아니다.
 공통 `3.6 * sqrt(lateral_accel_limit_mps2 / abs(curvature))` km/h와
 전체 `max_speed_kph`, 접근·정지 제한 중 더 낮은 값을 적용한다.
-`3km/h`는 초기 시험의 전체 상한이라 완만한 곡선에서는 곡률 감속 차이가 작을 수 있다.
+`30km/h`는 정상 주행의 최고속도이며 항상 30km/h로 달린다는 뜻은 아니다.
+곡률이 크거나 정지선·신호 조건에 걸리면 더 낮은 속도를 적용한다.
 계산값은 `turn_curve_speed_kph`, 적용 상한은 `turn_speed_limit_kph`를 확인한다.
 속도 상한을 바꾸면 같은 launch의 `max_speed_kph:=값`을 사용한다.
 `/ctrl_cmd`는 accel/brake 방식이므로 `velocity: 0`만 보고 고장으로 판단하지 않는다.

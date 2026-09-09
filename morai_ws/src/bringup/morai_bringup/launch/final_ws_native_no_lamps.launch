@@ -7,8 +7,9 @@
   <arg name="ego_status_port" default="1911" />
   <arg name="control_remote_port" default="9093" />
   <arg name="enable_control" default="false" />
-  <!-- Initial test cap, still subject to the shared curvature speed planner. -->
-  <arg name="max_speed_kph" default="3.0" />
+  <!-- Normal driving ceiling; the shared curvature planner can command less. -->
+  <arg name="max_speed_kph" default="30.0" />
+  <!-- GPS blackout lane following keeps its separate speed cap. -->
   <arg name="fallback_speed_cap_kph" default="3.0" />
   <arg name="lateral_accel_limit_mps2" default="1.0" />
   <arg name="turn_signal_maneuvers_file" default="$(find turn_signal_controller)/config/turn_signal_maneuvers.yaml" />
