@@ -3,7 +3,9 @@
 > 현재 `final_ws`는 구현 백업본이며 주행 승인본이 아닙니다.
 > [미해결 안전 문제와 검증 조건](docs/KNOWN_ISSUES_FINAL_WS.md)을 먼저 확인하세요.
 
-새 환경 설치와 최종 실행은 [Docker 구성·주행 시험 안내](docs/DOCKER_FINAL_WS_FROM_SCRATCH_KO.md)를 사용합니다.
+Docker 없이 새 Ubuntu 20.04 PC에서 시작하려면 [Ubuntu 최초 설치·센서 확인·주행 통합 안내](docs/UBUNTU_NATIVE_FIRST_SETUP_KO.md)를 사용합니다.
+주행 코드의 `final_ws`와 대회 메시지의 `beta_drive`를 구분해 설치합니다.
+Docker를 사용하는 새 환경 설치와 최종 실행은 [Docker 구성·주행 시험 안내](docs/DOCKER_FINAL_WS_FROM_SCRATCH_KO.md)를 사용합니다.
 정지선·신호·회전·GPS 음영구간 보완본의 재빌드와 시험 명령은
 [final_ws 보완본 Docker 빠른 실행](docs/FINAL_WS_UPDATED_DOCKER_TEST_KO.md)에 정리했습니다.
 

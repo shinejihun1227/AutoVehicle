@@ -1,5 +1,8 @@
 # Ubuntu 홈 폴더 설치: 방향지시등 없이 final_ws 시험하기
 
+ROS가 아직 없는 새 Ubuntu PC라면 [처음 설치부터 실제 주행까지 한 문서로 정리한 안내](UBUNTU_NATIVE_FIRST_SETUP_KO.md)를 사용한다.
+Ubuntu 네트워크, ROS 설치, final_ws/beta_drive clone, 가상환경 생성, 메시지 빌드, 센서 확인 순서가 포함되어 있다.
+
 대상: **Ubuntu 20.04 + ROS1 Noetic**, Docker를 사용하지 않는 Ubuntu 네이티브 실행.
 아래 명령은 Windows PowerShell이 아니라 **Ubuntu의 Bash 터미널**에서 실행한다.
 Windows에서 SSH로 접속했다면 접속 후 Ubuntu 터미널에 입력한다.
