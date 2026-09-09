@@ -1,0 +1,28 @@
+cat > "$HOME/morai_native_env.sh" <<'EOF'
+export MORAI_WS="$HOME/AutoVehicle/morai_ws"
+
+for morai_setup_file in \
+  "/opt/ros/noetic/setup.bash" \
+  "$HOME/morai-final-venv/bin/activate" \
+  "$MORAI_WS/devel/setup.bash"
+do
+  if [ ! -f "$morai_setup_file" ]; then
+    printf '파일 없음: %s\n' "$morai_setup_file"
+    return 1
+  fi
+done
+
+source /opt/ros/noetic/setup.bash
+source "$HOME/morai-final-venv/bin/activate"
+source "$MORAI_WS/devel/setup.bash"
+
+export ROS_MASTER_URI=http://192.168.0.200:11311
+export ROS_IP=192.168.0.200
+unset ROS_HOSTNAME
+export YOLO_AUTOINSTALL=false
+export QT_X11_NO_MITSHM=1
+
+echo "MORAI 환경 설정 완료"
+EOF
+
+source "$HOME/morai_native_env.sh"
