@@ -1,5 +1,20 @@
 source "$HOME/morai_native_env.sh"
 
+rosparam get /morai_lidar_udp_source/host_port
+rosparam get /morai_lidar_udp_source/destination_port
+
+rostopic info /morai/lidar/live_points
+rostopic info /perception/lidar/tracked_obstacles_map
+rostopic info /localization/odometry
+
+sudo tcpdump -ni any -nn -c 5 'udp and dst port 2001'
+
+rostopic echo -n 1 /morai/lidar/live_points
+rostopic echo -n 1 /perception/lidar/tracked_obstacles_map
+rostopic echo -n 1 /localization/odometry
+ㅡㅡㅡㅡㅡ
+source "$HOME/morai_native_env.sh"
+
 ip -br addr
 
 timeout 5s rosnode ping -c 2 /morai_udp_drive_bridge
