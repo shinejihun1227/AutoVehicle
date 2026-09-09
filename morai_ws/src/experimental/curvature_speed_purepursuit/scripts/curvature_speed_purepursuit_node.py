@@ -30,7 +30,9 @@ from curvature_speed_purepursuit.planner import (
     clean_consecutive_duplicates,
     cumulative_arc_lengths,
     curvature_profile,
+    adaptive_lookahead_m,
     interpolate_by_s,
+    max_abs_curvature_ahead,
     load_path_file,
     nearest_projection,
     profile_value_at_s,
@@ -120,11 +122,38 @@ class CurvatureSpeedPurePursuitNode:
         self.wheelbase_m = float(rospy.get_param("~wheelbase_m", 3.0))
         self.lookahead_min_m = float(rospy.get_param("~lookahead_min_m", 4.0))
         self.lookahead_gain = float(rospy.get_param("~lookahead_gain", 0.35))
+        self.lookahead_curvature_gain = max(
+            0.0, float(rospy.get_param("~lookahead_curvature_gain", 6.0))
+        )
+        self.lookahead_tight_min_m = max(
+            0.5, float(rospy.get_param("~lookahead_tight_min_m", 2.2))
+        )
+        self.lookahead_max_m = max(
+            self.lookahead_tight_min_m,
+            float(rospy.get_param("~lookahead_max_m", 12.0)),
+        )
+        self.curvature_preview_distance_m = max(
+            0.0,
+            float(rospy.get_param("~curvature_preview_distance_m", 8.0)),
+        )
+        self.curvature_preview_step_m = max(
+            0.1,
+            float(rospy.get_param("~curvature_preview_step_m", 0.5)),
+        )
+        self.steering_feedforward_weight = clamp(
+            float(rospy.get_param("~steering_feedforward_weight", 0.35)),
+            0.0,
+            1.0,
+        )
         self.goal_tolerance_m = float(rospy.get_param("~goal_tolerance_m", 1.5))
         self.max_steering_rad = float(
             rospy.get_param("~max_steering_rad", math.radians(40.0))
         )
         self.steering_sign = 1.0 if float(rospy.get_param("~steering_sign", 1.0)) >= 0.0 else -1.0
+        self.max_steering_rate_rad_s = max(
+            0.0,
+            float(rospy.get_param("~max_steering_rate_rad_s", 2.5)),
+        )
         self.max_accel_mps2 = max(1e-6, float(rospy.get_param("~max_accel_mps2", 1.0)))
         self.max_decel_mps2 = max(1e-6, float(rospy.get_param("~max_decel_mps2", 1.5)))
         self.rate_hz = max(1.0, float(rospy.get_param("~control_rate_hz", 20.0)))
@@ -166,6 +195,7 @@ class CurvatureSpeedPurePursuitNode:
         self.last_progress_s: Optional[float] = None
         self.last_control_time: Optional[float] = None
         self.command_speed_mps = 0.0
+        self.last_steering_rad = 0.0
 
         self.command_pub = rospy.Publisher(self.command_topic, CtrlCmd, queue_size=1)
         self.target_pub = rospy.Publisher(
@@ -279,14 +309,47 @@ class CurvatureSpeedPurePursuitNode:
     def compute_steering(
         self, x: float, y: float, yaw: float, speed_mps: float, progress_s: float
     ) -> Tuple[float, PathPoint, float]:
-        lookahead = max(
+        # Keep this method usable by lightweight offline turn tests and tools
+        # that construct the controller with ``__new__`` and only provide the
+        # original Pure Pursuit fields.
+        curvatures = getattr(self, "curvatures", [0.0] * len(self.points))
+        curvature_preview_distance = getattr(
+            self, "curvature_preview_distance_m", 0.0
+        )
+        curvature_preview_step = getattr(self, "curvature_preview_step_m", 0.5)
+        curvature_gain = getattr(self, "lookahead_curvature_gain", 0.0)
+        tight_min_lookahead = getattr(self, "lookahead_tight_min_m", self.lookahead_min_m)
+        max_lookahead = getattr(
+            self,
+            "lookahead_max_m",
+            1000.0,
+        )
+        feedforward_weight = getattr(self, "steering_feedforward_weight", 0.0)
+        nominal_lookahead = max(
             self.lookahead_min_m,
             self.lookahead_min_m + self.lookahead_gain * max(0.0, speed_mps),
         )
+        preview_curvature = max_abs_curvature_ahead(
+            self.s_values,
+            curvatures,
+            progress_s,
+            max(curvature_preview_distance, nominal_lookahead),
+            curvature_preview_step,
+        )
+        lookahead = adaptive_lookahead_m(
+            speed_mps=speed_mps,
+            base_lookahead_m=self.lookahead_min_m,
+            speed_gain_s=self.lookahead_gain,
+            preview_curvature_abs_m_inv=preview_curvature,
+            curvature_gain_m=curvature_gain,
+            tight_min_lookahead_m=tight_min_lookahead,
+            max_lookahead_m=max_lookahead,
+        )
+        target_s = min(self.total_length_m, progress_s + lookahead)
         target, _ = interpolate_by_s(
             self.points,
             self.s_values,
-            min(self.total_length_m, progress_s + lookahead),
+            target_s,
         )
         dx = target.x - x
         dy = target.y - y
@@ -296,9 +359,42 @@ class CurvatureSpeedPurePursuitNode:
         target_y_body = -sin_yaw * dx + cos_yaw * dy
         actual_lookahead = max(math.hypot(target_x_body, target_y_body), 1e-3)
         alpha = math.atan2(target_y_body, target_x_body)
-        curvature = 2.0 * math.sin(alpha) / actual_lookahead
-        steering = math.atan(self.wheelbase_m * curvature) * self.steering_sign
+        pp_curvature = 2.0 * math.sin(alpha) / actual_lookahead
+
+        # Feed forward the path curvature at the target corridor.  Pure
+        # Pursuit alone reacts after the vehicle has entered a tight bend;
+        # blending this term starts the turn earlier without removing the
+        # lateral-error feedback that recentres the vehicle on the path.
+        feedforward_s = min(
+            self.total_length_m,
+            progress_s + 0.75 * lookahead,
+        )
+        path_curvature = profile_value_at_s(
+            self.s_values, curvatures, feedforward_s
+        )
+        feedback_steering = math.atan(self.wheelbase_m * pp_curvature)
+        feedforward_steering = math.atan(self.wheelbase_m * path_curvature)
+        steering = (
+            (1.0 - feedforward_weight) * feedback_steering
+            + feedforward_weight * feedforward_steering
+        ) * self.steering_sign
         return clamp(steering, -self.max_steering_rad, self.max_steering_rad), target, actual_lookahead
+
+    def limit_steering_rate(self, steering: float, dt: float) -> float:
+        """Limit steering slew so a noisy bend cannot create a jerk."""
+
+        target = clamp(float(steering), -self.max_steering_rad, self.max_steering_rad)
+        if self.max_steering_rate_rad_s <= 0.0:
+            self.last_steering_rad = target
+            return target
+        max_delta = self.max_steering_rate_rad_s * max(float(dt), 1e-3)
+        limited = clamp(
+            target,
+            self.last_steering_rad - max_delta,
+            self.last_steering_rad + max_delta,
+        )
+        self.last_steering_rad = limited
+        return limited
 
     def make_command(
         self,
@@ -361,6 +457,7 @@ class CurvatureSpeedPurePursuitNode:
             or time.monotonic() - self.latest_odom_wall_time > self.pose_timeout_sec
         ):
             self.command_speed_mps = 0.0
+            self.last_steering_rad = 0.0
             self.speed_controller.reset()
             self.speed_command_pub.publish(Float64(0.0))
             self.goal_pub.publish(Bool(False))
@@ -411,12 +508,14 @@ class CurvatureSpeedPurePursuitNode:
 
         if stop:
             steering = 0.0
+            self.last_steering_rad = 0.0
             target = self.points[-1]
             actual_lookahead = 0.0
         else:
             steering, target, actual_lookahead = self.compute_steering(
                 x, y, yaw, measured_speed_mps, progress_s
             )
+            steering = self.limit_steering_rate(steering, dt)
 
         target_message = PointStamped()
         target_message.header.stamp = rospy.Time.now()

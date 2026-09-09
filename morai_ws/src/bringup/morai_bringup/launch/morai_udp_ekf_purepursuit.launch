@@ -15,8 +15,8 @@
   <arg name="longl_cmd_type" default="1" />
   <!-- 권장 주행: 곡률 속도 프로파일 + 목표속도 PI + accel/brake -->
   <arg name="use_curvature_speed_planner" default="true" />
-  <arg name="target_speed_kph" default="7.2" />
-  <arg name="max_speed_kph" default="7.2" />
+  <arg name="target_speed_kph" default="30.0" />
+  <arg name="max_speed_kph" default="30.0" />
   <arg name="lateral_accel_limit_mps2" default="1.0" />
   <arg name="max_accel_mps2" default="1.0" />
   <arg name="max_decel_mps2" default="1.5" />
@@ -26,6 +26,20 @@
   <arg name="speed_ki" default="0.05" />
   <arg name="speed_integral_limit_kph_s" default="10.8" />
   <arg name="speed_error_deadband_kph" default="0.1" />
+  <!-- 곡률 기반 Pure Pursuit 회전 파라미터 -->
+  <arg name="curvature_half_window_points" default="1" />
+  <arg name="curvature_smoothing_window" default="5" />
+  <arg name="lookahead_min_m" default="4.0" />
+  <arg name="lookahead_gain" default="0.35" />
+  <arg name="lookahead_curvature_gain" default="6.0" />
+  <arg name="lookahead_tight_min_m" default="2.2" />
+  <arg name="lookahead_max_m" default="12.0" />
+  <arg name="curvature_preview_distance_m" default="8.0" />
+  <arg name="curvature_preview_step_m" default="0.5" />
+  <arg name="steering_feedforward_weight" default="0.35" />
+  <arg name="max_steering_rate_rad_s" default="2.5" />
+  <arg name="max_steering_rad" default="0.6981317008" />
+  <arg name="steering_sign" default="1.0" />
   <arg name="ekf_gps_topic" default="/localization/gps" />
   <arg name="ekf_imu_topic" default="/Imu" />
   <arg name="ekf_default_gps_variance_m2" default="1.0" />
@@ -63,6 +77,7 @@
     <arg name="control_bind_port" value="$(arg control_source_port)" />
     <arg name="command_topic" value="/ctrl_cmd" />
     <arg name="longl_cmd_type" value="$(arg longl_cmd_type)" />
+    <arg name="max_wheel_angle_rad" value="$(arg max_steering_rad)" />
   </include>
 
   <!-- 3. 차량 기준점과 센서의 정적 TF -->
@@ -129,8 +144,8 @@
       <param name="publish_command" value="$(arg enable_control)" />
       <param name="pose_timeout_sec" value="0.5" />
       <param name="duplicate_epsilon_m" value="0.000001" />
-      <param name="curvature_half_window_points" value="1" />
-      <param name="curvature_smoothing_window" value="5" />
+      <param name="curvature_half_window_points" value="$(arg curvature_half_window_points)" />
+      <param name="curvature_smoothing_window" value="$(arg curvature_smoothing_window)" />
       <param name="max_speed_kph" value="$(arg max_speed_kph)" />
       <param name="lateral_accel_limit_mps2" value="$(arg lateral_accel_limit_mps2)" />
       <param name="max_accel_mps2" value="$(arg max_accel_mps2)" />
@@ -138,11 +153,18 @@
       <param name="initial_speed_kph" value="$(arg initial_speed_kph)" />
       <param name="final_speed_kph" value="$(arg final_speed_kph)" />
       <param name="wheelbase_m" value="$(arg wheelbase_m)" />
-      <param name="lookahead_min_m" value="4.0" />
-      <param name="lookahead_gain" value="0.35" />
+      <param name="lookahead_min_m" value="$(arg lookahead_min_m)" />
+      <param name="lookahead_gain" value="$(arg lookahead_gain)" />
+      <param name="lookahead_curvature_gain" value="$(arg lookahead_curvature_gain)" />
+      <param name="lookahead_tight_min_m" value="$(arg lookahead_tight_min_m)" />
+      <param name="lookahead_max_m" value="$(arg lookahead_max_m)" />
+      <param name="curvature_preview_distance_m" value="$(arg curvature_preview_distance_m)" />
+      <param name="curvature_preview_step_m" value="$(arg curvature_preview_step_m)" />
+      <param name="steering_feedforward_weight" value="$(arg steering_feedforward_weight)" />
+      <param name="max_steering_rate_rad_s" value="$(arg max_steering_rate_rad_s)" />
       <param name="goal_tolerance_m" value="1.5" />
-      <param name="max_steering_rad" value="0.6981317008" />
-      <param name="steering_sign" value="1.0" />
+      <param name="max_steering_rad" value="$(arg max_steering_rad)" />
+      <param name="steering_sign" value="$(arg steering_sign)" />
       <param name="longl_cmd_type" value="$(arg longl_cmd_type)" />
       <param name="speed_kp" value="$(arg speed_kp)" />
       <param name="speed_ki" value="$(arg speed_ki)" />

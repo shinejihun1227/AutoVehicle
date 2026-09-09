@@ -13,6 +13,8 @@
   <arg name="control_bind_port" default="9094" />
   <arg name="command_topic" default="/ctrl_cmd" />
   <arg name="longl_cmd_type" default="1" />
+  <!-- CtrlCmd steering 값의 실제 최대 조향각(라디안)과 맞춘다. -->
+  <arg name="max_wheel_angle_rad" default="0.6981317008" />
 
   <node pkg="morai_udp_drive_bridge"
         type="morai_udp_drive_bridge_node.py"
@@ -29,7 +31,7 @@
     <param name="control_bind_port" value="$(arg control_bind_port)" />
     <param name="command_topic" value="$(arg command_topic)" />
     <param name="longl_cmd_type" value="$(arg longl_cmd_type)" />
-    <param name="max_wheel_angle_rad" value="0.6981317008" />
+    <param name="max_wheel_angle_rad" value="$(arg max_wheel_angle_rad)" />
     <param name="send_rate_hz" value="20.0" />
     <param name="command_timeout_sec" value="0.5" />
     <param name="status_use_packet_time" value="false" />

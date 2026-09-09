@@ -16,6 +16,8 @@ from curvature_speed_purepursuit.planner import (  # noqa: E402
     curvature_profile,
     three_point_curvature,
     curvature_speed_mps,
+    adaptive_lookahead_m,
+    max_abs_curvature_ahead,
 )
 
 
@@ -86,6 +88,26 @@ class PlannerTest(unittest.TestCase):
         ]
         profile = curvature_profile(points, half_window_points=1, smoothing_window=3)
         self.assertEqual(len(profile), len(points))
+
+    def test_preview_finds_a_short_sharp_bend_between_control_cycles(self):
+        s_values = [float(index) for index in range(11)]
+        curvatures = [0.0] * len(s_values)
+        curvatures[5] = 0.4
+        self.assertAlmostEqual(
+            max_abs_curvature_ahead(s_values, curvatures, 3.2, 3.0, 0.25),
+            0.4,
+        )
+        self.assertEqual(
+            max_abs_curvature_ahead(s_values, curvatures, 0.0, 1.0),
+            0.0,
+        )
+
+    def test_adaptive_lookahead_shrinks_for_tight_curvature_and_is_bounded(self):
+        straight = adaptive_lookahead_m(8.0, 4.0, 0.35, 0.0)
+        tight = adaptive_lookahead_m(8.0, 4.0, 0.35, 0.5)
+        self.assertGreater(straight, tight)
+        self.assertGreaterEqual(tight, 2.2)
+        self.assertLessEqual(straight, 12.0)
 
 
 if __name__ == "__main__":
