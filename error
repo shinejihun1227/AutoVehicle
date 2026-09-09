@@ -1,6 +1,10 @@
 ss -lun | grep ':1911'
 rosparam get /morai_udp_drive_bridge/status_port
 
+sudo tcpdump -ni any -nn -c 5 \
+'udp and dst host 192.168.0.200 and dst port 1911'
+
+
 rosparam get /morai_udp_drive_bridge/control_output_enabled
 rosparam get /morai_udp_drive_bridge/control_remote_ip
 rosparam get /morai_udp_drive_bridge/control_remote_port
