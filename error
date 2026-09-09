@@ -1,3 +1,40 @@
+source "$HOME/morai_native_env.sh"
+
+python3 - <<'PY' | tee "$HOME/morai-drive-check.log"
+import json
+import rospy
+from std_msgs.msg import String
+from morai_msgs.msg import CtrlCmd, EgoVehicleStatus
+
+rospy.init_node("drive_readonly_check", anonymous=True)
+
+for key in ("control_output_enabled", "control_remote_ip", "control_remote_port"):
+    print(key, "=", rospy.get_param("/morai_udp_drive_bridge/" + key, "설정 없음"))
+
+for topic, cls in [
+    ("/control/mux_status", String),
+    ("/control/maneuver_status", String),
+    ("/ctrl_cmd", CtrlCmd),
+    ("/Ego_topic", EgoVehicleStatus),
+]:
+    try:
+        msg = rospy.wait_for_message(topic, cls, timeout=4)
+        if cls is String:
+            data = json.loads(msg.data)
+            keys = ("mode", "reason", "reasons", "signal_selection_reason",
+                    "reference_path_match", "route_direction")
+            print(topic, {k: data[k] for k in keys if k in data})
+        elif cls is CtrlCmd:
+            print(topic, "accel=", msg.accel, "brake=", msg.brake,
+                  "steering=", msg.steering)
+        else:
+            print(topic, "수신됨", "velocity=", msg.velocity)
+    except Exception as exc:
+        print(topic, "확인 실패:", str(exc))
+PY
+
+
+ㅡㅡㅡㅡㅡㅡㅡㅡㅡㅡ
 cat > "$HOME/morai_native_env.sh" <<'EOF'
 source /opt/ros/noetic/setup.bash || return 1
 
