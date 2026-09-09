@@ -1,3 +1,20 @@
+source "$HOME/morai_native_env.sh"
+
+roslaunch morai_bringup morai_udp_ekf_purepursuit.launch \
+workspace_path:="$HOME/AutoVehicle/morai_ws" \
+path_file:="$HOME/AutoVehicle/morai_ws/data/routes/2026_molit_comp_global_path.txt" \
+gps_port:=3001 \
+imu_port:=4001 \
+ego_status_port:=1911 \
+morai_host_ip:=192.168.0.161 \
+control_remote_port:=9093 \
+control_source_port:=9094 \
+enable_control:=true \
+use_curvature_speed_planner:=true \
+command_topic:=/ctrl_cmd \
+max_speed_kph:=5.0 \
+lateral_accel_limit_mps2:=1.0
+ㅡㅡ
 rostopic echo -n 1 /detection/fused_safety_stop
 rostopic echo -n 1 /control/mux_status
 
