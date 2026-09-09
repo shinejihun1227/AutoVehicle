@@ -1,3 +1,9 @@
+rostopic echo -n 1 /experimental/curvature_speed_limit
+rostopic echo -n 1 /experimental/curvature_speed_command
+rostopic echo -n 1 /experimental/curvature_value
+rostopic echo -n 1 /experimental/curvature_accel_command
+rostopic echo -n 1 /experimental/curvature_brake_command
+ㅡㅡ
 source "$HOME/morai_native_env.sh"
 
 roslaunch morai_bringup morai_udp_ekf_purepursuit.launch \
