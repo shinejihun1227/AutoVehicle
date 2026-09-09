@@ -392,6 +392,30 @@ launch 종료 자체를 비상정지로 가정하지 않는다.
 
 ## 10. 다음 실행·업데이트와 자주 만나는 문제
 
+경로 시작점에서 목표속도가 계속 0으로 남는 문제를 수정했다.
+`initial_speed_kph: 0`은 이제 시작 위치의 속도를 영구적으로 0에 고정하지 않는다.
+출발 명령은 0에서 시작해 `max_accel_mps2`에 따라 시간 기준으로 증가하며,
+곡률·종점 제동 상한과 하위 신호/정지선 검사는 계속 적용된다.
+이 수정으로 모든 정지 원인이 해결되는 것은 아니므로, 실행되지만 움직이지 않으면
+주행 launch를 켠 상태에서 새 터미널로 다음 출력을 확인한다.
+
+```bash
+source "$HOME/morai_native_env.sh"
+timeout 4s rostopic echo -n 1 /control/mux_status
+timeout 4s rostopic echo -n 1 /control/maneuver_status
+timeout 4s rostopic echo -n 1 /ctrl_cmd
+timeout 4s rostopic echo -n 1 /experimental/curvature_progress
+timeout 4s rostopic echo -n 1 /experimental/curvature_speed_command
+rosparam get /morai_udp_drive_bridge/control_output_enabled
+rosparam get /morai_udp_drive_bridge/control_remote_port
+```
+
+`/ctrl_cmd`의 `accel: 0`, `brake: 1`이면 소프트웨어 정지 명령이므로
+`mux_status.reasons`, `maneuver_status.reason`과 `signal_selection_reason`을 확인한다.
+`accel > 0`, `brake: 0`인데 차가 움직이지 않으면 차량 제어 수신 포트,
+외부 제어 모드, UDP 도착 여부를 확인한다. ROS 토픽 발행만으로 MORAI 수신이 확인되지는 않는다.
+`velocity: 0`은 accel/brake 제어 방식에서는 정상이다.
+
 다음 날에는 설치를 반복하지 않고 환경 파일을 source한 뒤 관찰/주행 launch를 실행한다.
 코드 업데이트는 주행을 종료하고 수행한다.
 
