@@ -84,3 +84,6 @@ mm
     fallback_speed_cap_kph:=3.0 \
     path_file:="$MORAI_WS/data/routes/2026_molit_comp_global_path.txt" \
     turn_signal_maneuvers_file:="$HOME/morai-native-config/turn_signal_maneuvers.yaml"
+
+
+ls -l /opt/ros/noetic/setup.bash /home/msclab/morai-final-venv/bin/activate /home/msclab/AutoVehicle/morai_ws/devel/setup.bash /home/msclab/morai-native-config/turn_signal_maneuvers.yaml 2>&1 | tee /home/msclab/morai-check.log
