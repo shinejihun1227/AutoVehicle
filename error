@@ -5,6 +5,12 @@ rosparam get /morai_udp_drive_bridge/control_remote_port
 rostopic info /ctrl_cmd
 rostopic echo -n 1 /Ego_topic
 
+sudo tcpdump -ni any -nn -c 10 \
+'udp and dst host 192.168.0.161 and dst port 9093'
+
+ㅡㅡ
+
+
 rostopic echo -n 1 /experimental/curvature_speed_limit
 rostopic echo -n 1 /experimental/curvature_speed_command
 rostopic echo -n 1 /experimental/curvature_value
