@@ -1,3 +1,6 @@
+ss -lun | grep ':1911'
+rosparam get /morai_udp_drive_bridge/status_port
+
 rosparam get /morai_udp_drive_bridge/control_output_enabled
 rosparam get /morai_udp_drive_bridge/control_remote_ip
 rosparam get /morai_udp_drive_bridge/control_remote_port
