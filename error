@@ -1,5 +1,19 @@
 source "$HOME/morai_native_env.sh"
 
+ip -br addr
+
+timeout 5s rosnode ping -c 2 /morai_udp_drive_bridge
+
+rosparam get /morai_udp_drive_bridge/status_port
+
+sudo timeout 8s tcpdump -ni any -nn -c 5 'udp and dst port 1911'
+tcpdump가 없다고 나오면 설치 후 마지막 명령만 다시 실행하세요.
+sudo apt install -y tcpdump
+
+
+
+source "$HOME/morai_native_env.sh"
+
 python3 - <<'PY' | tee "$HOME/morai-drive-check.log"
 import json
 import rospy
