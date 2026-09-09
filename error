@@ -26,3 +26,61 @@ echo "MORAI 환경 설정 완료"
 EOF
 
 source "$HOME/morai_native_env.sh"
+
+
+
+
+mm
+
+sudo apt update
+sudo apt install -y \
+  python3-venv python3-pip python3-dev \
+  python3-catkin-pkg python3-rospkg python3-empy python3-yaml
+
+source /opt/ros/noetic/setup.bash
+
+/usr/bin/python3 -m venv --system-site-packages \
+  "$HOME/morai-final-venv"
+
+source "$HOME/morai-final-venv/bin/activate"
+
+python -m pip install \
+  pip==24.3.1 setuptools==69.5.1 wheel==0.45.1
+
+cd "$HOME/AutoVehicle/morai_ws"
+
+python -m pip install -r docker/final_ws/requirements.txt
+python -m pip check
+
+
+catkin_make -j2 -l2 \
+  -DPYTHON_EXECUTABLE="$HOME/morai-final-venv/bin/python3"
+
+source "$HOME/morai_native_env.sh"
+
+
+mm
+
+  set -e
+
+  source /opt/ros/noetic/setup.bash
+  source "$HOME/morai-final-venv/bin/activate"
+
+  export MORAI_WS="$HOME/AutoVehicle/morai_ws"
+  source "$MORAI_WS/devel/setup.bash"
+
+  export ROS_MASTER_URI=http://192.168.0.200:11311
+  export ROS_IP=192.168.0.200
+  unset ROS_HOSTNAME
+  export YOLO_AUTOINSTALL=false
+  export QT_X11_NO_MITSHM=1
+
+  roslaunch morai_bringup final_ws_native_no_lamps.launch \
+    enable_control:=true \
+    morai_host_ip:=192.168.0.161 \
+    ego_status_port:=1911 \
+    control_remote_port:=9093 \
+    max_speed_kph:=30.0 \
+    fallback_speed_cap_kph:=3.0 \
+    path_file:="$MORAI_WS/data/routes/2026_molit_comp_global_path.txt" \
+    turn_signal_maneuvers_file:="$HOME/morai-native-config/turn_signal_maneuvers.yaml"
