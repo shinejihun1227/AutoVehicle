@@ -1,164 +1,30 @@
 source "$HOME/morai_native_env.sh"
-
-rosparam get /morai_lidar_udp_source/host_port
-rosparam get /morai_lidar_udp_source/destination_port
-
-rostopic info /morai/lidar/live_points
-rostopic info /perception/lidar/tracked_obstacles_map
-rostopic info /localization/odometry
-
-sudo tcpdump -ni any -nn -c 5 'udp and dst port 2001'
-
-rostopic echo -n 1 /morai/lidar/live_points
-rostopic echo -n 1 /perception/lidar/tracked_obstacles_map
-rostopic echo -n 1 /localization/odometry
-ㅡㅡㅡㅡㅡ
+roscore
+이미 roscore가 실행 중이면 이 단계는 건너뜁니다.
+터미널 2에서 주행을 실행하고, 이 창은 종료하지 마세요.
 source "$HOME/morai_native_env.sh"
 
-ip -br addr
+roslaunch morai_bringup final_ws_native_no_lamps.launch \
+enable_control:=true \
+morai_host_ip:=192.168.0.161 \
+ego_status_port:=1911 \
+control_remote_port:=9093 \
+max_speed_kph:=30.0 \
+fallback_speed_cap_kph:=3.0 \
+path_file:="$HOME/AutoVehicle/morai_ws/data/routes/2026_molit_comp_global_path.txt" \
+turn_signal_maneuvers_file:="$HOME/morai-native-config/turn_signal_maneuvers.yaml"
+터미널 3에서 확인하세요.
+source "$HOME/morai_native_env.sh"
 
-timeout 5s rosnode ping -c 2 /morai_udp_drive_bridge
-
+echo "$ROS_MASTER_URI"
+rosnode list
 rosparam get /morai_udp_drive_bridge/status_port
-
-sudo timeout 8s tcpdump -ni any -nn -c 5 'udp and dst port 1911'
-tcpdump가 없다고 나오면 설치 후 마지막 명령만 다시 실행하세요.
-sudo apt install -y tcpdump
-
-
-
-source "$HOME/morai_native_env.sh"
-
-python3 - <<'PY' | tee "$HOME/morai-drive-check.log"
-import json
-import rospy
-from std_msgs.msg import String
-from morai_msgs.msg import CtrlCmd, EgoVehicleStatus
-
-rospy.init_node("drive_readonly_check", anonymous=True)
-
-for key in ("control_output_enabled", "control_remote_ip", "control_remote_port"):
-    print(key, "=", rospy.get_param("/morai_udp_drive_bridge/" + key, "설정 없음"))
-
-for topic, cls in [
-    ("/control/mux_status", String),
-    ("/control/maneuver_status", String),
-    ("/ctrl_cmd", CtrlCmd),
-    ("/Ego_topic", EgoVehicleStatus),
-]:
-    try:
-        msg = rospy.wait_for_message(topic, cls, timeout=4)
-        if cls is String:
-            data = json.loads(msg.data)
-            keys = ("mode", "reason", "reasons", "signal_selection_reason",
-                    "reference_path_match", "route_direction")
-            print(topic, {k: data[k] for k in keys if k in data})
-        elif cls is CtrlCmd:
-            print(topic, "accel=", msg.accel, "brake=", msg.brake,
-                  "steering=", msg.steering)
-        else:
-            print(topic, "수신됨", "velocity=", msg.velocity)
-    except Exception as exc:
-        print(topic, "확인 실패:", str(exc))
-PY
-
-
-ㅡㅡㅡㅡㅡㅡㅡㅡㅡㅡ
-cat > "$HOME/morai_native_env.sh" <<'EOF'
-source /opt/ros/noetic/setup.bash || return 1
-
-export MORAI_WS="$HOME/AutoVehicle/morai_ws"
-
-if [ -f "$HOME/morai-final-venv/bin/activate" ]; then
-  source "$HOME/morai-final-venv/bin/activate" || return 1
-fi
-
-source "$MORAI_WS/devel/setup.bash" || return 1
-
-export ROS_MASTER_URI=http://192.168.0.200:11311
-export ROS_IP=192.168.0.200
-unset ROS_HOSTNAME
-
-export YOLO_AUTOINSTALL=false
-export QT_X11_NO_MITSHM=1
-
-echo "MORAI 환경 설정 완료"
-EOF
-
-source "$HOME/morai_native_env.sh"
-
-
-
-python3 -c 'import sys; print("Python:", sys.executable); import rospy, cv2, torch, ultralytics; from morai_msgs.msg import CtrlCmd; from common.msg import ObjectInfoArray; print("IMPORT_OK")'
-
-
-source "$HOME/morai_native_env.sh"
-
-roslaunch morai_bringup final_ws_native_no_lamps.launch \
-  enable_control:=true \
-  morai_host_ip:=192.168.0.161 \
-  ego_status_port:=1911 \
-  control_remote_port:=9093 \
-  max_speed_kph:=30.0 \
-  fallback_speed_cap_kph:=3.0 \
-  turn_signal_maneuvers_file:="$HOME/morai-native-config/turn_signal_maneuvers.yaml"
-
-
-source "$HOME/morai_native_env.sh"
-
-timeout 5s rostopic echo -n 1 /ctrl_cmd
-timeout 5s rostopic echo -n 1 /control/mux_status
-timeout 5s rostopic echo -n 1 /control/maneuver_status
-
-
-ㅡㅡㅡ
-
-set -e
-
-source /opt/ros/noetic/setup.bash
-
-if [ -f "$HOME/morai-final-venv/bin/activate" ]; then
-  source "$HOME/morai-final-venv/bin/activate"
-fi
-
-export MORAI_WS="$HOME/AutoVehicle/morai_ws"
-
-# 주행 코드와 수정된 검사 도구 업데이트
-cd "$HOME/AutoVehicle"
-git pull --ff-only origin final_ws
-
-# 별도 메시지 저장소를 대회용 브랜치로 전환
-cd "$MORAI_WS/src/common/morai_msgs"
-
-if [ -n "$(git status --porcelain)" ]; then
-  echo "morai_msgs에 로컬 수정이 있습니다. 수정 내용을 보관한 뒤 진행하세요."
-  exit 1
-fi
-
-git fetch origin refs/heads/beta_drive:refs/remotes/origin/beta_drive
-git switch beta_drive
-git merge --ff-only origin/beta_drive
-git branch --show-current
-
-# 메시지와 주행 패키지 재빌드
-cd "$MORAI_WS"
-catkin_make -j2 -l2 --force-cmake \
-  -DPYTHON_EXECUTABLE="$(command -v python3)"
-
-source "$MORAI_WS/devel/setup.bash"
-
-# 실제 로딩되는 메시지 필드 검사
-python3 "$MORAI_WS/docker/final_ws/check_morai_messages.py"
-)
-마지막에 **MORAI_MESSAGES_OK**가 나오면 메시지 형식 검사를 통과한 것입니다. 중간에 실패하면 그 오류부터 해결해야 합니다.
-3. 검사 통과 후 주행을 다시 실행합니다.
-source "$HOME/morai_native_env.sh"
-
-roslaunch morai_bringup final_ws_native_no_lamps.launch \
-  enable_control:=true \
-  morai_host_ip:=192.168.0.161 \
-  ego_status_port:=1911 \
-  control_remote_port:=9093 \
-  max_speed_kph:=30.0 \
-  fallback_speed_cap_kph:=3.0 \
-  turn_signal_maneuvers_file:="$HOME/morai-native-config/turn_signal_maneuvers.yaml"
+rostopic info /perception/lidar/tracked_obstacles_map
+정상이라면 다음이 확인되어야 합니다.
+/morai_udp_drive_bridge
+/morai_lidar_udp_source
+/roi_sensor_safety_adapter
+status_port: 1911
+그 후에 다시 확인하세요.
+rostopic echo -n 1 /control/mux_status
+rostopic echo -n 1 /ctrl_cmd
