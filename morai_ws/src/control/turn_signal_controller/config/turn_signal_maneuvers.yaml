@@ -48,3 +48,15 @@ signal_timeout_sec: 0.8
 # 일반 녹색에서 우회전 허용. 보행자/LiDAR 안전 정지는 항상 별도 우선한다.
 # 적색 우회전은 자동 허용하지 않는다. 별도 규정/미션 정책이 필요하다.
 right_on_green: true
+
+# 좌·우회전은 기존 경로 조향을 유지하며 속도/자세 제한을 추가한다.
+# 검증 전 초기 튜닝값: MORAI에서 실제 제동 응답과 경로 오차를 확인한다.
+turn_left_speed_kph: 15.0
+turn_right_speed_kph: 10.0
+turn_lateral_accel_mps2: 1.2
+turn_max_heading_error_deg: 60.0
+turn_max_lateral_error_m: 1.5
+# 경로 종료 위치와 출구 방향 정렬을 함께 확인한 뒤 방향지시등을 끈다.
+turn_exit_heading_error_deg: 15.0
+turn_exit_lateral_error_m: 0.75
+turn_exit_overrun_m: 3.0

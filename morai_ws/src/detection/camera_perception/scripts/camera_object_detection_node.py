@@ -69,7 +69,7 @@ def _parse_traffic_signal(label):
         return "Yellow", "YELLOW", (0, 255, 255)
     if "red" in normalized and "green" in normalized:
         return "Unknown", "CONFLICT", (128, 128, 128)
-    # GREEN has the highest priority, including ambiguous mixed-label names.
+    # Preserve the direction of compatible combined classes in one head.
     if "green" in normalized and "left" in normalized:
         return "Green_Left", "GREEN + LEFT", (0, 255, 128)
     if "green" in normalized and "right" in normalized:

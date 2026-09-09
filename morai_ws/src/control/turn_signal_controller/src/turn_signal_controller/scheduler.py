@@ -131,12 +131,14 @@ class TurnSignalScheduler:
         self.active: Optional[Maneuver] = None
         self.active_since: Optional[float] = None
         self.last_progress_s: Optional[float] = None
+        self.last_time: Optional[float] = None
 
     def reset(self) -> None:
         self.completed_ids.clear()
         self.active = None
         self.active_since = None
         self.last_progress_s = None
+        self.last_time = None
 
     def _complete_active(self) -> None:
         if self.active is not None:
@@ -151,18 +153,25 @@ class TurnSignalScheduler:
 
     def update(self, progress_s: float, speed_mps: float, now: float) -> SignalDecision:
         progress = float(progress_s)
-        speed = max(0.0, float(speed_mps))
+        speed = float(speed_mps)
         timestamp = float(now)
         if not math.isfinite(progress) or not math.isfinite(speed) or not math.isfinite(timestamp):
             return SignalDecision()
+        speed = max(0.0, speed)
 
         if (
-            self.last_progress_s is not None
-            and progress < self.last_progress_s - self.progress_reset_m
+            (self.last_progress_s is not None
+             and progress < self.last_progress_s - self.progress_reset_m)
+            or (self.last_time is not None and timestamp < self.last_time)
         ):
             # 새 주행을 시작하거나 시뮬레이터가 reset된 경우 이벤트를 다시 사용한다.
             self.reset()
         self.last_progress_s = progress
+        self.last_time = timestamp
+
+        # The duration is maneuver time, not time waiting with the lamp on.
+        if self.active is not None and self.active_since is None and progress >= self.active.start_s_m:
+            self.active_since = timestamp
 
         if self.active is not None and self._event_finished(self.active, progress, timestamp):
             self._complete_active()
@@ -171,8 +180,8 @@ class TurnSignalScheduler:
             return SignalDecision(
                 direction=self.active.direction,
                 maneuver_id=self.active.identifier,
-                phase="active",
-                eta_sec=0.0,
+                phase="active" if progress >= self.active.start_s_m else "lead",
+                eta_sec=max(0.0, self.active.start_s_m - progress) / max(speed, self.min_prediction_speed_mps),
             )
 
         # end_s_m이 있는 과거 이벤트는 시작 전에 노드가 올라온 경우에도 건너뛴다.
@@ -187,7 +196,7 @@ class TurnSignalScheduler:
             eta = remaining / max(speed, self.min_prediction_speed_mps)
             if progress >= event.start_s_m or eta <= self.lead_time_sec:
                 self.active = event
-                self.active_since = timestamp
+                self.active_since = timestamp if progress >= event.start_s_m else None
                 return SignalDecision(
                     direction=event.direction,
                     maneuver_id=event.identifier,

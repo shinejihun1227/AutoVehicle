@@ -49,6 +49,8 @@ class StopLineCoreTest(unittest.TestCase):
 
     def test_late_distance_compensates_processing_delay_and_front_offset(self):
         self.core = StopLineControllerCore(front_reference_offset_m=2.)
+        for i in range(5):
+            self.step(9.5 + i * 0.1)
         self.signal(10.)
         self.core.observe_line(10., 1., True, 9.5, 10., 10.)
         self.assertAlmostEqual(self.step(10.).distance_m, 7.)
@@ -89,7 +91,7 @@ class StopLineCoreTest(unittest.TestCase):
         for i in range(1, 9):
             d = self.step(10. + i * 0.05)
         self.assertEqual(d.brake, 1.)
-        self.assertIn("prediction_expired", d.reason)
+        self.assertEqual(d.reason, "stopline_tracking_lost_awaiting_green")
 
     def test_motion_uses_ros_elapsed_time_not_playback_wall_time(self):
         self.signal(10.)
@@ -134,6 +136,8 @@ class StopLineCoreTest(unittest.TestCase):
         self.assertAlmostEqual(decision.distance_m, 2.8)
 
     def test_unknown_between_ticks_cannot_be_erased_by_one_green(self):
+        self.signal(9.6, "GREEN")
+        self.step(9.6, 1.)
         self.signal(10., "GREEN")
         self.line(10., 0.8)
         self.assertEqual(self.step(10., 1.).mode, "NOMINAL")
@@ -155,14 +159,21 @@ class StopLineCoreTest(unittest.TestCase):
         self.assertEqual(self.step(20.1).mode, "APPROACH")
         self.assertAlmostEqual(self.core.distance, 10.)
 
-    def test_expired_target_does_not_block_fresh_reacquisition(self):
+    def test_expired_target_allows_next_junction_after_confirmed_green(self):
         self.core = StopLineControllerCore(max_dead_reckoning_sec=0.3)
         self.signal(10.)
         self.line(10., 2.)
         self.step(10., 0.)
         self.assertEqual(self.step(10.4, 0.).brake, 1.)
         self.line(10.5, 10.)
-        self.assertEqual(self.step(10.5, 0.).mode, "APPROACH")
+        self.assertEqual(self.step(10.5, 0.).brake, 1.)
+        self.signal(10.6, "GREEN")
+        self.step(10.6, 0.)
+        self.signal(10.95, "GREEN")
+        self.assertEqual(self.step(10.95, 0.).mode, "NOMINAL")
+        self.signal(11., "RED")
+        self.line(11., 10.)
+        self.assertEqual(self.step(11., 0.).mode, "APPROACH")
         self.assertAlmostEqual(self.core.distance, 10.)
 
     def test_next_farther_stopline_cannot_move_active_stop_target(self):
@@ -177,7 +188,9 @@ class StopLineCoreTest(unittest.TestCase):
         self.line(10., 80.)
         self.assertGreater(self.step(10., 60. / 3.6).brake, 0.)
 
-    def test_green_without_stop_request_passes(self):
+    def test_confirmed_green_without_stop_request_passes(self):
+        self.signal(9.6, "GREEN")
+        self.step(9.6)
         self.signal(10., "GREEN")
         self.line(10., 5.)
         self.assertEqual(self.step(10.).mode, "NOMINAL")

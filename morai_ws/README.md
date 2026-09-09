@@ -4,6 +4,8 @@
 > [미해결 안전 문제와 검증 조건](docs/KNOWN_ISSUES_FINAL_WS.md)을 먼저 확인하세요.
 
 새 환경 설치와 최종 실행은 [Docker 구성·주행 시험 안내](docs/DOCKER_FINAL_WS_FROM_SCRATCH_KO.md)를 사용합니다.
+정지선·신호·회전·GPS 음영구간 보완본의 재빌드와 시험 명령은
+[final_ws 보완본 Docker 빠른 실행](docs/FINAL_WS_UPDATED_DOCKER_TEST_KO.md)에 정리했습니다.
 
 이 폴더를 앞으로 사용하는 단일 기준 저장소로 정합니다. 기존 `ros_ws*`,
 `run+camera`, `running` 폴더의 코드는 정리 대상이며, 필요한 개념과 설정은

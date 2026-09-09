@@ -25,6 +25,8 @@
   <arg name="traffic_light_stop_topic" default="/perception/traffic_light/stop_required" />
   <arg name="traffic_light_state_topic" default="/perception/traffic_light/state" />
   <arg name="traffic_light_clear_confirmation_s" default="0.5" />
+  <arg name="traffic_light_min_confidence" default="0.5" />
+  <arg name="traffic_light_input_timeout_sec" default="0.8" />
   <arg name="camera_obstacle_topic" default="/detection/obstacle" />
   <arg name="dashed_lane_topic" default="/perception/camera/dashed_lane_detected" />
   <arg name="left_solid_lane_topic" default="/perception/camera/left_solid_lane_detected" />
@@ -87,6 +89,8 @@
     <param name="output_topic" value="$(arg traffic_light_stop_topic)" />
     <param name="state_topic" value="$(arg traffic_light_state_topic)" />
     <param name="clear_confirmation_s" value="$(arg traffic_light_clear_confirmation_s)" />
+    <param name="min_confidence" value="$(arg traffic_light_min_confidence)" />
+    <param name="input_timeout_sec" value="$(arg traffic_light_input_timeout_sec)" />
   </node>
 
   <node if="$(arg enable_highway_gate)"

@@ -31,7 +31,7 @@ lane_pipeline.LaneResult.as_dict() 한 곳만 줄이면 세 스크립트에 다 
                         장애물 회피 때문이다** - 중심선만 주면 "어디까지 비켜도
                         되는지"를 표현할 수 없다.
     left_type/right_type  white_solid / white_dashed / yellow (차선변경 가부 판단)
-    lateral_error       차로 중심 기준 횡오차 (m). 음수 = 왼쪽으로 치우침
+    lateral_error       전방 차로 중심의 -y (m). 양수 = 중심이 차량 오른쪽
     heading_error       차로 방향 대비 방위 오차 (rad)
     stopline_dist       자차 앞 정지선까지 (m), 없으면 null
 """

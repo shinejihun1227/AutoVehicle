@@ -254,7 +254,8 @@ class CameraTimestampTest(unittest.TestCase):
 
         def infer(_image):
             clock.advance(0.7)
-            return SimpleNamespace(ego_left=None, ego_right=None, stopline_dist=next(distances))
+            return SimpleNamespace(ego_left=None, ego_right=None, stopline_dist=next(distances),
+                                   stopline_confidence=.84)
 
         detector.run.side_effect = infer
         quality = Mock()
@@ -279,7 +280,7 @@ class CameraTimestampTest(unittest.TestCase):
         ros.Time.now.assert_not_called()
         return publishers, frames
 
-    def test_lane_publishes_inferred_frame_stamp_and_binary_stopline_quality(self):
+    def test_lane_publishes_inferred_frame_stamp_and_stopline_geometry_quality(self):
         pubs, frames = self.run_overlay([Stamp(100.1), Stamp(100.2), Stamp(100.3), Stamp(100.4)])
         stops = pubs["/perception/camera/stopline"].messages
         lanes = pubs["/detection/lane"].messages
@@ -287,7 +288,7 @@ class CameraTimestampTest(unittest.TestCase):
         self.assertEqual([msg.header.stamp for msg in stops[:-1]], [frames[1].received_stamp, frames[3].received_stamp])
         self.assertEqual([msg.header.stamp for msg in lanes], [msg.header.stamp for msg in stops])
         self.assertTrue(all(msg.header.frame_id == "base_link" for msg in stops))
-        self.assertEqual((stops[0].valid, stops[0].distance_m, stops[0].confidence), (True, 8.25, 1.0))
+        self.assertEqual((stops[0].valid, stops[0].distance_m, stops[0].confidence), (True, 8.25, .84))
         self.assertEqual((lanes[0].valid, lanes[0].confidence), (False, 0.0))
         self.assertEqual((stops[1].valid, stops[1].confidence), (False, 0.0))
         self.assertEqual((stops[-1].valid, stops[-1].header.stamp), (False, Stamp()))
@@ -415,17 +416,19 @@ class TrafficLightObservationTest(unittest.TestCase):
         self.states = self.publishers["/perception/traffic_light/state"].messages
         self.bools = self.publishers["/perception/traffic_light/stop_required"].messages
 
-    def observe(self, objects, stamp=None, header=True):
+    def observe(self, objects, stamp=None, header=True, ros_now=None):
         message = Message(objects=[SimpleNamespace(class_name=name, conf=conf) for name, conf in objects])
         if header:
             message.header = Header(seq=7, stamp=stamp, frame_id="camera_link")
         else:
             del message.header
+        self.ros.get_time.return_value = (ros_now if ros_now is not None else
+                                         stamp.to_sec() if stamp is not None else 100.)
         self.node.callback(message)
         self.ros.Time.now.assert_not_called()
         return self.states[-1]
 
-    def test_unknown_during_and_after_legacy_clear_is_never_green(self):
+    def test_unknown_never_releases_legacy_stop(self):
         red = self.observe([("Red", 0.8)], Stamp(100.0))
         self.assertEqual((red.state, red.valid, red.confidence), ("RED", True, 0.8))
         self.clock.advance(0.1)
@@ -434,31 +437,84 @@ class TrafficLightObservationTest(unittest.TestCase):
         self.assertEqual((unknown.state, unknown.valid, unknown.confidence), ("UNKNOWN", False, 0.0))
         self.clock.advance(0.6)
         cleared = self.observe([], Stamp(100.7))
-        self.assertFalse(self.bools[-1].data)
+        self.assertTrue(self.bools[-1].data)
         self.assertEqual((cleared.state, cleared.valid), ("UNKNOWN", False))
 
-    def test_green_priority_confidence_comes_only_from_green_evidence(self):
+    def test_conflicting_heads_are_unknown_and_cannot_release_red(self):
         self.observe([("Red", 0.99)], Stamp(100.0))
         green = self.observe([("Green_Left", 0.51), ("Green", 0.6), ("Red", 0.99), ("Yellow", 0.9)], Stamp(100.1))
-        self.assertEqual((green.state, green.valid, green.confidence), ("GREEN", True, 0.6))
-        self.assertFalse(self.bools[-1].data)
+        self.assertEqual((green.state, green.valid, green.confidence), ("UNKNOWN", False, 0.0))
+        self.assertTrue(self.bools[-1].data)
 
-    def test_yellow_and_red_confidence_exclude_other_objects(self):
-        yellow = self.observe([("Amber", 0.4), ("Red", 0.95), ("car", 0.99)], Stamp(1))
-        self.assertEqual((yellow.state, yellow.valid, yellow.confidence), ("YELLOW", True, 0.4))
-        red = self.observe([("Red", 0.5), ("car", 0.99)], Stamp(2))
+    def test_low_confidence_green_does_not_override_red_or_yellow(self):
+        yellow = self.observe([("Amber", 0.8), ("Green", 0.4)], Stamp(1))
+        self.assertEqual((yellow.state, yellow.valid, yellow.confidence), ("YELLOW", True, 0.8))
+        red = self.observe([("Red", 0.5), ("Green", 0.4)], Stamp(2))
         self.assertEqual((red.state, red.valid, red.confidence), ("RED", True, 0.5))
         self.assertTrue(self.bools[-1].data)
 
-    def test_unrecognized_turn_classes_do_not_become_green_or_valid(self):
-        for name in ("car", "traffic light", "Left", "Red_Left", "Red_Right"):
+    def test_unsupported_classes_never_grant_permission(self):
+        for name in ("car", "traffic light", "Green_Arrow", "RED_Green left"):
             with self.subTest(name=name):
                 output = self.observe([(name, 0.99)], Stamp(100.0))
                 self.assertEqual((output.state, output.valid, output.confidence), ("UNKNOWN", False, 0.0))
-                self.assertFalse(self.bools[-1].data)
+                self.assertTrue(self.bools[-1].data)
         red_with_turn = self.observe([("Red", 0.7), ("Left", 0.9)], Stamp(100.1))
-        self.assertEqual(red_with_turn.state, "RED")
-        self.assertFalse(self.bools[-1].data)  # Existing turn exception retained.
+        self.assertEqual(red_with_turn.state, "UNKNOWN")
+        self.assertTrue(self.bools[-1].data)
+
+    def test_turn_arrows_are_preserved_for_maneuvers_but_do_not_permit_straight(self):
+        directional = self.publishers["/perception/traffic_light/directional_state"].messages
+        for i, name in enumerate(("Left", "Red_Left", "Right", "Red_Right")):
+            output = self.observe([(name, .9)], Stamp(100. + i * .1))
+            self.assertEqual((output.state, output.valid), ("RED", True))
+            self.assertEqual((directional[-1].state, directional[-1].valid), (name.upper(), True))
+
+    def test_stale_and_future_green_cannot_clear_latch(self):
+        self.observe([("Red", .9)], Stamp(100.), ros_now=100.)
+        for stamp in (100.1, 100.7, 105., 0.):
+            output = self.observe([("Green", .9)], Stamp(stamp), ros_now=103.)
+            self.assertEqual((output.state, output.valid), ("UNKNOWN", False))
+            self.assertTrue(self.bools[-1].data)
+
+    def test_fresh_green_confirmation_uses_source_and_receipt_time(self):
+        self.observe([("Red", .9)], Stamp(100.))
+        self.clock.advance(.1)
+        self.observe([("Green", .9)], Stamp(100.1))
+        self.assertTrue(self.bools[-1].data)
+        self.clock.advance(.5)
+        self.observe([("Green", .9)], Stamp(100.6))
+        self.assertFalse(self.bools[-1].data)
+
+    def test_clock_reset_requires_new_green_sequence(self):
+        self.observe([("Green", .9)], Stamp(100.))
+        self.clock.advance(.5)
+        self.observe([("Green", .9)], Stamp(100.5))
+        self.assertFalse(self.bools[-1].data)
+        reset = self.observe([("Green", .9)], Stamp(1.), ros_now=1.)
+        self.assertEqual((reset.state, reset.valid), ("UNKNOWN", False))
+        self.assertTrue(self.bools[-1].data)
+        self.clock.advance(.1)
+        self.observe([("Green", .9)], Stamp(1.1))
+        self.assertTrue(self.bools[-1].data)
+        self.clock.advance(.5)
+        self.observe([("Green", .9)], Stamp(1.6))
+        self.assertFalse(self.bools[-1].data)
+
+    def test_shutdown_cannot_be_overwritten_by_a_pending_green_callback(self):
+        self.node.shutdown()
+        count = len(self.bools)
+        self.observe([("Green", .9)], Stamp(100.))
+        self.clock.advance(.5)
+        self.observe([("Green", .9)], Stamp(100.5))
+        self.assertEqual(len(self.bools), count)
+        self.assertTrue(self.bools[-1].data)
+
+    def test_malformed_confidences_never_authorize_green(self):
+        for conf in (float("nan"), float("inf"), -1., 1.1, .49, "bad", None):
+            output = self.observe([("Green", conf)], Stamp(100.))
+            self.assertEqual((output.state, output.valid, output.confidence), ("UNKNOWN", False, 0.))
+            self.assertTrue(self.bools[-1].data)
 
     def test_delayed_out_of_order_duplicate_and_zero_stamps_are_preserved(self):
         self.clock.seconds = 9000.0
@@ -478,12 +534,13 @@ class TrafficLightObservationTest(unittest.TestCase):
         self.assertEqual(source.frame_id, "")
         self.assertEqual(output.header.frame_id, "front_camera")
         self.node.shutdown()
+        self.assertTrue(self.bools[-1].data)
         self.assertEqual((self.states[-1].state, self.states[-1].valid, self.states[-1].header.stamp), ("UNKNOWN", False, Stamp()))
         self.ros.Time.now.assert_not_called()
 
     def test_invalid_scores_do_not_create_nonfinite_state_confidence(self):
         output = self.observe([("Green", float("nan")), ("Green", float("inf")), ("Green", -1.0), ("Red", 0.99)], Stamp(1))
-        self.assertEqual((output.state, output.valid, output.confidence), ("GREEN", True, 0.0))
+        self.assertEqual((output.state, output.valid, output.confidence), ("RED", True, 0.99))
 
 
 if __name__ == "__main__":

@@ -178,6 +178,32 @@ class StopLineWiringTest(unittest.TestCase):
         self.assertTrue(self.node.core.holding)
         self.assertTrue(self.node.core.stop_requested)
 
+    def test_new_nan_odometry_invalidates_cached_speed_immediately(self):
+        self.approach()
+        self.now += .05
+        self.node.odom_callback(self.odometry(speed=float("nan")))
+        self.node.nominal_callback(Command(accel=1.))
+        self.node.publish_command(None)
+        self.assertIsNone(self.node.odom)
+        self.assertEqual(self.node.output_pub.publish.call_args.args[0].brake, 1.)
+
+    def test_confirmed_green_departure_has_limited_pedal_rise(self):
+        self.approach()
+        released = False
+        for _ in range(12):
+            self.now += .05
+            self.node.odom_callback(self.odometry(speed=0.))
+            self.node.nominal_callback(Command(accel=1.))
+            self.node.signal_callback(Message(state="GREEN", confidence=1., valid=True,
+                                              header=NS(stamp=Stamp(self.now), frame_id="camera_link")))
+            self.node.publish_command(None)
+            command = self.node.output_pub.publish.call_args.args[0]
+            if command.brake == 0.:
+                self.assertLessEqual(command.accel, .025 + 1e-9)
+                released = True
+                break
+        self.assertTrue(released)
+
     def test_launch_signal_ownership_and_evaluator_separation(self):
         path = SOURCE / "bringup/morai_bringup/launch"
         root = ET.parse(path / "perception_control_bringup.launch").getroot()
@@ -192,6 +218,13 @@ class StopLineWiringTest(unittest.TestCase):
         self.assertEqual(camera.find("arg[@name='traffic_light_stop_topic']").get("value"), "$(arg stopline_signal_topic)")
         final = ET.parse(path / "final_ws_bringup.launch").getroot()
         self.assertEqual(final.find("arg[@name='enable_control']").get("default"), "false")
+        for node_type in ("stopline_controller.py", "maneuver_fusion_node.py"):
+            node = root.find("node[@type='" + node_type + "']")
+            for param, arg in (("stop_tolerance_m", "stopline_stop_tolerance_m"),
+                               ("accel_rise_rate_per_sec", "stopline_accel_rise_rate_per_sec")):
+                self.assertEqual(len(node.findall("param[@name='" + param + "']")), 1)
+                self.assertEqual(node.find("param[@name='" + param + "']").get("value"), "$(arg " + arg + ")")
+                self.assertIsNotNone(final.find("include/arg[@name='" + arg + "']"))
         for document in (root, final):
             self.assertFalse(any("mission_evaluator" in item.get("file", "") for item in document.iter("include")))
 

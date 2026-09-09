@@ -29,23 +29,20 @@ class TrafficSignalTest(unittest.TestCase):
                 msg=class_name,
             )
 
-    def test_red_with_turn_signal_does_not_stop(self):
-        self.assertFalse(traffic_signal_requires_stop(["Red_Left"]))
-        self.assertFalse(traffic_signal_requires_stop(["Red_Right"]))
-        self.assertFalse(traffic_signal_requires_stop(["Red", "Left"]))
-        self.assertFalse(traffic_signal_requires_stop(["RED", "Green_Left"]))
+    def test_turn_arrow_does_not_authorize_straight_travel(self):
+        for names in (["Red_Left"], ["Red_Right"], ["Red", "Left"], ["RED", "Green_Left"]):
+            self.assertTrue(traffic_signal_requires_stop(names))
 
-    def test_does_not_stop_for_green_left_or_no_detection(self):
+    def test_no_detection_is_unknown_and_combined_green_is_supported(self):
         self.assertFalse(traffic_signal_requires_stop([]))
-        self.assertFalse(traffic_signal_requires_stop(["Green", "Green_Left", "Left"]))
+        self.assertFalse(traffic_signal_requires_stop(["Green_Left"]))
+        self.assertTrue(traffic_signal_requires_stop(["Green", "Green_Left", "Left"]))
 
-    def test_green_has_priority_over_red_and_yellow(self):
+    def test_only_unambiguous_recognized_green_allows_straight(self):
         green_classes = (
             "Green",
             "Green_Left",
-            "RED_Green left",
-            "RED_Green right",
-            "Yellow_Green_Arrow",
+            "Green_Right",
         )
         for class_name in green_classes:
             self.assertTrue(traffic_signal_has_green([class_name]), msg=class_name)
@@ -54,25 +51,58 @@ class TrafficSignalTest(unittest.TestCase):
                 msg=class_name,
             )
 
-        self.assertTrue(traffic_signal_has_green(["Red", "Green", "Yellow"]))
-        self.assertFalse(
-            traffic_signal_requires_stop(["Red", "Green", "Yellow"])
-        )
-        self.assertFalse(
-            traffic_signal_requires_stop(["Red", "Green_Left"])
-        )
+        for names in (["Red", "Green", "Yellow"], ["Red", "Green_Left"],
+                      ["RED_Green left"], ["RED_Green right"], ["Green_Arrow"],
+                      ["Yellow_Green_Arrow"], ["greenish"]):
+            self.assertFalse(traffic_signal_has_green(names), names)
+            self.assertTrue(traffic_signal_requires_stop(names), names)
 
-    def test_requires_continuous_clear_frames_before_release(self):
+    def test_empty_frames_never_release_stop(self):
         latch = TrafficSignalStopLatch(clear_confirmation_s=0.5)
-        self.assertTrue(latch.update(["Red"], 0.0))
-        self.assertTrue(latch.update([], 0.1))
-        self.assertTrue(latch.update([], 0.5))
-        self.assertFalse(latch.update([], 0.6))
+        self.assertTrue(latch.update(["Red"], 10.0))
+        self.assertTrue(latch.update([], 10.1))
+        self.assertTrue(latch.update([], 10.5))
+        self.assertTrue(latch.update([], 10.6))
 
-    def test_green_releases_stop_immediately(self):
+    def test_green_requires_continuous_distinct_frames(self):
         latch = TrafficSignalStopLatch(clear_confirmation_s=0.5)
-        self.assertTrue(latch.update(["Red"], 0.0))
-        self.assertFalse(latch.update(["Red", "Green", "Yellow"], 0.1))
+        self.assertTrue(latch.update(["Red"], 10.0))
+        self.assertTrue(latch.update(["Red", "Green", "Yellow"], 10.1))
+        self.assertTrue(latch.update(["Green"], 10.2))
+        self.assertTrue(latch.update(["Green"], 10.2, received_sec=10.6))
+        self.assertTrue(latch.update(["Green"], 10.6))
+        self.assertFalse(latch.update(["Green"], 10.7))
+
+    def test_burst_of_old_green_frames_cannot_release_immediately(self):
+        latch = TrafficSignalStopLatch()
+        latch.update(["Red"], 10., 20.)
+        self.assertTrue(latch.update(["Green"], 10.1, 20.01))
+        self.assertTrue(latch.update(["Green"], 10.6, 20.02))
+
+    def test_gap_unknown_reordering_and_conflict_restart_confirmation(self):
+        for interruption in ([], ["Red"], ["Green", "Red"]):
+            latch = TrafficSignalStopLatch()
+            latch.update(["Green"], 10.)
+            self.assertTrue(latch.update(interruption, 10.4))
+            self.assertTrue(latch.update(["Green"], 10.5))
+            self.assertFalse(latch.update(["Green"], 11.))
+        latch = TrafficSignalStopLatch()
+        latch.update(["Green"], 10.)
+        self.assertTrue(latch.update(["Green"], 11.))
+        self.assertFalse(latch.update(["Green"], 11.5))
+        self.assertTrue(latch.update(["Red"], 11.5))
+        self.assertTrue(latch.update(["Green"], 11.6))
+        self.assertTrue(latch.update(["Green"], 11.55))
+        self.assertTrue(latch.update(["Green"], 12.))
+
+    def test_invalid_parameters_and_zero_stamp(self):
+        for value in (-1, float("nan"), float("inf")):
+            with self.assertRaises(ValueError):
+                TrafficSignalStopLatch(clear_confirmation_s=value)
+        latch = TrafficSignalStopLatch(clear_confirmation_s=0.)
+        self.assertTrue(latch.update(["Green"], 0.))
+        self.assertTrue(latch.update(["Green"], 1.))
+        self.assertFalse(latch.update(["Green"], 1.1))
 
 
 if __name__ == "__main__":

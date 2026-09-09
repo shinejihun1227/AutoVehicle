@@ -263,10 +263,10 @@ def main(argv=None):
                             stopline_message.distance_m = float(
                                 res.stopline_dist if stopline_detected else 0.0
                             )
-                            # Detector binary validity proxy (1/0), NOT a
-                            # calibrated probability or lane-quality score.
+                            # Stop-line geometry support, independent of lane
+                            # quality; this is NOT a calibrated probability.
                             stopline_message.confidence = (
-                                1.0 if stopline_detected else 0.0
+                                float(res.stopline_confidence) if stopline_detected else 0.0
                             )
                             stopline_publisher.publish(stopline_message)
                             lane_message = LaneDetection()

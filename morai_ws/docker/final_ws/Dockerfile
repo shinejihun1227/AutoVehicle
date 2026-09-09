@@ -57,6 +57,7 @@ RUN source /opt/ros/noetic/setup.bash \
     && catkin_make -j2 -l2 -DPYTHON_EXECUTABLE=/opt/morai-venv/bin/python3 \
     && source devel/setup.bash \
     && python -c 'import rospy, cv2, torch, torchvision, ultralytics; from morai_msgs.msg import CtrlCmd, GPSMessage, EgoVehicleStatus; from morai_perception_msgs.msg import StopLineDetection; from common.msg import ObjectInfoArray' \
+    && python docker/final_ws/run_regression.py \
     && python -m pip freeze > /opt/morai-build/pip-freeze.txt \
     && dpkg-query -W > /opt/morai-build/apt-packages.txt \
     && printf '%s\n' "${CODE_REVISION}" > /opt/morai-build/code-revision.txt \

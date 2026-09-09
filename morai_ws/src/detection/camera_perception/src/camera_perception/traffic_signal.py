@@ -1,11 +1,7 @@
 """YOLO 신호등 클래스명을 주행/정지 조건으로 변환한다."""
 
 import math
-
-
-GREEN_SIGNAL_KEYWORDS = ("green",)
-YELLOW_SIGNAL_KEYWORDS = ("yellow", "amber")
-TURN_SIGNAL_KEYWORDS = ("left", "right", "arrow", "좌회전", "우회전")
+from types import SimpleNamespace
 
 
 def traffic_bbox_plausible(x, y, width, height, image_height):
@@ -34,11 +30,11 @@ def directional_observation(objects, min_confidence=0.5):
     for item in objects:
         try:
             score = float(item.conf)
-        except (ValueError, TypeError):
+        except (AttributeError, ValueError, TypeError, OverflowError):
             continue
         if not math.isfinite(score) or not min_confidence <= score <= 1.0:
             continue
-        name = str(item.class_name).strip().upper().replace(" ", "_")
+        name = str(getattr(item, "class_name", "UNKNOWN")).strip().upper().replace(" ", "_")
         if "YELLOW" in name or "AMBER" in name:
             name = "YELLOW"
         if name not in supported:
@@ -49,70 +45,100 @@ def directional_observation(objects, min_confidence=0.5):
     return next(iter(evidence.items()))
 
 
-def traffic_signal_has_green(class_names):
-    """GREEN 계열 클래스가 하나라도 있으면 True를 반환한다."""
+def straight_observation(objects, min_confidence=0.5):
+    """Conservative straight-ahead state for consumers without route intent.
 
-    normalized_names = [str(name).strip().lower() for name in class_names]
-    return any(
-        keyword in name
-        for name in normalized_names
-        for keyword in GREEN_SIGNAL_KEYWORDS
-    )
+    An illuminated turn arrow does not authorize straight travel. Preserve
+    directional classes separately for the route-associated maneuver node.
+    Conflicting heads never become green, even if one has higher confidence.
+    """
+    state, confidence = directional_observation(objects, min_confidence)
+    if state in ("GREEN", "GREEN_LEFT", "GREEN_RIGHT"):
+        return "GREEN", confidence
+    if state in ("RED", "RED_LEFT", "RED_RIGHT", "LEFT", "RIGHT"):
+        return "RED", confidence
+    if state == "YELLOW":
+        return state, confidence
+    return "UNKNOWN", 0.0
+
+
+def _class_observation(class_names):
+    return straight_observation([SimpleNamespace(class_name=name, conf=1.0)
+                                 for name in class_names])[0]
+
+
+def traffic_signal_has_green(class_names):
+    """Only compatible, explicitly recognized green evidence permits straight travel."""
+    return _class_observation(class_names) == "GREEN"
 
 
 def traffic_signal_requires_stop(class_names):
-    """GREEN 우선순위 적용 후 단독 RED/Yellow 정지 여부를 반환한다.
-
-    같은 프레임에서 GREEN이 다른 신호와 함께 검출되면 GREEN을 우선한다.
-    RED는 같은 프레임에 좌·우회전 계열 신호가 없어야 정지 조건이다.
-    Yellow/Amber 계열은 조합 클래스도 정지 조건으로 처리한다.
-    """
-
-    normalized_names = [str(name).strip().lower() for name in class_names]
-    if traffic_signal_has_green(normalized_names):
-        return False
-
-    yellow_detected = any(
-        keyword in name
-        for name in normalized_names
-        for keyword in YELLOW_SIGNAL_KEYWORDS
-    )
-    if yellow_detected:
-        return True
-
-    red_detected = "red" in normalized_names
-    turn_signal_detected = any(
-        keyword in name
-        for name in normalized_names
-        for keyword in TURN_SIGNAL_KEYWORDS
-    )
-    return red_detected and not turn_signal_detected
+    """Visible conflicting/unsupported heads request a stop; emptiness is unknown."""
+    names = list(class_names)
+    return bool(names) and not traffic_signal_has_green(names)
 
 
 class TrafficSignalStopLatch:
-    """GREEN은 즉시 해제하고, 그 외 정상 검출은 확인 후 해제한다."""
+    """Latch stops until distinct, continuous green source frames confirm release.
 
-    def __init__(self, clear_confirmation_s=0.5):
+    Empty frames cannot release a stop. Callers enforce source age; repeated
+    source stamps never refresh evidence, and callback backlog cannot satisfy
+    the confirmation interval unless receipt time also spans that interval.
+    """
+
+    def __init__(self, clear_confirmation_s=0.5, max_gap_s=0.8):
         self.clear_confirmation_s = float(clear_confirmation_s)
-        if self.clear_confirmation_s < 0.0:
-            raise ValueError("clear_confirmation_s must be non-negative")
+        self.max_gap_s = float(max_gap_s)
+        if (not math.isfinite(self.clear_confirmation_s) or self.clear_confirmation_s < 0
+                or not math.isfinite(self.max_gap_s) or self.max_gap_s <= 0):
+            raise ValueError("Confirmation must be finite/nonnegative and gap finite/positive")
         self.stop_required = False
+        self.last_stamp = self.last_received = self.last_state = None
         self.clear_since = None
+        self.clear_received = None
+        self.green_samples = 0
 
-    def update(self, class_names, timestamp_sec):
-        now = float(timestamp_sec)
-        if not math.isfinite(now):
-            raise ValueError("timestamp_sec must be finite")
-        if traffic_signal_has_green(class_names):
-            self.stop_required = False
-            self.clear_since = None
-        elif traffic_signal_requires_stop(class_names):
+    def revoke(self, reset_clock=False):
+        self.stop_required = True
+        self.clear_since = self.clear_received = None
+        self.green_samples = 0
+        if reset_clock:
+            self.last_stamp = self.last_received = self.last_state = None
+        return self.stop_required
+
+    def update(self, class_names, timestamp_sec, received_sec=None):
+        names = list(class_names)
+        return self.observe(_class_observation(names), timestamp_sec, received_sec,
+                            detected=bool(names))
+
+    def observe(self, state, timestamp_sec, received_sec=None, detected=True):
+        stamp = float(timestamp_sec)
+        received = stamp if received_sec is None else float(received_sec)
+        if not math.isfinite(stamp) or stamp <= 0 or not math.isfinite(received):
+            return self.revoke()
+        evidence = (state, bool(detected))
+        if self.last_stamp is not None and stamp <= self.last_stamp:
+            if stamp < self.last_stamp or evidence != self.last_state:
+                self.revoke()
+            return self.stop_required
+        if (self.last_stamp is not None and
+                (stamp - self.last_stamp > self.max_gap_s
+                 or not 0 <= received - self.last_received <= self.max_gap_s)):
+            self.revoke()
+        self.last_stamp, self.last_received, self.last_state = stamp, received, evidence
+        if state != "GREEN":
+            self.clear_since = self.clear_received = None
+            self.green_samples = 0
+            if state in ("RED", "YELLOW") or detected:
+                self.stop_required = True
+            return self.stop_required
+        if self.clear_since is None:
+            self.clear_since, self.clear_received = stamp, received
+            self.green_samples = 0
             self.stop_required = True
-            self.clear_since = None
-        elif self.stop_required:
-            if self.clear_since is None or now < self.clear_since:
-                self.clear_since = now
-            if now - self.clear_since >= self.clear_confirmation_s:
-                self.stop_required = False
-                self.clear_since = None
+        self.green_samples += 1
+        if (self.green_samples >= 2
+                and stamp - self.clear_since + 1e-9 >= self.clear_confirmation_s
+                and received - self.clear_received + 1e-9 >= self.clear_confirmation_s):
+            self.stop_required = False
         return self.stop_required

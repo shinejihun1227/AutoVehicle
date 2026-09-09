@@ -53,6 +53,8 @@ class SensorQualityMonitor:
         self.last_imu_time: Optional[float] = None
         self.last_health: Optional[GpsHealth] = None
         self.last_health_time = 0.0
+        self.source_stamps = {}
+        self.epoch_ros = rospy.get_time()
 
         self.quality_pub = rospy.Publisher(
             self.quality_topic, SensorQuality, queue_size=1, latch=True
@@ -77,40 +79,64 @@ class SensorQualityMonitor:
             self.quality_topic,
         )
 
-    def gps_callback(self, _message: Odometry) -> None:
-        with self.lock:
-            self.last_gps_time = time.monotonic()
+    def accept(self, message, key):
+        ros_now = rospy.get_time()
+        if ros_now < self.epoch_ros:
+            self.source_stamps.clear()
+            self.last_gps_time = self.last_imu_time = None
+            self.last_health = None
+        self.epoch_ros = ros_now
+        stamp = float(message.header.stamp.to_sec())
+        if (not math.isfinite(stamp) or stamp <= 0
+                or not -0.05 <= ros_now - stamp <= self.sensor_timeout_sec
+                or stamp <= self.source_stamps.get(key, 0.0)):
+            return False
+        self.source_stamps[key] = stamp
+        return True
 
-    def imu_callback(self, _message: Imu) -> None:
+    def gps_callback(self, message: Odometry) -> None:
         with self.lock:
-            self.last_imu_time = time.monotonic()
+            if self.accept(message, "gps"):
+                p, v = message.pose.pose.position, message.twist.twist.linear
+                self.last_gps_time = (time.monotonic() if all(math.isfinite(x) for x in
+                                     (p.x, p.y, v.x, v.y)) else None)
+
+    def imu_callback(self, message: Imu) -> None:
+        with self.lock:
+            if self.accept(message, "imu"):
+                g, a, q = message.angular_velocity, message.linear_acceleration, message.orientation
+                values = (g.x, g.y, g.z, a.x, a.y, a.z, q.x, q.y, q.z, q.w)
+                valid = (all(math.isfinite(x) for x in values)
+                         and abs(sum(x*x for x in (q.x, q.y, q.z, q.w)) - 1.) <= .02)
+                self.last_imu_time = time.monotonic() if valid else None
 
     def health_callback(self, message: GpsHealth) -> None:
         with self.lock:
-            self.last_health = message
-            self.last_health_time = time.monotonic()
+            if self.accept(message, "health"):
+                self.last_health = message
+                self.last_health_time = time.monotonic()
 
     def snapshot(self) -> Dict[str, object]:
         now = time.monotonic()
         with self.lock:
-            gps_age = (
-                math.inf if self.last_gps_time is None else now - self.last_gps_time
-            )
-            imu_age = (
-                math.inf if self.last_imu_time is None else now - self.last_imu_time
-            )
-            health_age = (
-                math.inf
-                if self.last_health_time <= 0.0
-                else now - self.last_health_time
-            )
+            ros_now = rospy.get_time()
+            def age(key, received):
+                stamp = self.source_stamps.get(key)
+                if (stamp is None or received is None or now < received
+                        or ros_now < self.epoch_ros or ros_now - stamp < -.05):
+                    return math.inf
+                return max(0., now - received, ros_now - stamp)
+            gps_age = age("gps", self.last_gps_time)
+            imu_age = age("imu", self.last_imu_time)
+            health_age = age("health", self.last_health_time)
 
             health_fresh = (
                 self.last_health is not None
                 and health_age <= self.sensor_timeout_sec
             )
             if health_fresh:
-                gps_valid = bool(self.last_health.valid)
+                gps_valid = (bool(self.last_health.valid) and math.isfinite(self.last_health.age_sec)
+                             and 0 <= self.last_health.age_sec <= self.sensor_timeout_sec)
                 gps_blackout = bool(self.last_health.blackout)
                 gps_recovering = self.last_health.state == "GPS_RECOVERING"
                 reason = str(self.last_health.reason)
@@ -122,18 +148,23 @@ class SensorQualityMonitor:
 
             gps_stale = gps_age > self.sensor_timeout_sec
             imu_stale = imu_age > self.sensor_timeout_sec
-            if gps_blackout:
+            if imu_stale:
+                state = SENSOR_DEGRADED
+                confidence = 0.0
+                reason = "imu_stale_or_invalid"
+            elif gps_blackout:
                 state = GPS_BLACKOUT
                 confidence = 0.0
-            elif not health_fresh or gps_stale or imu_stale or gps_recovering:
+            elif (not health_fresh or not gps_valid or gps_stale or gps_recovering
+                  or self.last_health.state != "GPS_OK"):
                 state = SENSOR_DEGRADED
                 confidence = 0.2
                 if health_fresh and gps_recovering:
                     reason = "gps_recovering"
                 elif gps_stale:
                     reason = "gps_stale"
-                elif imu_stale:
-                    reason = "imu_stale"
+                elif not gps_valid:
+                    reason = "gps_invalid"
             else:
                 state = NORMAL
                 confidence = 1.0

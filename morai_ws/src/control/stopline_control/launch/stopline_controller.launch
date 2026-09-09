@@ -8,6 +8,8 @@
   <arg name="odom_topic" default="/localization/odometry" />
   <arg name="front_reference_offset_m" default="3.845" />
   <arg name="hold_distance_m" default="0.5" />
+  <arg name="stop_tolerance_m" default="0.03" />
+  <arg name="accel_rise_rate_per_sec" default="0.5" />
   <arg name="max_decel_mps2" default="1.5" />
   <arg name="planning_decel_mps2" default="1.0" />
 
@@ -28,6 +30,8 @@
     <param name="front_reference_offset_m" value="$(arg front_reference_offset_m)" />
     <param name="reaction_time_sec" value="0.3" />
     <param name="hold_distance_m" value="$(arg hold_distance_m)" />
+    <param name="stop_tolerance_m" value="$(arg stop_tolerance_m)" />
+    <param name="accel_rise_rate_per_sec" value="$(arg accel_rise_rate_per_sec)" />
     <param name="approach_distance_m" value="20.0" />
     <param name="trigger_margin_m" value="1.0" />
   </node>

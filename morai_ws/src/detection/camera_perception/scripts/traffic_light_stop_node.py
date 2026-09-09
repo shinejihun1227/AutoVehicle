@@ -1,7 +1,8 @@
 #!/usr/bin/env python3
-"""YOLO 신호등 객체를 GREEN 우선 정지 Bool 토픽으로 변환한다."""
+"""Publish directional evidence and conservative timestamp-checked stop state."""
 
 import math
+import threading
 import time
 
 import rospy
@@ -9,11 +10,21 @@ from common.msg import ObjectInfoArray
 from morai_perception_msgs.msg import TrafficLight
 from std_msgs.msg import Bool
 
-from camera_perception.traffic_signal import TrafficSignalStopLatch, directional_observation
+from camera_perception.traffic_signal import (
+    TrafficSignalStopLatch, directional_observation, straight_observation,
+)
 
 
 class TrafficLightStopNode:
     def __init__(self):
+        self.lock = threading.RLock()
+        self.shutting_down = False
+        self.last_ros_now = None
+        self.input_timeout = float(rospy.get_param("~input_timeout_sec", 0.8))
+        self.min_confidence = float(rospy.get_param("~min_confidence", 0.5))
+        if (not math.isfinite(self.input_timeout) or self.input_timeout <= 0
+                or not math.isfinite(self.min_confidence) or not 0 <= self.min_confidence <= 1):
+            raise ValueError("Invalid traffic-light timeout/confidence")
         input_topic = rospy.get_param("~input_topic", "/detection/traffic_light")
         output_topic = rospy.get_param(
             "~output_topic", "/perception/traffic_light/stop_required"
@@ -32,37 +43,51 @@ class TrafficLightStopNode:
             rospy.get_param("~directional_state_topic", "/perception/traffic_light/directional_state"),
             TrafficLight, queue_size=1,
         )
-        self.latch = TrafficSignalStopLatch(clear_confirmation_s)
+        self.latch = TrafficSignalStopLatch(clear_confirmation_s, self.input_timeout)
         self.stop_required = False
-        rospy.Subscriber(input_topic, ObjectInfoArray, self.callback, queue_size=1)
         rospy.on_shutdown(self.shutdown)
         self.publisher.publish(Bool(data=False))
         self.state_publisher.publish(self.state_message("UNKNOWN", 0.0, False))
+        rospy.Subscriber(input_topic, ObjectInfoArray, self.callback, queue_size=32)
         rospy.logwarn(
-            "Traffic-light stop: input=%s output=%s priority=GREEN>RED-only/Yellow/Amber "
-            "clear_confirmation=%.2fs",
+            "Traffic-light stop: input=%s output=%s explicit_green_confirmation=%.2fs",
             input_topic,
             output_topic,
             clear_confirmation_s,
         )
 
     def callback(self, message):
-        state, confidence = directional_observation(message.objects)
+        with self.lock:
+            if not self.shutting_down:
+                self.process_observation(message)
+
+    def process_observation(self, message):
+        state, confidence = directional_observation(message.objects, self.min_confidence)
         self.directional_publisher.publish(self.state_message(
             state, confidence, state != "UNKNOWN", getattr(message, "header", None)))
-        class_names = [item.class_name for item in message.objects]
-        stop_required = self.latch.update(class_names, time.monotonic())
+        class_names = [str(getattr(item, "class_name", "UNKNOWN")) for item in message.objects]
+        state, confidence = straight_observation(message.objects, self.min_confidence)
+        header = getattr(message, "header", None)
+        stamp = header.stamp.to_sec() if header is not None else 0.0
+        ros_now, received = rospy.get_time(), time.monotonic()
+        reset = self.last_ros_now is not None and ros_now < self.last_ros_now
+        self.last_ros_now = ros_now
+        if reset or not (math.isfinite(stamp) and math.isfinite(ros_now)
+                         and stamp > 0 and -0.05 <= ros_now - stamp <= self.input_timeout):
+            stop_required = self.latch.revoke(reset_clock=reset)
+            state, confidence = "UNKNOWN", 0.0
+        else:
+            stop_required = self.latch.observe(state, stamp, received, detected=bool(class_names))
         if stop_required != self.stop_required:
             rospy.logwarn(
                 "[TRAFFIC LIGHT] %s classes=%s",
-                "STOP (RED-only/YELLOW)" if stop_required else "GO (GREEN priority/clear)",
+                "STOP/WAIT" if stop_required else "GREEN CONFIRMED",
                 ",".join(class_names) if class_names else "none",
             )
         self.stop_required = stop_required
         self.publisher.publish(Bool(data=stop_required))
-        # Timestamped state describes this observation, never the Bool latch's
-        # history. Keep the existing GREEN/yellow/red-only class policy.
-        state, confidence = self.observed_signal(message.objects)
+        # This topic describes the current frame; the controller independently
+        # confirms GREEN. The Bool latch is never evidence of permission.
         self.state_publisher.publish(
             self.state_message(
                 state, confidence, state != "UNKNOWN",
@@ -72,21 +97,7 @@ class TrafficLightStopNode:
 
     @staticmethod
     def observed_signal(objects):
-        normalized = [(str(item.class_name).strip().lower(), item) for item in objects]
-        for state, matches in (
-            ("GREEN", lambda name: "green" in name),
-            ("YELLOW", lambda name: "yellow" in name or "amber" in name),
-            ("RED", lambda name: name == "red"),
-        ):
-            evidence = [item for name, item in normalized if matches(name)]
-            if evidence:
-                scores = [float(item.conf) for item in evidence]
-                confidence = max(
-                    (score for score in scores if math.isfinite(score) and score >= 0.0),
-                    default=0.0,
-                )
-                return state, confidence
-        return "UNKNOWN", 0.0
+        return straight_observation(objects)
 
     @staticmethod
     def state_message(state, confidence, valid, source_header=None):
@@ -105,8 +116,12 @@ class TrafficLightStopNode:
         return output
 
     def shutdown(self):
-        self.publisher.publish(Bool(data=False))
-        self.state_publisher.publish(self.state_message("UNKNOWN", 0.0, False))
+        with self.lock:
+            self.shutting_down = True
+            self.latch.revoke()
+            self.publisher.publish(Bool(data=True))
+            self.state_publisher.publish(self.state_message("UNKNOWN", 0.0, False))
+            self.directional_publisher.publish(self.state_message("UNKNOWN", 0.0, False))
 
 
 def main():

@@ -111,6 +111,7 @@ from GenerateLabels import load_camera                      # noqa: E402
 from seg_dataset import (IMAGENET_MEAN, IMAGENET_STD, INPUT_H,  # noqa: E402
                          INPUT_W, NUM_CLASSES)
 from seg_model import LaneSegNet                            # noqa: E402
+from stopline_geometry import select_stopline               # noqa: E402
 
 CLASS_BG, CLASS_WHITE_SOLID, CLASS_WHITE_DASHED, CLASS_YELLOW, CLASS_STOPLINE = range(5)
 LANE_CLASSES = (CLASS_WHITE_SOLID, CLASS_WHITE_DASHED, CLASS_YELLOW)
@@ -240,10 +241,8 @@ LANE_WIDTH_M = 3.3
 EVAL_X_NEAR, EVAL_X_FAR = 7.0, 14.0
 
 # --- 정지선 --------------------------------------------------------------
-# 정지선은 진행방향과 직각이라 y = f(x) 로 표현할 수 없다. 차선과 같은
-# 파이프라인을 태우지 않고 BEV 픽셀의 중앙값으로 거리만 뽑는다.
-# **자차 진로를 가로지르는 것만 인정한다** - 옆 도로 정지선을 잡으면 엉뚱한
-# 곳에서 선다.
+# 거리별 후보를 분리하고 횡방향 폭·두께·중앙 통과 조건을 검사한다.
+# 유효 후보가 여러 개이면 가장 가까운 정지선을 선택한다.
 STOPLINE_MIN_PIXELS = 60
 STOPLINE_HALF_WIDTH_M = 2.0
 
@@ -304,6 +303,7 @@ class DetectionResult:
     bev: np.ndarray = None
     infer_ms: float = 0.0
     post_ms: float = 0.0
+    stopline_confidence: float = 0.0    # 기하학적 지지 점수, 확률 아님
 
     def by_id(self, lane_id):
         for l in self.lanes:
@@ -338,7 +338,7 @@ class DetectionResult:
         return None
 
     def lateral_error(self, x=EVAL_X_NEAR):
-        """차로 중심 기준 자차의 횡오차 (m). 음수 = 왼쪽으로 치우침."""
+        """전방 x m 차로 중심의 -y (m). 양수 = 중심이 차량 오른쪽에 있음."""
         c = self.lane_center(x)
         return None if c is None else -c
 
@@ -372,6 +372,7 @@ class DetectionResult:
             "lateral_error": rnd(le),
             "heading_error": rnd(he, decimals + 1),
             "stopline_dist": rnd(self.stopline_dist),
+            "stopline_confidence": rnd(self.stopline_confidence),
             "n_lanes": len(self.lanes),
             "infer_ms": round(self.infer_ms, 1),
             "post_ms": round(self.post_ms, 1),
@@ -619,22 +620,15 @@ class LaneTracker:
 
 
 def detect_stopline(bev):
-    """정지선까지의 거리. 차선과 달리 곡선을 맞추지 않는다.
+    """기존 거리/횡위치 API를 유지하며 가장 가까운 유효 후보를 반환한다."""
+    candidate = stopline_candidate(bev)
+    return ((candidate.distance_m, candidate.lateral_m) if candidate else (None, None))
 
-    정지선은 진행방향과 직각이라 y = f(x) 로 표현할 수 없다. BEV 픽셀의
-    중앙값으로 거리만 뽑고, **자차 진로를 가로지르는 것만** 인정한다 -
-    옆 도로 정지선을 잡으면 엉뚱한 곳에서 선다.
-    """
-    rr, cc = np.nonzero(bev == CLASS_STOPLINE)
-    if rr.size < STOPLINE_MIN_PIXELS:
-        return None, None
-    x, y = bev_to_ego(rr, cc)
-    if not (y.min() <= 0.0 <= y.max()):
-        return None, None
-    near = np.abs(y) <= STOPLINE_HALF_WIDTH_M
-    if near.sum() < STOPLINE_MIN_PIXELS // 2:
-        return None, None
-    return float(np.median(x[near])), float(np.median(y[near]))
+
+def stopline_candidate(bev):
+    return select_stopline(bev, BEV_X_MAX, BEV_Y_MAX, BEV_RES,
+                           CLASS_STOPLINE, STOPLINE_HALF_WIDTH_M,
+                           STOPLINE_MIN_PIXELS // 2)
 
 
 def assign_lane_ids(lanes):
@@ -795,11 +789,14 @@ class LaneDetector:
         if self.tracker is not None:
             lanes = self.tracker.update(lanes)
         lanes = assign_lane_ids(lanes)
-        sd, sy = detect_stopline(bev)
+        stopline = stopline_candidate(bev)
 
         t2 = cv2.getTickCount()
         f = cv2.getTickFrequency()
-        return DetectionResult(lanes=lanes, stopline_dist=sd, stopline_y=sy,
+        return DetectionResult(lanes=lanes,
+                               stopline_dist=stopline.distance_m if stopline else None,
+                               stopline_y=stopline.lateral_m if stopline else None,
+                               stopline_confidence=stopline.confidence if stopline else 0.0,
                                mask=mask, bev=bev,
                                infer_ms=(t1 - t0) / f * 1000.0,
                                post_ms=(t2 - t1) / f * 1000.0)

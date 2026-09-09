@@ -106,6 +106,28 @@ class DirectionContractTest(unittest.TestCase):
             lead.sent("LEFT", 6 + i * 0.05, 5.1)  # simulation paused
         self.assertFalse(lead.ready("LEFT", 11.95, 5.1))
 
+    def test_indicator_clock_jump_or_invalid_direction_revokes_lead(self):
+        for clock in ("wall", "ros"):
+            lead = IndicatorLead()
+            for i in range(101):
+                lead.sent("LEFT", 100 + i * .05, 100 + i * .05)
+            wall, ros = (106., 105.05) if clock == "wall" else (105.05, 106.)
+            self.assertFalse(lead.ready("LEFT", wall, ros))
+            lead.sent("LEFT", wall, ros)
+            self.assertFalse(lead.ready("LEFT", wall, ros))
+        lead.sent("HAZARD", 106.05, 106.05)
+        self.assertFalse(lead.ready("HAZARD", 112., 112.))
+        self.assertEqual(lead.direction, "OFF")
+
+    def test_indicator_rejects_nonfinite_clocks_and_bad_gap_configuration(self):
+        for gap in (0., -1., float("nan"), float("inf")):
+            with self.assertRaises(ValueError):
+                IndicatorLead(max_gap_sec=gap)
+        lead = IndicatorLead()
+        lead.sent("LEFT", 100., 100.)
+        lead.sent("LEFT", 100.05, float("nan"))
+        self.assertEqual(lead.direction, "OFF")
+
 
 class FusionNodeTest(unittest.TestCase):
     def setUp(self):
@@ -128,6 +150,7 @@ class FusionNodeTest(unittest.TestCase):
             spec.loader.exec_module(self.module)
         self.module.time = NS(monotonic=lambda: self.now)
         self.socket = Mock()
+        self.socket.sendto.return_value = 33
         self.module.socket = NS(socket=lambda *_: self.socket, AF_INET=2, SOCK_DGRAM=2)
         self.module.load_path_file = lambda _: turn_path()
         self.node = self.module.ManeuverFusionNode()
@@ -139,7 +162,8 @@ class FusionNodeTest(unittest.TestCase):
     def tick(self, signal="LEFT", line=4.345, obstacle=False, quality="NORMAL",
              x=85.655, speed=0.0, refresh=True):
         if refresh:
-            self.sample("odom", pose=NS(pose=NS(position=NS(x=x, y=0.))),
+            self.sample("odom", pose=NS(pose=NS(position=NS(x=x, y=0.),
+                        orientation=NS(x=0., y=0., z=0., w=1.))),
                         twist=NS(twist=NS(linear=NS(x=speed, y=0.))))
             self.sample("quality", state=quality)
             self.sample("safety", stop_required=obstacle, reason="pedestrian" if obstacle else "clear")
@@ -258,12 +282,13 @@ class FusionNodeTest(unittest.TestCase):
 
     def test_committed_turn_survives_arrow_leaving_camera_but_not_obstacle(self):
         self.run_ticks(110)
-        self.tick(x=86.2, line=None)
+        # Rear axle + 3m wheelbase must cross 90m; the bumper is not enough.
+        self.tick(x=87.1, line=None)
         self.now += 0.05
-        output, status = self.run_ticks(25, x=87.0, line=None, signal=None)
+        output, status = self.run_ticks(25, x=87.2, line=None, signal=None)
         self.assertTrue(status["event"]["committed"])
         self.assertEqual(output.brake, 0.0)
-        output, _ = self.tick(x=87.0, line=None, signal=None, obstacle=True)
+        output, _ = self.tick(x=87.2, line=None, signal=None, obstacle=True)
         self.assertEqual(output.brake, 1.0)
 
     def test_invalid_source_stamp_and_controller_death_fail_closed(self):
@@ -275,11 +300,41 @@ class FusionNodeTest(unittest.TestCase):
         self.sample("signal", state="LEFT", confidence=1., valid=True, stamp=self.now - 10)
         self.assertLess(self.node.samples["signal"].stamp, self.now)
 
+    def test_fusion_restart_after_safety_stop_limits_pedal_without_delaying_brake(self):
+        self.run_ticks(120)
+        output, _ = self.tick(obstacle=True)
+        self.assertEqual((output.accel, output.brake), (0., 1.))
+        self.now += .05
+        output, status = self.tick(obstacle=False)
+        self.assertEqual(output.brake, 0.)
+        self.assertGreater(output.accel, 0.)
+        self.assertLessEqual(output.accel, .025 + 1e-9)
+        self.assertTrue(status["accel_rise_limited"])
+
+    def test_delayed_line_route_position_uses_source_pose_during_braking(self):
+        self.sample("odom", pose=NS(pose=NS(position=NS(x=80., y=0.))),
+                    twist=NS(twist=NS(linear=NS(x=4., y=0.))))
+        self.sample("line", "base_link", distance_m=10., valid=True, confidence=1.)
+        line = self.node.samples["line"]
+        self.now += .5
+        self.sample("odom", pose=NS(pose=NS(position=NS(x=81.25, y=0.))),
+                    twist=NS(twist=NS(linear=NS(x=1., y=0.))))
+        self.node.update_route(self.node.samples["odom"], self.now, self.now)
+        self.assertAlmostEqual(self.node.line_route_s(line), 90.)
+        self.node.pose_history.popleft()
+        self.assertIsNone(self.node.line_route_s(line))
+
     def test_final_launch_owns_one_lamp_writer_and_post_fallback_stopline(self):
         root = ET.parse(SOURCE / "bringup/morai_bringup/launch/perception_control_bringup.launch").getroot()
         fusion = root.find("node[@type='maneuver_fusion_node.py']")
         self.assertEqual(fusion.get("if"), "$(arg enable_maneuver_fusion)")
         self.assertIn("camera_fallback_cmd", fusion.find("param[@name='nominal_command_topic']").get("value"))
+        self.assertEqual(fusion.find("param[@name='front_axle_offset_m']").get("value"),
+                         "$(arg turn_entry_front_axle_offset_m)")
+        final = ET.parse(SOURCE / "bringup/morai_bringup/launch/final_ws_bringup.launch").getroot()
+        self.assertEqual(final.find("arg[@name='turn_entry_front_axle_offset_m']").get("default"), "3.0")
+        self.assertEqual(final.find("include/arg[@name='turn_entry_front_axle_offset_m']").get("value"),
+                         "$(arg turn_entry_front_axle_offset_m)")
         old = root.find("node[@type='stopline_controller.py']")
         self.assertIn("not arg('enable_maneuver_fusion')", old.find("param[@name='enabled']").get("value"))
         lamp = root.find("node[@type='turn_signal_node.py']")
@@ -305,14 +360,15 @@ class StrictFusionTest(unittest.TestCase):
         self.node.map_heads = [self.head]
 
     def frame(self, state="LEFT", line=False, objects_stamp=None, extra=(), x=85.655,
-              quality="NORMAL", no_objects=False):
+              quality="NORMAL", no_objects=False, obstacle=False):
         from turn_signal_controller.signal_association import project_signal
         c = self.fixture
         c.sample("odom", pose=NS(pose=NS(position=NS(x=x, y=0., z=0.),
                      orientation=NS(x=0., y=0., z=0., w=1.))),
                  twist=NS(twist=NS(linear=NS(x=0., y=0.))))
-        c.sample("quality", state=quality)
-        c.sample("safety", stop_required=False, reason="clear")
+        c.sample("quality", state=quality, imu_stale=False, gps_valid=quality == "NORMAL",
+                 gps_blackout=quality == "GPS_BLACKOUT", gps_recovering=False)
+        c.sample("safety", stop_required=obstacle, reason="pedestrian" if obstacle else "clear")
         c.sample("signal", state=state, confidence=.9, valid=state != "UNKNOWN")
         c.sample("line", "base_link", distance_m=4.345 if line else 0.,
                  confidence=1. if line else 0., valid=line)
@@ -441,6 +497,13 @@ class StrictFusionTest(unittest.TestCase):
         self.assertFalse(status["permission"])
         self.assertEqual(output.brake, 1.)
 
+    def test_unsynchronized_stopline_pose_forces_safe_stop(self):
+        self.frame("GREEN", line=True)
+        self.node.pose_history.clear()
+        output, status = self.fixture.tick(refresh=False)
+        self.assertIn("stopline_pose_unsynchronized", status["reason"])
+        self.assertEqual(output.brake, 1.)
+
     def test_distant_context_cannot_hide_nearer_stopline(self):
         self.context.update(start=200., end=240., stop_s=200.)
         output, status = self.frame("RED", line=True)
@@ -460,6 +523,214 @@ class StrictFusionTest(unittest.TestCase):
         output, status = self.frame("RED")
         self.assertFalse(status["event"]["committed"])
         self.assertEqual(status["next_junction_guard_id"], "next_change")
+
+    def authorize(self):
+        for _ in range(120):
+            output, status = self.frame()
+        self.assertTrue(status["permission"])
+
+    def test_bumper_crossing_does_not_commit_before_front_axle(self):
+        self.authorize()
+        _, status = self.frame(x=86.3)
+        self.assertFalse(status["event"]["committed"])
+        output, status = self.frame("RED", x=86.4)
+        self.assertFalse(status["event"]["committed"])
+        self.assertEqual(output.brake, 1.)
+
+    def test_red_at_front_axle_crossing_cannot_reuse_previous_arrow(self):
+        self.authorize()
+        output, status = self.frame("RED", x=87.1)
+        self.assertFalse(status["event"]["committed"])
+        self.assertIn("entry_without_current_permission", status["reason"])
+        self.assertEqual(output.brake, 1.)
+        for _ in range(120):
+            output, status = self.frame(x=87.1)
+        self.assertFalse(status["permission"])
+        self.assertEqual(output.brake, 1.)
+
+    def test_expired_entry_ticket_is_not_reused_after_control_gap(self):
+        self.context["direction"] = "STRAIGHT"
+        for _ in range(30):
+            self.frame("GREEN")
+        self.fixture.now += 1.
+        output, status = self.frame("GREEN", x=87.1)
+        self.assertFalse(status["event"]["committed"])
+        self.assertEqual(output.brake, 1.)
+
+    def test_mid_junction_start_cannot_create_permission_retroactively(self):
+        for _ in range(120):
+            output, status = self.frame(x=88.)
+        self.assertFalse(status["event"]["committed"])
+        self.assertFalse(status["permission"])
+        self.assertEqual(output.brake, 1.)
+
+    def test_lamp_failure_at_crossing_does_not_commit(self):
+        self.authorize()
+        self.fixture.socket.sendto.side_effect = OSError("disconnect")
+        output, status = self.frame(x=87.1)
+        self.assertFalse(status["event"]["committed"])
+        self.assertEqual(output.brake, 1.)
+
+    def test_valid_crossing_retains_lamp_during_localization_loss(self):
+        self.authorize()
+        _, status = self.frame(x=87.1)
+        self.assertTrue(status["event"]["committed"])
+        output, status = self.frame("UNKNOWN", x=87.1, quality="GPS_BLACKOUT", no_objects=True)
+        self.assertEqual(output.brake, 1.)
+        self.assertEqual(self.node.lamp_pub.publish.call_args.args[0].data, "LEFT")
+
+    def test_stop_guard_adjustment_does_not_move_verified_axle_crossing(self):
+        self.authorize()
+        self.node.event["start"] = 89.
+        _, status = self.frame(x=86.4)
+        self.assertFalse(status["event"]["committed"])
+
+    def test_front_axle_offset_is_validated(self):
+        for offset in (-1., float("nan"), 4.):
+            self.fixture.params["~front_axle_offset_m"] = offset
+            with self.assertRaises(ValueError):
+                self.fixture.module.ManeuverFusionNode()
+
+    def test_obstacle_at_crossing_cannot_leave_latched_entry(self):
+        self.authorize()
+        output, status = self.frame(x=87.1, obstacle=True)
+        self.assertFalse(status["event"]["committed"])
+        self.assertEqual(output.brake, 1.)
+        output, status = self.frame("RED", x=87.1)
+        self.assertFalse(status["permission"])
+        self.assertEqual(output.brake, 1.)
+
+    def test_short_lamp_send_is_not_counted_as_success(self):
+        self.fixture.socket.sendto.return_value = 10
+        for _ in range(120):
+            output, status = self.frame()
+        self.assertEqual(status["lamp_requested"], "LEFT")
+        self.assertFalse(status["lamp_transmit_ok"])
+        self.assertFalse(status["indicator_ready"])
+        self.assertEqual(output.brake, 1.)
+
+    def test_right_turn_policy_false_requires_its_own_arrow(self):
+        self.context["direction"] = "RIGHT"
+        self.node.right_on_green = False
+        for _ in range(120):
+            output, status = self.frame("GREEN")
+        self.assertFalse(status["permission"])
+        self.assertEqual(output.brake, 1.)
+        for _ in range(20):
+            output, status = self.frame("RIGHT")
+        self.assertTrue(status["permission"])
+        self.assertEqual(self.node.lamp_pub.publish.call_args.args[0].data, "RIGHT")
+        output, status = self.frame("RED", x=87.1)
+        self.assertFalse(status["event"]["committed"])
+        self.assertEqual(output.brake, 1.)
+
+    def test_lamp_stays_on_until_verified_exit_then_turns_off(self):
+        self.context["end"] = 90.
+        self.authorize()
+        for x in (87.1, 88., 89., 89.99):
+            _, status = self.frame(x=x)
+            self.assertTrue(status["event"]["committed"])
+            self.assertEqual(self.node.lamp_pub.publish.call_args.args[0].data, "LEFT")
+        _, status = self.frame("UNKNOWN", x=90., no_objects=True)
+        self.assertIsNone(status["event"])
+        self.assertEqual(self.node.lamp_pub.publish.call_args.args[0].data, "OFF")
+
+    def test_adjacent_turn_restarts_lead_even_for_same_direction(self):
+        for following_direction in ("LEFT", "RIGHT"):
+            with self.subTest(direction=following_direction):
+                self.setUp()
+                self.context["end"] = 90.
+                self.node.contexts.append(dict(self.context, id="next", start=100.,
+                                               stop_s=100., end=125., direction=following_direction))
+                self.authorize()
+                for x in (87.1, 88., 89.):
+                    self.frame(x=x)
+                _, status = self.frame(following_direction, x=90.)
+                self.assertEqual(status["event"]["id"], "next")
+                self.assertFalse(status["indicator_ready"])
+                self.assertFalse(status["permission"])
+                self.assertEqual(self.node.lamp_pub.publish.call_args.args[0].data, following_direction)
+
+    def corridor_frame(self, quality="NORMAL", mode="normal_nominal", x=10., **kwargs):
+        self.node.allow_blackout_lane = True
+        self.node.fallback_status_callback(Message(data=json.dumps(dict(
+            stamp=self.fixture.now, mode=mode, camera_used=mode != "normal_nominal",
+            lane_primary_usable=True, nominal_fresh=True, blackout_budget_exhausted=False,
+            accel=0. if mode == "lane_loss_braking" else .5,
+            brake=.2 if mode == "lane_loss_braking" else 0.))))
+        return self.frame("UNKNOWN", no_objects=True, quality=quality, x=x, **kwargs)
+
+    def test_bounded_blackout_corridor_reaches_final_command(self):
+        self.corridor_frame()
+        output, status = self.corridor_frame("GPS_BLACKOUT", "gps_blackout_camera_fallback", x=10.1)
+        self.assertTrue(status["blackout_lane_corridor"])
+        self.assertEqual(output.brake, 0.)
+        self.assertGreater(output.accel, 0.)
+        self.assertFalse(status["permission"])  # Not a junction entry permit.
+
+    def test_blackout_corridor_needs_normal_anchor_and_fresh_status(self):
+        output, status = self.corridor_frame("GPS_BLACKOUT", "gps_blackout_camera_fallback")
+        self.assertFalse(status["blackout_lane_corridor"])
+        self.assertEqual(output.brake, 1.)
+        self.corridor_frame()
+        self.node.samples.pop("fallback")
+        output, status = self.frame("UNKNOWN", no_objects=True, quality="GPS_BLACKOUT", x=10.1)
+        self.assertEqual(output.brake, 1.)
+        self.assertIn("camera_fallback_status_stale", status["reason"])
+
+    def test_blackout_corridor_cannot_cross_junction_or_visible_line(self):
+        self.corridor_frame(x=49.)
+        output, status = self.corridor_frame("GPS_BLACKOUT", "gps_blackout_camera_fallback", x=50.1)
+        self.assertFalse(status["blackout_lane_corridor"])
+        self.assertEqual(output.brake, 1.)
+        self.setUp()
+        self.corridor_frame()
+        output, status = self.corridor_frame("GPS_BLACKOUT", "gps_blackout_camera_fallback", line=True)
+        self.assertFalse(status["blackout_lane_corridor"])
+        self.assertEqual(output.brake, 1.)
+
+    def test_blackout_corridor_expiration_and_obstacle_override(self):
+        self.corridor_frame()
+        output, status = self.corridor_frame("GPS_BLACKOUT", "gps_blackout_camera_fallback", obstacle=True)
+        self.assertEqual(output.brake, 1.)
+        self.assertIn("pedestrian", status["reason"])
+        self.node.blackout_max_duration = .1
+        for _ in range(5):
+            output, status = self.corridor_frame("GPS_BLACKOUT", "gps_blackout_camera_fallback")
+        self.assertEqual(output.brake, 1.)
+        self.assertIn("budget", status["blackout_corridor_reason"])
+
+    def test_recovery_status_does_not_restore_route_permission_early(self):
+        self.corridor_frame()
+        self.corridor_frame("GPS_BLACKOUT", "gps_blackout_camera_fallback")
+        output, status = self.corridor_frame("NORMAL", "recovery_camera")
+        self.assertTrue(status["blackout_lane_corridor"])
+        self.assertIsNone(status["event"])
+        self.assertFalse(status["permission"])
+        self.assertEqual(output.brake, 0.)
+
+    def test_corrupt_fallback_status_revokes_previous_valid_state(self):
+        self.corridor_frame()
+        self.node.fallback_status_callback(Message(data="not JSON"))
+        output, status = self.frame("UNKNOWN", no_objects=True, x=10.)
+        self.assertEqual(output.brake, 1.)
+        self.assertIn("camera_fallback_status_stale", status["reason"])
+
+    def test_lane_loss_braking_status_limits_older_nominal_accel(self):
+        self.corridor_frame()
+        output, status = self.corridor_frame("GPS_BLACKOUT", "lane_loss_braking")
+        self.assertTrue(status["blackout_lane_corridor"])
+        self.assertEqual(output.accel, 0.)
+        self.assertGreaterEqual(output.brake, .2)
+
+    def test_final_launch_wires_matching_blackout_budgets(self):
+        root = ET.parse(SOURCE / "bringup/morai_bringup/launch/perception_control_bringup.launch").getroot()
+        fusion = root.find("node[@type='maneuver_fusion_node.py']")
+        fallback = root.find("node[@type='camera_localization_fallback_controller.py']")
+        self.assertEqual(fusion.find("param[@name='allow_blackout_lane_corridor']").get("value"), "$(arg enable_lane_fallback)")
+        for key in ("blackout_max_duration_sec", "blackout_max_distance_m"):
+            self.assertEqual(fusion.find("param[@name='%s']" % key).get("value"),
+                             fallback.find("param[@name='%s']" % key).get("value"))
 
 
 class BumperStopTest(unittest.TestCase):

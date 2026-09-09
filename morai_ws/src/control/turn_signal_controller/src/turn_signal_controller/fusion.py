@@ -65,6 +65,8 @@ class IndicatorLead:
     def __init__(self, lead_sec=5.0, max_gap_sec=0.6):
         if not math.isfinite(lead_sec) or lead_sec < 5.0:
             raise ValueError("indicator lead time must be at least five seconds")
+        if not math.isfinite(max_gap_sec) or max_gap_sec <= 0:
+            raise ValueError("indicator maximum send gap must be positive and finite")
         self.lead_sec, self.max_gap_sec = lead_sec, max_gap_sec
         self.reset()
 
@@ -73,17 +75,20 @@ class IndicatorLead:
         self.started = self.last = None
 
     def sent(self, direction, now, ros_now, success=True):
-        if not success or direction == "OFF":
+        if (not success or direction not in ("LEFT", "RIGHT")
+                or not all(math.isfinite(t) for t in (now, ros_now))):
             self.reset()
             return
         if (direction != self.direction or self.last is None
                 or not 0 <= now - self.last[0] <= self.max_gap_sec
-                or ros_now < self.last[1]):
+                or not 0 <= ros_now - self.last[1] <= self.max_gap_sec):
             self.started = (now, ros_now)
         self.direction, self.last = direction, (now, ros_now)
 
     def ready(self, direction, now, ros_now):
-        return bool(self.started is not None and direction == self.direction
+        return bool(all(math.isfinite(t) for t in (now, ros_now))
+                    and self.started is not None and direction == self.direction
                     and 0 <= now - self.last[0] <= self.max_gap_sec
+                    and 0 <= ros_now - self.last[1] <= self.max_gap_sec
                     and now - self.started[0] >= self.lead_sec
                     and ros_now - self.started[1] >= self.lead_sec)

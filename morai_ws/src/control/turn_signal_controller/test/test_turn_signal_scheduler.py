@@ -42,6 +42,25 @@ class TurnSignalSchedulerTest(unittest.TestCase):
         self.assertIsNone(maneuvers[0].end_s_m)
         self.assertEqual(maneuvers[0].duration_sec, 3.0)
 
+    def test_duration_starts_at_maneuver_not_early_lamp_activation(self):
+        scheduler = TurnSignalScheduler([Maneuver("left", 100., LEFT, duration_sec=3.)])
+        self.assertEqual(scheduler.update(95., 1., 0.).phase, "lead")
+        self.assertEqual(scheduler.update(95., 0., 30.).phase, "lead")
+        self.assertEqual(scheduler.update(100., 1., 31.).direction, LEFT)
+        self.assertEqual(scheduler.update(102., 1., 33.9).direction, LEFT)
+        self.assertEqual(scheduler.update(103., 1., 34.).direction, OFF)
+
+    def test_bad_measurement_does_not_consume_event(self):
+        scheduler = TurnSignalScheduler([Maneuver("left", 100., LEFT, end_s_m=120.)])
+        self.assertEqual(scheduler.update(99., float("nan"), 1.).direction, OFF)
+        self.assertIsNone(scheduler.active)
+
+    def test_clock_reset_rearms_duration_event(self):
+        scheduler = TurnSignalScheduler([Maneuver("left", 100., LEFT, duration_sec=3.)])
+        scheduler.update(100., 1., 100.)
+        self.assertEqual(scheduler.update(104., 1., 104.).direction, OFF)
+        self.assertEqual(scheduler.update(100., 1., 1.).direction, LEFT)
+
 
 if __name__ == "__main__":
     unittest.main()

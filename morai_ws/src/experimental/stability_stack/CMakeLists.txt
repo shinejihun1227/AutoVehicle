@@ -12,6 +12,10 @@ find_package(catkin REQUIRED COMPONENTS
 
 catkin_package()
 
+if(CATKIN_ENABLE_TESTING)
+  catkin_add_nosetests(test)
+endif()
+
 catkin_install_python(PROGRAMS
   scripts/camera_stability_controller.py
   scripts/camera_localization_fallback_controller.py

@@ -13,7 +13,7 @@ from morai_perception_msgs.msg import StopLineDetection, TrafficLight
 from nav_msgs.msg import Odometry
 from std_msgs.msg import Bool, String
 
-from stopline_control.core import Decision, Sample, StopLineControllerCore, clamp, finite
+from stopline_control.core import AccelRiseLimiter, Decision, Sample, StopLineControllerCore, clamp, finite
 
 
 def limit_command(nominal, decision):
@@ -38,6 +38,10 @@ class StopLineController:
             raise ValueError("stopline_control requires accel/brake longl_cmd_type=1")
         self.nominal_timeout = float(rospy.get_param("~nominal_timeout_sec", 0.5))
         self.odom_timeout = float(rospy.get_param("~odom_timeout_sec", 0.5))
+        self.accel_rise_rate = float(rospy.get_param("~accel_rise_rate_per_sec", 0.5))
+        if not all(finite(value) and value > 0 for value in
+                   (self.nominal_timeout, self.odom_timeout, self.accel_rise_rate)):
+            raise ValueError("Timeouts and accel_rise_rate_per_sec must be finite and positive")
         self.stopline_frame = rospy.get_param("~stopline_frame", "base_link")
         defaults = dict(max_decel_mps2=1.5, planning_decel_mps2=1.0,
                         reaction_time_sec=0.3, hold_distance_m=0.5,
@@ -46,10 +50,12 @@ class StopLineController:
                         signal_min_confidence=0.5, stopline_timeout_sec=0.8,
                         signal_timeout_sec=0.8, green_confirmation_sec=0.3,
                         max_dead_reckoning_sec=8.0, max_dead_reckoning_m=12.0,
-                        max_update_gap_sec=0.5)
+                        max_update_gap_sec=0.5, stop_tolerance_m=0.03,
+                        history_extrapolation_sec=0.05)
         self.core = StopLineControllerCore(**{
             key: float(rospy.get_param("~" + key, value)) for key, value in defaults.items()
         })
+        self.accel_limiter = AccelRiseLimiter(self.accel_rise_rate, self.core.max_update_gap_sec)
         self.nominal = None
         self.nominal_at = None
         self.odom = None
@@ -58,7 +64,7 @@ class StopLineController:
         self.status_pub = rospy.Publisher(rospy.get_param("~status_topic", "/control/stopline_status"), String, queue_size=1, latch=True)
         rospy.Subscriber(rospy.get_param("~nominal_command_topic", "/control/ctrl_cmd"), CtrlCmd, self.nominal_callback, queue_size=1)
         rospy.Subscriber(rospy.get_param("~stopline_topic", "/perception/camera/stopline"), StopLineDetection, self.stopline_callback, queue_size=1)
-        rospy.Subscriber(rospy.get_param("~signal_state_topic", "/perception/traffic_light/state"), TrafficLight, self.signal_callback, queue_size=1)
+        rospy.Subscriber(rospy.get_param("~signal_state_topic", "/perception/traffic_light/state"), TrafficLight, self.signal_callback, queue_size=32)
         rospy.Subscriber(rospy.get_param("~odom_topic", "/localization/odometry"), Odometry, self.odom_callback, queue_size=1)
         # Optional legacy publishers may request a stop. Bool(false) never
         # proves a green light and cannot release a stop.
@@ -94,9 +100,17 @@ class StopLineController:
         speed = math.hypot(message.twist.twist.linear.x, message.twist.twist.linear.y)
         sample = Sample(stamp, now, speed)
         with self.lock:
-            if stamp > self.last_odom_stamp and finite(speed) and sample.fresh(ros_now, now, self.odom_timeout):
-                self.odom = sample
+            if stamp > self.last_odom_stamp and sample.fresh(ros_now, now, self.odom_timeout):
+                # A new invalid measurement invalidates the cached speed now,
+                # rather than letting the previous finite value release HOLD.
+                self.odom = sample if finite(speed) else None
                 self.last_odom_stamp = stamp
+
+    def limit_accel_rise(self, output, now, ros_now):
+        """Limit pedal rise only; deceleration/emergency braking is immediate."""
+        previous = output.accel
+        output.accel = self.accel_limiter.limit(output.accel, output.brake, now, ros_now)
+        return output.accel < previous
 
     def publish_command(self, _event):
         with self.lock:
@@ -115,13 +129,16 @@ class StopLineController:
                 decision = Decision("SAFE_STOP", "nominal_stale_or_invalid", 0.0, 1.0, 0.0)
             output = (copy.deepcopy(nominal) if not self.enabled and valid
                       else limit_command(nominal, decision))
+            rise_limited = self.limit_accel_rise(output, now, ros_now) if self.enabled else False
             self.output_pub.publish(output)
             self.status_pub.publish(String(data=json.dumps({
                 "enabled": self.enabled, "mode": decision.mode, "reason": decision.reason,
                 "stop_requested": self.core.stop_requested, "holding": self.core.holding,
+                "tracking_fault": self.core.tracking_fault,
                 "distance_m": decision.distance_m, "target_speed_kph": decision.target_speed_kph,
                 "measured_speed_kph": None if speed is None else speed * 3.6,
                 "accel": output.accel, "brake": output.brake,
+                "accel_rise_limited": rise_limited,
                 "front_reference_offset_m": self.core.front_reference_offset_m,
             }, allow_nan=False, sort_keys=True)))
 

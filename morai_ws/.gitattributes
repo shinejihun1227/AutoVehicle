@@ -1,0 +1,3 @@
+# Docker entrypoints must remain executable by Linux bash after Windows checkout.
+*.sh text eol=lf
+docker/final_ws/Dockerfile text eol=lf

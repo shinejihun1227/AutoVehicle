@@ -24,6 +24,10 @@ def finite(value: Optional[float]) -> bool:
 class LaneQualityEstimator:
     """한 프레임의 차선 결과를 주행용 품질 지표로 변환한다."""
 
+    # DetectionResult uses 7 m for lateral error and 7--14 m for heading.
+    # Validate the whole fitted corridor, not just its near-end width.
+    EVALUATION_X = tuple(7.0 + 0.5 * i for i in range(15))
+
     def __init__(
         self,
         expected_lane_width_m: float = 3.3,
@@ -38,12 +42,18 @@ class LaneQualityEstimator:
         self.good_streak = 0
         self.bad_streak = 0
 
-    @staticmethod
-    def _line_score(line) -> float:
+    @classmethod
+    def _line_score(cls, line) -> float:
         if line is None:
             return 0.0
-        point_score = clamp(float(getattr(line, "n_points", 0)) / 220.0, 0.0, 1.0)
+        points = float(getattr(line, "n_points", 0))
         x_range = getattr(line, "x_range", (0.0, 0.0))
+        if (not finite(points) or points < 0 or len(x_range) != 2
+                or not all(finite(v) for v in x_range)
+                or x_range[0] > cls.EVALUATION_X[0] or x_range[1] < cls.EVALUATION_X[-1]
+                or not all(finite(line.y_at(x)) for x in cls.EVALUATION_X)):
+            return 0.0
+        point_score = clamp(points / 220.0, 0.0, 1.0)
         span = max(0.0, float(x_range[1]) - float(x_range[0]))
         span_score = clamp(span / 10.0, 0.0, 1.0)
         return 0.5 * point_score + 0.5 * span_score
@@ -58,20 +68,28 @@ class LaneQualityEstimator:
         both_visible = left_visible and right_visible
 
         lane_width_m = None
+        corridor_widths = []
         if both_visible:
-            left_y = left.y_at(7.0)
-            right_y = right.y_at(7.0)
-            if finite(left_y) and finite(right_y):
-                lane_width_m = abs(float(left_y) - float(right_y))
+            for x in self.EVALUATION_X:
+                left_y, right_y = left.y_at(x), right.y_at(x)
+                if not finite(left_y) or not finite(right_y):
+                    break
+                # Signed width also rejects crossing/reversed boundaries.
+                corridor_widths.append(float(left_y) - float(right_y))
+            if corridor_widths:
+                lane_width_m = corridor_widths[0]
+        corridor_valid = (len(corridor_widths) == len(self.EVALUATION_X)
+                          and all(w > 0 and abs(w - self.expected_lane_width_m)
+                                  <= self.lane_width_tolerance_m for w in corridor_widths))
 
         line_score = 0.5 * (
             self._line_score(left) + self._line_score(right)
         ) if both_visible else self._line_score(left or right)
 
-        if both_visible and lane_width_m is not None:
+        if both_visible and corridor_valid:
             width_score = clamp(
                 1.0
-                - abs(lane_width_m - self.expected_lane_width_m)
+                - max(abs(w - self.expected_lane_width_m) for w in corridor_widths)
                 / self.lane_width_tolerance_m,
                 0.0,
                 1.0,
@@ -85,10 +103,12 @@ class LaneQualityEstimator:
         visibility_score = 1.0 if both_visible else 0.55 if (left_visible or right_visible) else 0.0
 
         continuity_score = 1.0
+        continuous = True
         if self.history and finite(lateral_error) and finite(heading_error):
             previous = self.history[-1]
             lateral_delta = abs(float(lateral_error) - previous["lateral_error"])
             heading_delta = abs(float(heading_error) - previous["heading_error"])
+            continuous = lateral_delta <= .75 and heading_delta <= .30
             continuity_score = 0.5 * (
                 clamp(1.0 - lateral_delta / 0.75, 0.0, 1.0)
                 + clamp(1.0 - heading_delta / 0.30, 0.0, 1.0)
@@ -111,6 +131,8 @@ class LaneQualityEstimator:
             and finite(heading_error)
             and (left_visible or right_visible)
             and line_score >= 0.25
+            and (not both_visible or (corridor_valid
+                 and min(self._line_score(left), self._line_score(right)) >= .25))
         )
         confidence = (
             0.35 * visibility_score
@@ -121,6 +143,10 @@ class LaneQualityEstimator:
             else 0.0
         )
         confidence = clamp(confidence, 0.0, 1.0)
+        # Soft weighted scores alone could give an impossible width exactly
+        # 0.80. Geometry is a hard gate; a temporal jump cannot be primary.
+        if not both_visible or not continuous:
+            confidence = min(confidence, .79)
 
         if valid and confidence >= 0.55:
             self.good_streak += 1
@@ -137,6 +163,8 @@ class LaneQualityEstimator:
         else:
             self.bad_streak += 1
             self.good_streak = 0
+            if self.bad_streak >= 3:
+                self.history.clear()
 
         return {
             "valid": valid,
@@ -148,6 +176,9 @@ class LaneQualityEstimator:
             if finite(heading_error)
             else None,
             "lane_width_m": lane_width_m,
+            "corridor_valid": corridor_valid,
+            "lane_width_min_m": min(corridor_widths) if corridor_valid else None,
+            "lane_width_max_m": max(corridor_widths) if corridor_valid else None,
             "left_visible": left_visible,
             "right_visible": right_visible,
             "both_visible": both_visible,
