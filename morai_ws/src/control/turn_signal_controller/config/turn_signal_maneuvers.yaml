@@ -5,7 +5,9 @@
 # start_s_m : 차선 변경 또는 좌/우회전을 시작할 경로 누적거리(m)
 # end_s_m   : 조작이 끝나는 누적거리(m). 최종 fusion에서는 필수
 # direction : LEFT/RIGHT (좌/우, 좌회전/우회전도 허용)
-# kind      : lane_change 또는 turn 등 기록용 분류
+# kind      : lane_change 또는 turn
+# 엄격 모드의 turn은 유일한 MGeo 경로 조작과 같은 방향이어야 한다.
+# 일치하면 지도 이벤트만 사용하며, 수동 항목으로 진행 방향을 덮어쓰지 않는다.
 #
 # 실제 대회 경로의 조작 지점을 측정한 뒤 아래 목록에 등록한다.
 # 예시:
@@ -25,6 +27,10 @@ maneuvers: []
 
 # 최종 모드: 지도 연결이 없거나 모호하면 곡률만으로 통행을 허가하지 않는다.
 require_route_signal_context: true
+# 조향 노드가 실제로 사용하는 전체 경로와 일치해야 주행한다.
+# 누락/다른 좌표/반대 순서/다른 좌표계이면 정지하며 GPS 음영 예외도 차단한다.
+require_reference_path_match: true
+reference_path_topic: /experimental/curvature_reference_path
 # YOLO Cam 4 (UDP 1131)의 실제 설정과 map 좌표 정렬을 검증한 뒤 true.
 # lane/cam_set.json은 Cam 1~3 설정이므로 Cam 4 값으로 복사하면 안 된다.
 # 아래 수치는 미입력 표시이며, calibrated=false에서는 교차로 통과하지 않는다.

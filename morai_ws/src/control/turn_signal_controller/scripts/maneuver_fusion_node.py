@@ -18,7 +18,7 @@ from pathlib import Path
 import rospy
 from morai_msgs.msg import CtrlCmd
 from morai_perception_msgs.msg import TrafficLight, StopLineDetection, SafetyStop, SensorQuality
-from nav_msgs.msg import Odometry
+from nav_msgs.msg import Odometry, Path as RosPath
 from std_msgs.msg import String
 from common.msg import ObjectInfoArray
 
@@ -26,7 +26,10 @@ from curvature_speed_purepursuit.planner import (
     load_path_file, clean_consecutive_duplicates, cumulative_arc_lengths, nearest_projection,
 )
 from stopline_control.core import AccelRiseLimiter, StopLineControllerCore, Sample, Decision, finite, clamp
-from turn_signal_controller.fusion import IndicatorLead, build_lamp_packet, route_intent, signal_permits
+from turn_signal_controller.fusion import (
+    IndicatorLead, build_lamp_packet, route_intent, signal_permits, signal_allowed_directions,
+)
+from turn_signal_controller.route_contract import reference_path_reason, route_event_key, route_checked_maneuvers
 from turn_signal_controller.scheduler import parse_maneuvers
 from turn_signal_controller.route_context import load_route_contexts
 from turn_signal_controller.turn_motion import TurnMotion, TurnMotionPlanner, quaternion_yaw
@@ -66,6 +69,9 @@ class ManeuverFusionNode:
         self.right_on_green = bool(rospy.get_param("~right_on_green", True))
         # Strict mode never uses screen-centre/route-curvature as a signal ID.
         self.require_context = bool(rospy.get_param("~require_route_signal_context", True))
+        self.require_reference_path = bool(rospy.get_param("~require_reference_path_match", self.require_context))
+        self.reference_path_match = False
+        self.reference_path_reason = "reference_path_not_received"
         self.allow_blackout_lane = bool(rospy.get_param("~allow_blackout_lane_corridor", False))
         self.blackout_max_duration = float(rospy.get_param("~blackout_max_duration_sec", 15.0))
         self.blackout_max_distance = float(rospy.get_param("~blackout_max_distance_m", 30.0))
@@ -144,10 +150,8 @@ class ManeuverFusionNode:
             raise ValueError("Duplicate maneuver id")
         if any(a.end_s_m > b.start_s_m for a, b in zip(self.manual, self.manual[1:])):
             raise ValueError("Overlapping route maneuvers")
-        if self.require_context and any(
-                m.kind == "lane_change" and m.start_s_m < c["end"] and m.end_s_m > c["start"]
-                for m in self.manual for c in self.contexts):
-            raise ValueError("Lane-change plans must not overlap signal-controlled contexts")
+        if self.require_context:
+            self.manual = route_checked_maneuvers(self.manual, self.contexts)
         self.samples, self.last_stamps = {}, {}
         self.nominal = None
         self.nominal_at = None
@@ -176,6 +180,8 @@ class ManeuverFusionNode:
                              queue_size=self.signal_queue_limit if key in ("signal", "objects") else 1)
         rospy.Subscriber(rospy.get_param("~nominal_command_topic", "/control/camera_fallback_cmd"),
                          CtrlCmd, self.command_callback, queue_size=1)
+        rospy.Subscriber(rospy.get_param("~reference_path_topic", "/experimental/curvature_reference_path"),
+                         RosPath, self.reference_path_callback, queue_size=1)
         rospy.Subscriber("/morai/lidar/merge_gap/results", String, self.merge_gap_callback, queue_size=1)
         if self.allow_blackout_lane:
             rospy.Subscriber("/stability/camera_fallback_status", String, self.fallback_status_callback, queue_size=1)
@@ -219,6 +225,23 @@ class ManeuverFusionNode:
         return (message.header.frame_id,
                 tuple(tuple(getattr(obj, field, None) for field in fields) for obj in message.objects))
 
+    def reference_path_callback(self, message):
+        with self.lock:
+            self.reference_path_reason = reference_path_reason(self.points, message)
+            self.reference_path_match = self.reference_path_reason == "matched"
+            if self.require_reference_path and not self.reference_path_match:
+                # Revoke in the callback, even if a matching path returns before
+                # the next tick. Old signal evidence must not revive permission.
+                self.enter_permission = False
+                self.entry_ticket = None
+                self.core.revoke_permission()
+                self.confirmation.reset()
+                self.selection = Selection(reason=self.reference_path_reason)
+                self.selection_stamp = max(self.selection_stamp, rospy.get_time())
+                self.signal_observations.clear()
+                self.lead.reset()
+                self.corridor_anchor = self.corridor_last = None
+
     def command_callback(self, message):
         with self.lock:
             self.nominal, self.nominal_at = copy.deepcopy(message), time.monotonic()
@@ -257,6 +280,9 @@ class ManeuverFusionNode:
         """
         self.corridor_reason = "disabled"
         if not self.allow_blackout_lane:
+            return False
+        if self.require_reference_path and not self.reference_path_match:
+            self.corridor_reason = self.reference_path_reason
             return False
         if route_valid:
             self.corridor_anchor = (now, ros_now, self.progress)
@@ -361,12 +387,22 @@ class ManeuverFusionNode:
             self.core.observe_signal("GREEN" if allowed else "RED", message.confidence,
                                      valid, sample.stamp, sample.received, ros_now)
 
+    def synchronize_route_intent(self, event):
+        """Reset signal evidence and indicator lead before evaluating new intent."""
+        context_id = route_event_key(event)
+        if context_id != self.selection_context:
+            if self.selection_context is not None:
+                self.revoke_entry_permission()
+                self.lead.reset()
+                self.signal_observations.clear()
+                self.selection_stamp = max(self.selection_stamp, rospy.get_time())
+            self.confirmation.reset()
+            self.selection = Selection(reason="route_intent_changed")
+            self.selection_context = context_id
+
     def selected_signal(self, objects, event, route_valid):
         """Consume ordered images at image-time poses; defer, never skip, a hole."""
-        context_id = event["id"] if event else None
-        if context_id != self.selection_context:
-            self.confirmation.reset()
-            self.selection_context, self.selection_stamp = context_id, 0.0
+        self.synchronize_route_intent(event)
         reason = None
         if not route_valid or not event or not event.get("signal_points"):
             reason = "route_context_unavailable"
@@ -591,7 +627,7 @@ class ManeuverFusionNode:
         ticket = self.entry_ticket
         valid = bool(not event.get("entry_fault") and permitted and ready
                      and self.enter_permission and ticket is not None
-                     and ticket[0] == event["id"] and ticket[1] <= self.crossing_s(event)
+                     and ticket[0] == route_event_key(event) and ticket[1] <= self.crossing_s(event)
                      and 0 <= now - ticket[2] <= self.timeout
                      and 0 < ros_now - ticket[3] <= self.timeout)
         if not valid:
@@ -630,7 +666,8 @@ class ManeuverFusionNode:
             odom = self.fresh("odom", now, ros_now)
             speed = self.update_route(odom, now, ros_now)
             quality = self.fresh("quality", now, ros_now)
-            route_valid = speed is not None
+            route_valid = (speed is not None
+                           and (not self.require_reference_path or self.reference_path_match))
             if self.require_quality:
                 route_valid = route_valid and quality is not None and quality.value.state == "NORMAL"
             fallback = self.fresh("fallback", now, ros_now) if self.allow_blackout_lane else None
@@ -676,6 +713,8 @@ class ManeuverFusionNode:
                 self.revoke_entry_permission()
                 self.confirmation.reset()
 
+            if self.require_context:
+                self.synchronize_route_intent(self.event)
             direction = self.event["direction"] if self.event else ("UNKNOWN" if self.require_context else "STRAIGHT")
             lamp = direction if direction in ("LEFT", "RIGHT") else "OFF"
             if (self.require_context and self.event and self.progress is not None
@@ -800,6 +839,8 @@ class ManeuverFusionNode:
             # observations is a dead camera/inference stream, including mid-turn.
             if self.require_camera_stream and (signal is None or line is None):
                 reasons.append("camera_observation_stream_stale")
+            if self.require_reference_path and not self.reference_path_match:
+                reasons.append(self.reference_path_reason)
             if self.require_context:
                 if objects is None:
                     reasons.append("signal_observation_stale")
@@ -863,7 +904,7 @@ class ManeuverFusionNode:
                 reasons.append("entry_without_current_permission")
             self.enter_permission = bool(event and route_valid and ready and (permitted or committed)
                                          and decision.mode == "NOMINAL" and not reasons)
-            self.entry_ticket = ((event["id"], self.progress, now, ros_now)
+            self.entry_ticket = ((route_event_key(event), self.progress, now, ros_now)
                                  if self.enter_permission and not committed
                                  and self.progress <= self.crossing_s(event) else None)
             if reasons:
@@ -879,9 +920,17 @@ class ManeuverFusionNode:
             requested_accel = output.accel
             output.accel = self.accel_limiter.limit(output.accel, output.brake, now, ros_now)
             self.output_pub.publish(output)
+            permission_state = (self.selection.state if self.require_context
+                                else signal.value.state if signal else "UNKNOWN")
+            allowed_directions = sorted(signal_allowed_directions(permission_state, self.right_on_green)) if signal_ok else []
             self.state_pub.publish(String(data=json.dumps({
                 "mode": decision.mode, "reason": decision.reason, "event": event,
                 "direction": direction, "signal": signal.value.state if signal else "STALE",
+                "route_direction": direction, "signal_allowed_directions": allowed_directions,
+                "route_signal_compatible": direction in allowed_directions,
+                "reference_path_required": self.require_reference_path,
+                "reference_path_match": self.reference_path_match,
+                "reference_path_reason": self.reference_path_reason,
                 "indicator_ready": ready, "lamp_udp_enabled": self.lamp_enabled,
                 "lamp_requested": self.lamp_requested, "lamp_transmit_ok": self.lamp_transmit_ok,
                 "permission": self.enter_permission, "progress_s_m": self.progress,

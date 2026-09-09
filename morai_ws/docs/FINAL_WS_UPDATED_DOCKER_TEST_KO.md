@@ -70,6 +70,10 @@ sudo docker run --rm --network none "$IMAGE" \
 sudo docker run --rm --network none "$IMAGE" \
   python /opt/AutoVehicle/morai_ws/docker/final_ws/run_regression.py --suite blackout
 
+# 대회 경로 우선, 신호 방향 불일치, 조향 경로 대조 테스트
+sudo docker run --rm --network none "$IMAGE" \
+  python /opt/AutoVehicle/morai_ws/docker/final_ws/run_regression.py --suite turn
+
 # 실제 모델 로드와 빈 영상 1회 추론
 sudo docker run --rm --network none "$IMAGE" \
   python /opt/AutoVehicle/morai_ws/docker/final_ws/smoke_models.py
@@ -79,7 +83,7 @@ GPU 모델 검사는 마지막 명령에 `--gpus all`을 docker 옵션으로 추
 Python 인자로 `--device cuda`를 추가한다. 회귀 시험 성공 표시는 `REGRESSION_PASS`,
 모델 smoke 성공 표시는 `OFFLINE_SMOKE_PASS`다.
 
-보완 시점 로컬 회귀 결과는 334개 통과(카메라 67, 정지선 54, 회전/신호 168,
+보완 시점 로컬 회귀 결과는 350개 통과(카메라 67, 정지선 54, 회전/신호 184,
 음영/센서 41, 곡률 4)다. 시험은 합성 차선/경로와 대체 ROS 입력을 사용하므로,
 실제 영상 정확도·MORAI 차량 응답은 아래 센서/주행 단계에서 확인한다.
 
@@ -159,6 +163,13 @@ rostopic hz /detection/lane
 0.15초 안에 드는지 확인한다. 차선은 7~14m 양쪽 경계가 필요하며,
 `lane_primary_usable`에는 품질 0.80, 서로 다른 영상 5개, 최소 0.20초 확인이 필요하다.
 
+`maneuver_status`에서 `reference_path_match: true`를 먼저 확인한다.
+`reference_path_not_received`이면 `/experimental/curvature_reference_path` 발행 노드를,
+`reference_path_*_mismatch`이면 조향 노드와 fusion의 `path_file` 및 좌표계를 확인한다.
+두 노드를 같은 대회 경로로 실행해야 하며 이 검사를 꺼서 통과시키지 않는다.
+`route_direction`이 가려는 방향, `signal_allowed_directions`가 현재 확인된 신호의
+허용 방향이다. 일치 여부는 `route_signal_compatible`, 최종 진입 허가는 `permission`이다.
+
 ## 6. 보정 후 MORAI 저속 시험
 
 현재 `signal_camera.calibrated=false`이므로 교차로 통과는 차단된다. 실제 Cam4
@@ -189,6 +200,9 @@ xvfb-run -a -s '-screen 0 1920x1080x24' \
 | 직선/완만한 곡선 | 경로·차선 이탈과 조향 진동, 설정 속도 준수 |
 | 적색·황색·신호 미확인 | 정지선 접근 감속·대기, 확인된 허가 후 출발 |
 | 좌·우회전 | 방향지시등 선행 5초, 방향별 허가, 회전 속도 제한, 출구 정렬 |
+| 직진 경로 + 좌/우회전 전용 신호 | 회전하지 않고 직진 허가를 정지선에서 대기, 방향지시등 OFF |
+| 직진 경로 + 직진/좌회전 동시 신호 | 대회 경로를 따라 직진 |
+| 좌/우회전 경로 + 다른 방향 전용 신호 | 경로 방향 유지, 자기 방향 허가까지 정지선 대기 |
 | 정상 주행 후 실제 GPS 음영 구간 | IMU·속도·차선 유효 시 제한된 차선 유지 |
 | 음영 중 차선 품질 저하/영상 중단 | 가속 0·제동, 마지막 확정 영상 0.25초 이후 정지 |
 | GPS 복구 | 1초 연속 정상 확인 후 경로 조향으로 전환 |

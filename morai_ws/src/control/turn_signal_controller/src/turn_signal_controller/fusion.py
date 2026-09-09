@@ -16,7 +16,8 @@ def build_lamp_packet(direction):
     return struct.pack("<13s i 3i b b 2s", b"#LampControl$", 2, 0, 0, 0, code, 0, b"\r\n")
 
 
-def signal_permits(state, direction, right_on_green=True):
+def signal_allowed_directions(state, right_on_green=True):
+    """Traffic lights grant permission; they never select a route direction."""
     permissions = {
         "GREEN": {"STRAIGHT"} | ({"RIGHT"} if right_on_green else set()),
         "GREEN_LEFT": {"STRAIGHT", "LEFT"} | ({"RIGHT"} if right_on_green else set()),
@@ -24,7 +25,11 @@ def signal_permits(state, direction, right_on_green=True):
         "LEFT": {"LEFT"}, "RED_LEFT": {"LEFT"},
         "RIGHT": {"RIGHT"}, "RED_RIGHT": {"RIGHT"},
     }
-    return direction in permissions.get(str(state).upper(), set())
+    return permissions.get(str(state).upper(), set())
+
+
+def signal_permits(state, direction, right_on_green=True):
+    return direction in signal_allowed_directions(state, right_on_green)
 
 
 @dataclass(frozen=True)

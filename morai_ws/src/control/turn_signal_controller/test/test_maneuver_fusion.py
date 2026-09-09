@@ -143,7 +143,7 @@ class FusionNodeTest(unittest.TestCase):
                    "common.msg": NS(ObjectInfoArray=Message),
                    "morai_perception_msgs.msg": NS(TrafficLight=Message, StopLineDetection=Message,
                                                     SafetyStop=Message, SensorQuality=Message),
-                   "nav_msgs.msg": NS(Odometry=Message), "std_msgs.msg": NS(String=Message)}
+                   "nav_msgs.msg": NS(Odometry=Message, Path=Message), "std_msgs.msg": NS(String=Message)}
         spec = importlib.util.spec_from_file_location("_fusion_test_node", PACKAGE / "scripts/maneuver_fusion_node.py")
         self.module = importlib.util.module_from_spec(spec)
         with patch.dict(sys.modules, modules):
