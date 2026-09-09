@@ -36,3 +36,10 @@ roslaunch morai_bringup final_ws_native_no_lamps.launch \
   max_speed_kph:=30.0 \
   fallback_speed_cap_kph:=3.0 \
   turn_signal_maneuvers_file:="$HOME/morai-native-config/turn_signal_maneuvers.yaml"
+
+
+source "$HOME/morai_native_env.sh"
+
+timeout 5s rostopic echo -n 1 /ctrl_cmd
+timeout 5s rostopic echo -n 1 /control/mux_status
+timeout 5s rostopic echo -n 1 /control/maneuver_status
