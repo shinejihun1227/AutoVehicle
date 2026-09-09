@@ -23,7 +23,7 @@ rostopic echo -n 1 /experimental/curvature_goal_reached
 
 rostopic echo -n 1 /detection/fused_safety_stop
 rostopic echo -n 1 /control/mux_status
-rostopic echo -n 1 /control/maneuver_status
+rostopic echo -n 1 /ctrl_cmd
 
 
 source "$HOME/morai_native_env.sh"
