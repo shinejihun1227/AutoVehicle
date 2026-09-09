@@ -24,3 +24,15 @@ source "$HOME/morai_native_env.sh"
 
 
 python3 -c 'import sys; print("Python:", sys.executable); import rospy, cv2, torch, ultralytics; from morai_msgs.msg import CtrlCmd; from common.msg import ObjectInfoArray; print("IMPORT_OK")'
+
+
+source "$HOME/morai_native_env.sh"
+
+roslaunch morai_bringup final_ws_native_no_lamps.launch \
+  enable_control:=true \
+  morai_host_ip:=192.168.0.161 \
+  ego_status_port:=1911 \
+  control_remote_port:=9093 \
+  max_speed_kph:=30.0 \
+  fallback_speed_cap_kph:=3.0 \
+  turn_signal_maneuvers_file:="$HOME/morai-native-config/turn_signal_maneuvers.yaml"
