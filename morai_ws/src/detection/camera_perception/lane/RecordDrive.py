@@ -120,7 +120,7 @@ from lib.network.UDP import Receiver
 DEFAULT_CAM_IP = os.environ.get("MORAI_CAM_IP", "192.168.0.200")
 DEFAULT_CAM_PORT = int(os.environ.get("MORAI_CAM_PORT", "1101"))
 # 시뮬레이터 Network Settings 의 sim→user 목적지 포트. 실측으로 확인했다:
-# 192.168.0.151:1910 → 이쪽 1911 로 229바이트(#MoraiInfo$ ... \r\n) 가 들어온다.
+# MORAI 192.168.0.148:1910 → 이쪽 1911 로 229바이트(#MoraiInfo$ ... \r\n) 가 들어온다.
 # 예전 기본값이던 909 는 특권 포트라 일반 사용자로는 bind 조차 안 된다.
 DEFAULT_STATUS_PORT = int(os.environ.get("MORAI_STATUS_PORT", "1911"))
 # ObjectInfo 는 카메라·차량상태와 같은 인터페이스로 들어온다. EgoNetwork 쪽

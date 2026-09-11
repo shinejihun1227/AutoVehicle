@@ -292,7 +292,7 @@ Ego 상태 수신과 ROS 내부 판단은 유지된다. 실제 제어 실행:
 
 ```bash
 roslaunch morai_bringup final_ws_bringup.launch \
-  enable_control:=true morai_host_ip:=192.168.0.151 \
+  enable_control:=true morai_host_ip:=192.168.0.148 \
   turn_signal_remote_port:=9097 \
   turn_entry_front_axle_offset_m:=3.0 \
   stopline_front_reference_offset_m:=3.845 stopline_hold_distance_m:=0.5

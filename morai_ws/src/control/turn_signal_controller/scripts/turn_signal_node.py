@@ -49,7 +49,7 @@ class TurnSignalController:
     def __init__(self) -> None:
         rospy.init_node("turn_signal_controller", anonymous=False)
 
-        self.remote_ip = rospy.get_param("~remote_ip", "192.168.0.151")
+        self.remote_ip = rospy.get_param("~remote_ip", "192.168.0.148")
         self.remote_port = int(rospy.get_param("~remote_port", 9097))
         self.progress_topic = rospy.get_param(
             "~progress_topic", "/experimental/curvature_progress"

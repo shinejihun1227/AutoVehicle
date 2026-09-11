@@ -8,7 +8,7 @@ Ubuntu 설치 후 첫 터미널부터 센서 확인과 주행 시험까지 순�
 | 항목 | 이번 구성 |
 |---|---|
 | Ubuntu 알고리즘 PC | `192.168.0.200` |
-| MORAI 시뮬레이터 PC | `192.168.0.161` |
+| MORAI 시뮬레이터 PC | `192.168.0.148` |
 | 주행 코드 | `shinejihun1227/AutoVehicle`의 **`final_ws`** |
 | 대회 메시지 | `MORAI-Autonomous/MORAI-ROS_morai_msgs`의 **`beta_drive`** |
 | 설치 위치 | `$HOME/AutoVehicle/morai_ws` |
@@ -50,7 +50,7 @@ Ubuntu와 MORAI가 같은 장치의 IP를 중복 사용하면 안 된다. VM의 
 CUDA 사용 가능 여부를 판단하지 말고 5절의 실제 GPU 검사를 사용한다.
 
 ```bash
-ping -c 4 192.168.0.161
+ping -c 4 192.168.0.148
 ```
 
 설치 중에는 Ubuntu에서 인터넷에도 접속할 수 있어야 한다. ping 성공은 UDP 수신 확인과 별개이며,
@@ -276,7 +276,7 @@ $HOME/AutoVehicle/morai_ws/data/routes/2026_molit_comp_global_path.txt
 
 시나리오를 불러온 뒤 센서가 실제 배치되어 있고 UDP 출력이 연결됐는지 확인한다.
 [MORAI Network Settings](https://help-morai-sim.scrollhelp.site/ko/morai-sim-drive/24.R2/ui)에서
-Host IP는 `192.168.0.161`, Destination IP는 `192.168.0.200`으로 맞추고 연결한다.
+Host IP는 `192.168.0.148`, Destination IP는 `192.168.0.200`으로 맞추고 연결한다.
 이번 launch는 **MORAI와 UDP로 통신하고 Ubuntu 내부에서 ROS 토픽을 사용한다.**
 별도 rosbridge 서버나 MORAI 측 ROS 토픽 설정을 추가하는 구성은 아니다.
 
@@ -343,7 +343,7 @@ MORAI에서 Ego 차량을 정지시킨 상태로 센서 출력을 시작한다. 
 source "$HOME/morai_native_env.sh"
 roslaunch morai_bringup final_ws_native_no_lamps.launch \
   enable_control:=false \
-  morai_host_ip:=192.168.0.161 \
+  morai_host_ip:=192.168.0.148 \
   ego_status_port:=1911 \
   control_remote_port:="$MORAI_CONTROL_REMOTE_PORT" \
   turn_signal_maneuvers_file:="$HOME/morai-native-config/turn_signal_maneuvers.yaml"
@@ -379,7 +379,7 @@ LiDAR 원시 토픽이 있어도 추적 결과가 없으면 위치 추정·추�
 ```bash
 ss -lunp
 sudo timeout 8s tcpdump -ni any -nn -c 5 \
-  'udp and src host 192.168.0.161 and dst port 2001'
+  'udp and src host 192.168.0.148 and dst port 2001'
 ```
 
 도착이 없으면 네트워크·MORAI 송신 설정을, 도착하지만 토픽이 없으면 포트 바인드·파서·노드를 확인한다.
@@ -399,7 +399,7 @@ mkdir -p "$HOME/morai-native-logs"
 set -o pipefail
 roslaunch morai_bringup final_ws_native_no_lamps.launch \
   enable_control:=true \
-  morai_host_ip:=192.168.0.161 \
+  morai_host_ip:=192.168.0.148 \
   ego_status_port:=1911 \
   control_remote_port:="$MORAI_CONTROL_REMOTE_PORT" \
   max_speed_kph:=30.0 \
@@ -449,10 +449,10 @@ AV-ExternalCtrl로도 전환되지 않으면 주행 launch를 켠 채 아래를 
 source "$HOME/morai_native_env.sh"
 timeout 5s rosnode ping -c 2 /morai_udp_drive_bridge
 rosparam get /morai_udp_drive_bridge
-sudo timeout 5s tcpdump -ni any -nn -c 5 'udp and dst host 192.168.0.161'
+sudo timeout 5s tcpdump -ni any -nn -c 5 'udp and dst host 192.168.0.148'
 ```
 
-코드 기본값에서는 `.200:9094 → .161:9093`, 제어 패킷 길이 55바이트가 기대된다.
+코드 기본값에서는 `.200:9094 → .148:9093`, 제어 패킷 길이 55바이트가 기대된다.
 Ubuntu에서 송신이 보이는 것만으로 MORAI 수신·적용이 확인되지는 않는다. Cmd Control의
 메시지 종류·UDP 연결·실제 수신 포트와 MORAI 실행/제어 모드를 확인한다.
 현재 브리지는 정지 패킷에도 `ctrl_mode=2`를 넣으므로, 센서 문제로 정지하는 것과

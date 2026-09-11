@@ -1,5 +1,5 @@
 <launch>
-  <arg name="remote_ip" default="192.168.0.151" />
+  <arg name="remote_ip" default="192.168.0.148" />
   <arg name="remote_port" default="9097" />
   <arg name="progress_topic" default="/experimental/curvature_progress" />
   <arg name="odometry_topic" default="/localization/odometry" />

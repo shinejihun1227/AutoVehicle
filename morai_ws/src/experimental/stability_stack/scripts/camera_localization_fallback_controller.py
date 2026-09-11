@@ -135,6 +135,14 @@ class CameraLocalizationFallbackController:
         if not all(finite(v) and v > 0 for v in (self.lateral_gain, self.heading_gain)):
             raise ValueError("Lane correction gains must be positive and finite")
         self.lane_sign = 1.0 if float(rospy.get_param("~lane_sign", 1.0)) >= 0.0 else -1.0
+        self.enable_lane_correction = bool(
+            rospy.get_param("~enable_lane_correction", False)
+        )
+        self.lane_correction_weight = clamp(
+            float(rospy.get_param("~lane_correction_weight", 0.25)), 0.0, 1.0
+        )
+        if not finite(self.lane_correction_weight):
+            raise ValueError("Lane correction weight must be finite")
         self.max_steering_rad = max(
             0.05,
             float(rospy.get_param("~max_steering_rad", math.radians(40.0))),
@@ -475,6 +483,30 @@ class CameraLocalizationFallbackController:
             self.lateral_gain + self.heading_gain)
         return self.lane_sign * math.atan(self.wheelbase_m * curvature)
 
+    def apply_lane_correction(self, command, now):
+        """Blend a fresh lane estimate into the curvature command in NORMAL mode.
+
+        GPS blackout uses ``lane_steering`` as the sole steering source below;
+        this method is intentionally called only on the normal nominal path so
+        that lane correction is never applied twice.
+        """
+
+        if not self.enable_lane_correction or not self.lane_is_usable(now):
+            return False
+        lane_steering = self.lane_steering()
+        if not finite(lane_steering) or not finite(command.steering):
+            return False
+        nominal_steering = clamp(
+            float(command.steering), -self.max_steering_rad, self.max_steering_rad
+        )
+        command.steering = clamp(
+            nominal_steering
+            + self.lane_correction_weight * (lane_steering - nominal_steering),
+            -self.max_steering_rad,
+            self.max_steering_rad,
+        )
+        return True
+
     @staticmethod
     def command_velocity(command):
         if command is None:
@@ -570,6 +602,9 @@ class CameraLocalizationFallbackController:
             "lane_source_age_sec": (max(0., rospy.get_time() - self.source_stamps["lane"])
                                     if "lane" in self.source_stamps else None),
             "lane_control_timeout_sec": self.lane_control_timeout,
+            "lane_correction_enabled": self.enable_lane_correction,
+            "lane_correction_weight": self.lane_correction_weight,
+            "lane_correction_applied": mode == "normal_lane_corrected",
             "output_steering_rad": self.last_output_steering,
             "accel": output.accel, "brake": output.brake,
             "output_velocity_mps": self.last_output_velocity,
@@ -621,7 +656,10 @@ class CameraLocalizationFallbackController:
                 return
             if state == NORMAL and not self.recovering:
                 self.had_normal = True
-                self.emit(copy.deepcopy(nominal), "normal_nominal", state, reason, nominal_fresh=True)
+                output = copy.deepcopy(nominal)
+                corrected = self.apply_lane_correction(output, now)
+                self.emit(output, "normal_lane_corrected" if corrected else "normal_nominal",
+                          state, reason, camera_used=corrected, nominal_fresh=True)
                 return
 
             if state == NORMAL:

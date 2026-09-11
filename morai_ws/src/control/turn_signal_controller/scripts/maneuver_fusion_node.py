@@ -117,7 +117,7 @@ class ManeuverFusionNode:
                              and not self.test_without_turn_signals)
         if self.test_without_turn_signals:
             rospy.logwarn("Simulator test mode: turn-signal UDP and indicator lead requirement disabled")
-        self.remote = (rospy.get_param("~remote_ip", "192.168.0.151"),
+        self.remote = (rospy.get_param("~remote_ip", "192.168.0.148"),
                        int(rospy.get_param("~remote_port", 9097)))
         self.socket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM) if self.lamp_enabled else None
         self.lead = IndicatorLead(float(rospy.get_param("~lead_time_sec", 5.0)))

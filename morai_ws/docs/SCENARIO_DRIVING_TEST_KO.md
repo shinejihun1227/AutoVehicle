@@ -142,7 +142,7 @@ rosrun turn_signal_controller inspect_route_signals.py \
 
 ### 네트워크와 의존성
 
-`morai_host_ip`는 **시뮬레이터 PC** 주소다. 센서의 Destination IP는 **Ubuntu 알고리즘 PC** 주소다. `0.0.0.0`은 Ubuntu 수신 bind 값이고 원격 목적지 IP가 아니다. 저장소 예시 `192.168.0.151`/`192.168.0.200`과 과거 문서의 `.148`/`.185`를 실제 주소라고 가정하지 않는다.
+`morai_host_ip`는 **시뮬레이터 PC** 주소다. 센서의 Destination IP는 **Ubuntu 알고리즘 PC** 주소다. `0.0.0.0`은 Ubuntu 수신 bind 값이고 원격 목적지 IP가 아니다. 현재 시험 기준은 MORAI `192.168.0.148`, Ubuntu `192.168.0.200`이지만, 실제 네트워크 설정과 연결 상태를 먼저 확인한다.
 
 | 데이터 | 방향 / 포트 | 최종 ROS 입력·출력 |
 |---|---|---|
@@ -194,7 +194,7 @@ ROS의 rospy/tf/nav_msgs/sensor_msgs/geometry_msgs/std_msgs, 메시지 생성 �
 | 최상위에서 실제 선언된 인자 | 기본값 |
 |---|---|
 | `workspace_path`, `path_file` | `$HOME/morai_ws`, 해당 workspace의 `data/routes/2026_molit_comp_global_path.txt` |
-| `morai_host_ip`, `enable_control` | `192.168.0.151`, `false` |
+| `morai_host_ip`, `enable_control` | `192.168.0.148`, `false` |
 | `max_speed_kph` | `7.2`; 하위 PP의 max/target 속도 인자 모두에 전달 |
 | `enable_roi_camera`, `enable_roi_lidar`, `roi_enable_lane`, `roi_enable_yolo` | 모두 `true` |
 | `roi_lidar_rviz` | `false` |
@@ -218,7 +218,7 @@ ROS의 rospy/tf/nav_msgs/sensor_msgs/geometry_msgs/std_msgs, 메시지 생성 �
 MORAI에서 센서 송신을 준비하고, 위 빌드 환경을 source한 Ubuntu 터미널에서 실행한다. 다음 IP는 실제 시뮬레이터 주소로 바꾼다.
 
 ```bash
-export MORAI_IP=192.168.0.151
+export MORAI_IP=192.168.0.148
 roslaunch morai_bringup final_ws_bringup.launch \
   workspace_path:="$MORAI_WS" \
   path_file:="$MORAI_WS/data/routes/2026_molit_comp_global_path.txt" \

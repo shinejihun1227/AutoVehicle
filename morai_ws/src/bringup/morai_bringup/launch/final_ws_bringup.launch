@@ -7,11 +7,18 @@
   -->
   <arg name="workspace_path" default="$(env HOME)/morai_ws" />
   <arg name="path_file" default="$(arg workspace_path)/data/routes/2026_molit_comp_global_path.txt" />
-  <arg name="morai_host_ip" default="192.168.0.151" />
+  <arg name="morai_host_ip" default="192.168.0.148" />
   <arg name="ego_status_port" default="909" />
   <arg name="control_remote_port" default="9093" />
+  <arg name="control_source_port" default="9094" />
   <arg name="enable_control" default="false" />
   <arg name="enable_lane_fallback" default="true" />
+  <!-- Optional normal-mode blend of fresh lane geometry into curvature PP. -->
+  <arg name="enable_lane_correction" default="false" />
+  <arg name="lane_correction_weight" default="0.25" />
+  <arg name="lane_lateral_gain" default="0.8" />
+  <arg name="lane_heading_gain" default="0.7" />
+  <arg name="lane_sign" default="1.0" />
   <arg name="enable_stopline_control" default="true" />
   <!-- Rear-axle base_link -> front bumper: wheelbase 3.000 + overhang 0.845.
        Recalibrate if the simulator/BEV origin is not the rear axle. -->
@@ -37,6 +44,8 @@
   <arg name="lane_stable_samples" default="5" />
   <arg name="lane_stable_sec" default="0.20" />
   <arg name="lane_control_timeout_sec" default="0.15" />
+  <arg name="lane_preview_distance_m" default="7.0" />
+  <arg name="lane_heading_distance_m" default="14.0" />
   <arg name="fallback_entry_delay_sec" default="0.50" />
   <arg name="lane_loss_grace_sec" default="0.25" />
   <arg name="recovery_stable_sec" default="1.0" />
@@ -59,10 +68,16 @@
     <arg name="morai_host_ip" value="$(arg morai_host_ip)" />
     <arg name="ego_status_port" value="$(arg ego_status_port)" />
     <arg name="control_remote_port" value="$(arg control_remote_port)" />
+    <arg name="control_source_port" value="$(arg control_source_port)" />
     <arg name="enable_control" value="$(arg enable_control)" />
     <arg name="use_roi_sensor_stack" value="true" />
     <arg name="enable_sensor_quality" value="$(arg enable_lane_fallback)" />
     <arg name="enable_lane_fallback" value="$(arg enable_lane_fallback)" />
+    <arg name="enable_lane_correction" value="$(arg enable_lane_correction)" />
+    <arg name="lane_correction_weight" value="$(arg lane_correction_weight)" />
+    <arg name="lane_lateral_gain" value="$(arg lane_lateral_gain)" />
+    <arg name="lane_heading_gain" value="$(arg lane_heading_gain)" />
+    <arg name="lane_sign" value="$(arg lane_sign)" />
     <arg name="enable_stopline_control" value="$(arg enable_stopline_control)" />
     <arg name="stopline_front_reference_offset_m" value="$(arg stopline_front_reference_offset_m)" />
     <arg name="turn_entry_front_axle_offset_m" value="$(arg turn_entry_front_axle_offset_m)" />
@@ -88,6 +103,8 @@
     <arg name="lane_stable_samples" value="$(arg lane_stable_samples)" />
     <arg name="lane_stable_sec" value="$(arg lane_stable_sec)" />
     <arg name="lane_control_timeout_sec" value="$(arg lane_control_timeout_sec)" />
+    <arg name="lane_preview_distance_m" value="$(arg lane_preview_distance_m)" />
+    <arg name="lane_heading_distance_m" value="$(arg lane_heading_distance_m)" />
     <arg name="fallback_entry_delay_sec" value="$(arg fallback_entry_delay_sec)" />
     <arg name="lane_loss_grace_sec" value="$(arg lane_loss_grace_sec)" />
     <arg name="recovery_stable_sec" value="$(arg recovery_stable_sec)" />

@@ -31,7 +31,7 @@ class MoraiUdpDriveBridge:
         self.status_frame_id = rospy.get_param("~status_frame_id", "map")
         # Read once at startup: dry-run output cannot be enabled at runtime.
         self.control_output_enabled = bool(rospy.get_param("~control_output_enabled", True))
-        self.control_remote_ip = rospy.get_param("~control_remote_ip", "192.168.0.151")
+        self.control_remote_ip = rospy.get_param("~control_remote_ip", "192.168.0.148")
         self.control_remote_port = int(rospy.get_param("~control_remote_port", 9093))
         self.control_bind_ip = rospy.get_param("~control_bind_ip", "0.0.0.0")
         self.control_bind_port = int(rospy.get_param("~control_bind_port", 0))

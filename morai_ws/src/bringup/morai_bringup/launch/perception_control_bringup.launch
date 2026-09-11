@@ -3,14 +3,21 @@
        enable_control=false가 기본이며, 실제 제어 전환 전에 모든 토픽을 검증한다. -->
   <arg name="workspace_path" default="$(env HOME)/morai_ws" />
   <arg name="path_file" default="$(arg workspace_path)/data/routes/2026_molit_comp_global_path.txt" />
-  <arg name="morai_host_ip" default="192.168.0.151" />
+  <arg name="morai_host_ip" default="192.168.0.148" />
   <arg name="ego_status_port" default="909" />
   <arg name="control_remote_port" default="9093" />
+  <arg name="control_source_port" default="9094" />
   <arg name="enable_control" default="false" />
   <arg name="use_curvature_speed_planner" default="true" />
   <arg name="use_roi_sensor_stack" default="false" />
   <arg name="enable_sensor_quality" default="false" />
   <arg name="enable_lane_fallback" default="false" />
+  <!-- Optional NORMAL-mode blend. GPS blackout still uses lane-only fallback. -->
+  <arg name="enable_lane_correction" default="false" />
+  <arg name="lane_correction_weight" default="0.25" />
+  <arg name="lane_lateral_gain" default="0.8" />
+  <arg name="lane_heading_gain" default="0.7" />
+  <arg name="lane_sign" default="1.0" />
   <arg name="enable_stopline_control" default="$(arg use_roi_sensor_stack)" />
   <arg name="stopline_front_reference_offset_m" default="3.845" />
   <arg name="turn_entry_front_axle_offset_m" default="3.0" />
@@ -33,6 +40,8 @@
   <arg name="roi_lidar_stop_distance_m" default="8.0" />
   <arg name="lane_detection_topic" default="/detection/lane" />
   <arg name="lane_quality_topic" default="/perception/camera/lane_quality" />
+  <arg name="lane_preview_distance_m" default="7.0" />
+  <arg name="lane_heading_distance_m" default="14.0" />
   <arg name="stopline_topic" default="/perception/camera/stopline" />
   <arg name="stopline_signal_topic" default="/perception/traffic_light/stop_required" />
   <arg name="stopline_signal_state_topic" default="/perception/traffic_light/state" />
@@ -76,6 +85,7 @@
     <arg name="morai_host_ip" value="$(arg morai_host_ip)" />
     <arg name="ego_status_port" value="$(arg ego_status_port)" />
     <arg name="control_remote_port" value="$(arg control_remote_port)" />
+    <arg name="control_source_port" value="$(arg control_source_port)" />
     <arg name="enable_control" value="$(arg enable_control)" />
     <arg name="use_curvature_speed_planner" value="$(arg use_curvature_speed_planner)" />
     <arg name="max_speed_kph" value="$(arg max_speed_kph)" />
@@ -265,12 +275,17 @@
     <param name="intersection_timeout_sec" value="0.5" />
     <param name="min_lane_confidence" value="$(arg lane_assist_confidence)" />
     <param name="lane_fallback_confidence" value="$(arg lane_fallback_confidence)" />
+    <param name="enable_lane_correction" value="$(arg enable_lane_correction)" />
+    <param name="lane_correction_weight" value="$(arg lane_correction_weight)" />
+    <param name="lateral_gain" value="$(arg lane_lateral_gain)" />
+    <param name="heading_gain" value="$(arg lane_heading_gain)" />
+    <param name="lane_sign" value="$(arg lane_sign)" />
     <param name="lane_stable_samples" value="$(arg lane_stable_samples)" />
     <param name="lane_stable_sec" value="$(arg lane_stable_sec)" />
     <param name="lane_control_timeout_sec" value="$(arg lane_control_timeout_sec)" />
     <!-- ROI LaneDetection references: lateral at 7 m, heading chord to 14 m. -->
-    <param name="lane_preview_distance_m" value="7.0" />
-    <param name="lane_heading_distance_m" value="14.0" />
+    <param name="lane_preview_distance_m" value="$(arg lane_preview_distance_m)" />
+    <param name="lane_heading_distance_m" value="$(arg lane_heading_distance_m)" />
     <param name="wheelbase_m" value="3.0" />
     <param name="fallback_entry_delay_sec" value="$(arg fallback_entry_delay_sec)" />
     <param name="lane_loss_grace_sec" value="$(arg lane_loss_grace_sec)" />
