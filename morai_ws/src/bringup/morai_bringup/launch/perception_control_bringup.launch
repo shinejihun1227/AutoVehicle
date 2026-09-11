@@ -67,6 +67,19 @@
   <arg name="signal_mgeo_path" default="$(find camera_perception)/lane/mgeo/R_KR_PR_K-city_2025" />
   <arg name="max_speed_kph" default="7.2" />
   <arg name="lateral_accel_limit_mps2" default="1.0" />
+  <arg name="curvature_half_window_points" default="1" />
+  <arg name="curvature_smoothing_window" default="5" />
+  <arg name="lookahead_min_m" default="4.0" />
+  <arg name="lookahead_gain" default="0.35" />
+  <arg name="lookahead_curvature_gain" default="6.0" />
+  <arg name="lookahead_tight_min_m" default="2.2" />
+  <arg name="lookahead_max_m" default="12.0" />
+  <arg name="curvature_preview_distance_m" default="8.0" />
+  <arg name="curvature_preview_step_m" default="0.5" />
+  <arg name="steering_feedforward_weight" default="0.35" />
+  <arg name="max_steering_rate_rad_s" default="2.5" />
+  <arg name="max_steering_rad" default="0.6981317008" />
+  <arg name="steering_sign" default="1.0" />
   <arg name="turn_signal_progress_topic" default="/experimental/curvature_progress" />
   <arg name="turn_signal_odometry_topic" default="/localization/odometry" />
   <arg name="require_fresh_safety" default="true" />
@@ -90,6 +103,19 @@
     <arg name="use_curvature_speed_planner" value="$(arg use_curvature_speed_planner)" />
     <arg name="max_speed_kph" value="$(arg max_speed_kph)" />
     <arg name="lateral_accel_limit_mps2" value="$(arg lateral_accel_limit_mps2)" />
+    <arg name="curvature_half_window_points" value="$(arg curvature_half_window_points)" />
+    <arg name="curvature_smoothing_window" value="$(arg curvature_smoothing_window)" />
+    <arg name="lookahead_min_m" value="$(arg lookahead_min_m)" />
+    <arg name="lookahead_gain" value="$(arg lookahead_gain)" />
+    <arg name="lookahead_curvature_gain" value="$(arg lookahead_curvature_gain)" />
+    <arg name="lookahead_tight_min_m" value="$(arg lookahead_tight_min_m)" />
+    <arg name="lookahead_max_m" value="$(arg lookahead_max_m)" />
+    <arg name="curvature_preview_distance_m" value="$(arg curvature_preview_distance_m)" />
+    <arg name="curvature_preview_step_m" value="$(arg curvature_preview_step_m)" />
+    <arg name="steering_feedforward_weight" value="$(arg steering_feedforward_weight)" />
+    <arg name="max_steering_rate_rad_s" value="$(arg max_steering_rate_rad_s)" />
+    <arg name="max_steering_rad" value="$(arg max_steering_rad)" />
+    <arg name="steering_sign" value="$(arg steering_sign)" />
     <arg name="target_speed_kph" value="$(arg max_speed_kph)" />
     <arg name="command_topic" value="/control/ctrl_cmd" />
     <arg name="use_sensor_quality_gate" value="$(arg enable_sensor_quality)" />

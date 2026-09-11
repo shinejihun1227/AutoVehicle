@@ -120,3 +120,11 @@ rostopic echo /detection/lane
 
 한 번에 하나의 파라미터만 바꾸고, 각 시험 시작 전에 이전 launch를 종료한다. `enable_lane_correction`
 은 launch 시작 시 읽으므로 실행 중에 변경되지 않는다.
+
+곡률 조향을 조정할 때는 다음 인자를 한 번에 하나씩 바꾼다. `lookahead_min_m`와
+`curvature_preview_distance_m`을 줄이면 굽은 구간에 빨리 반응하지만 흔들림이 커질 수
+있다. `lookahead_curvature_gain`을 키우면 큰 곡률에서 lookahead가 더 짧아진다.
+`steering_feedforward_weight`는 경로 곡률을 미리 반영하는 비율이고,
+`max_steering_rate_rad_s`는 조향 변화 속도 제한이다. `max_steering_rad`의 기본값
+`0.6981317008`은 40도다. 이 인자들은 `final_ws_bringup.launch`와
+`final_ws_native_no_lamps.launch`에서 직접 지정할 수 있다.
