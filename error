@@ -1,3 +1,26 @@
+source /opt/ros/noetic/setup.bash
+source "$HOME/AutoVehicle/morai_ws/devel/setup.bash"
+
+rosnode list | egrep "morai_udp_drive_bridge|curvature_speed_purepursuit"
+rosparam get /morai_udp_drive_bridge/control_output_enabled
+rosparam get /morai_udp_drive_bridge/control_remote_ip
+rosparam get /morai_udp_drive_bridge/control_remote_port
+rosparam get /morai_udp_drive_bridge/control_bind_port
+rostopic info /ctrl_cmd
+timeout 3s rostopic echo -n 1 /ctrl_cmd
+정상값은 다음과 같습니다.
+control_output_enabled: true
+control_remote_ip: 192.168.0.161
+control_remote_port: 9093
+control_bind_port: 9094
+rostopic info /ctrl_cmd에는 다음 연결이 있어야 합니다.
+Publisher: /curvature_speed_purepursuit
+Subscriber: /morai_udp_drive_bridge
+UDP 패킷이 실제로 MORAI까지 나가는지도 확인합니다.
+timeout 8s sudo tcpdump -ni any -c 20 \
+'udp and dst host 192.168.0.161 and dst port 9093'
+
+
 roslaunch morai_bringup final_ws_bringup.launch \
 workspace_path:="$HOME/AutoVehicle/morai_ws" \
 path_file:="$HOME/AutoVehicle/morai_ws/data/routes/2026_molit_comp_global_path.txt" \
