@@ -1,3 +1,26 @@
+roslaunch morai_bringup final_ws_bringup.launch \
+workspace_path:="$HOME/AutoVehicle/morai_ws" \
+path_file:="$HOME/AutoVehicle/morai_ws/data/routes/2026_molit_comp_global_path.txt" \
+enable_control:=true \
+morai_host_ip:=192.168.0.161 \
+ego_status_port:=1911 \
+control_remote_port:=9093 \
+enable_roi_camera:=true \
+enable_roi_lidar:=false \
+enable_lane_fallback:=true \
+enable_maneuver_fusion:=true \
+max_speed_kph:=30.0
+
+rostopic echo -n 1 /control/camera_fallback_status
+
+timeout 5s rostopic echo -n 1 /control/mux_status
+timeout 5s rostopic echo -n 1 /control/maneuver_status
+timeout 5s rostopic echo -n 1 /control/camera_fallback_status
+timeout 5s rostopic echo -n 1 /control/stopline_status
+timeout 5s rostopic echo -n 1 /detection/fused_safety_stop
+
+
+ㅡㅡㅡㅡㅡㅡㅡㅡㅡㅡㅡㅡㅡㅡㅡㅡㅡㅡㅡㅡㅡㅡㅡㅡㅡㅡㅡ
 rosparam get /morai_udp_drive_bridge/control_remote_ip
 rosparam get /morai_udp_drive_bridge/control_remote_port
 rosparam get /morai_udp_drive_bridge/control_bind_port
