@@ -1,5 +1,13 @@
 cd "$HOME/AutoVehicle/morai_ws/docker/final_ws"
 
-sed -i 's/^MORAI_IP=.*/MORAI_IP=192.168.0.147/' highway.env
+sed -i 's/^TEST_PROFILE=.*/TEST_PROFILE=curvature/' highway-test.env
+sed -i 's/^MAX_SPEED_KPH=.*/MAX_SPEED_KPH=45.0/' highway-test.env
 
-grep -E '^(UBUNTU_IP|MORAI_IP|CONTAINER_NAME|IMAGE_NAME|TORCH_FLAVOR)=' highway.env
+bash run_test.sh show
+
+cd "$HOME/AutoVehicle/morai_ws/docker/final_ws"
+
+sed -i 's/^TEST_PROFILE=.*/TEST_PROFILE=obstacle/' highway-test.env
+sed -i 's/^MAX_SPEED_KPH=.*/MAX_SPEED_KPH=45.0/' highway-test.env
+
+bash run_test.sh show
