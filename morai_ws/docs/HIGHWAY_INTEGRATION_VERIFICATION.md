@@ -35,3 +35,26 @@ do not pass. Simulator scenarios still require operator testing.
 
 Existing blackout tests validate that package; they do not imply that the new
 highway launch enables its fallback controller.
+
+## Beginner guide and saved test recipes (2026-09-13)
+
+The guide was rewritten for the observed Ubuntu 22.04.4 / RTX 4090 host at
+192.168.0.185. The host-only `run_test.sh` reads `highway-test.env` and selects
+the existing curvature-only or integrated ROS launch. It does not change the
+controller algorithms. Docker commands explicitly select the Ubuntu host Engine
+(`--context default`) rather than inheriting a Docker Desktop connection.
+
+Validation performed without real Docker or ROS:
+
+- Bash syntax checked for all 35 Bash blocks in the guide and both host helpers.
+- Four profiles (full, obstacle, merge, curvature) checked with show/monitor/drive.
+- Stubbed Docker verified that monitor passes control=false and drive passes
+  control=true; sensor/profile switches and saved speed values reached the launch.
+- Every generated launch argument was checked against that launch's declarations.
+- show and invalid mode/profile requests did not contact Docker; launching did
+  not rewrite the saved settings file.
+
+The 492 algorithm test results above belong to the earlier integration validation;
+those suites were not rerun for this documentation/host launcher change. Ubuntu
+package installation, Docker build and live GPU/ROS/MORAI execution remain to be
+verified on the user's Ubuntu PC using the guide's completion checks.

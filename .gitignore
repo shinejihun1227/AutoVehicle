@@ -9,3 +9,6 @@ __pycache__/
 morai_ws/src/detection/camera_perception/models/highway_best.pt
 morai_ws/src/detection/camera_perception/models/highway_best.download
 morai_ws/docker/final_ws/highway.env
+morai_ws/docker/final_ws/highway-test.env
+morai_ws/docker/final_ws/highway.env.backup-*
+morai_ws/docker/final_ws/highway-test.env.good-*

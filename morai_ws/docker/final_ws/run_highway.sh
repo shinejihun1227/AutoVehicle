@@ -8,8 +8,10 @@ MORAI_IP="${MORAI_IP:-192.168.0.148}"
 CONTAINER_NAME="${CONTAINER_NAME:-morai-highway}"
 IMAGE_NAME="${IMAGE_NAME:-morai-final:highway}"
 TORCH_FLAVOR="${TORCH_FLAVOR:-cpu}"
-DOCKER=(docker)
-if ! docker info >/dev/null 2>&1; then DOCKER=(sudo docker); fi
+# This two-PC setup uses the Ubuntu host Engine, including its LAN and GPU.
+# A Docker Desktop context points at a different daemon with different containers.
+DOCKER=(docker --context default)
+if ! "${DOCKER[@]}" info >/dev/null 2>&1; then DOCKER=(sudo docker --context default); fi
 MODE="${1:-help}"
 [[ $# -eq 0 ]] || shift
 case "$MODE" in

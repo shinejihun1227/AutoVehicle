@@ -1,5 +1,9 @@
 # final_ws: Docker 첫 설치부터 메시지·환경 설정·MORAI 시험까지
 
+> **Ubuntu 22.04.4 + RTX 4090 / Ubuntu IP 192.168.0.185의 현재 구성은
+> [복사해서 따라 하는 두 PC Docker 안내](TWO_PC_DOCKER_HIGHWAY_KO.md)를 사용하세요.**
+> 아래는 기존 전체 스택 안내입니다. 두 문서의 실행 명령을 동시에 사용하지 않습니다.
+
 Docker 없이 Ubuntu 20.04/Noetic의 홈 폴더에 설치하고, 방향지시등 인터페이스 없이
 시험하려면 [Ubuntu 네이티브·방향지시등 제외 실행 안내](FINAL_WS_NATIVE_NO_LAMPS_TEST_KO.md)를 따른다.
 해당 안내는 Ubuntu `192.168.0.200`, MORAI `192.168.0.148`, Ego 수신 `1911` 기준이다.

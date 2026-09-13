@@ -1,5 +1,9 @@
 # MORAI 통합 작업공간
 
+**Ubuntu 22.04 + RTX 4090 두 PC 구성:**
+[복사해서 따라 하는 Docker 설치·재시작·파라미터 테스트 안내](docs/TWO_PC_DOCKER_HIGHWAY_KO.md).
+처음에는 1~8번, 다음 부팅에는 9번, 기능별 시험은 10번을 사용합니다.
+
 > 현재 `final_ws`는 구현 백업본이며 주행 승인본이 아닙니다.
 > [미해결 안전 문제와 검증 조건](docs/KNOWN_ISSUES_FINAL_WS.md)을 먼저 확인하세요.
 
