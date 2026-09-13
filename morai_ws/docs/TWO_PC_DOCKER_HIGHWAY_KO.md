@@ -607,6 +607,86 @@ sudo ufw status
 sudo ufw allow from 192.168.0.148 to 192.168.0.185 port 1101,1131,1911,2001,3001,4001 proto udp
 ```
 
+## 12-1. 두 PC가 연결되지 않을 때
+
+MORAI UDP 센서 설정에서 **Host IP는 Windows MORAI PC `192.168.0.148`**,
+**Destination IP는 Ubuntu 제어 PC `192.168.0.185`**다. UDP에는 TCP처럼 연결 버튼이나
+연결 상태가 없다. MORAI가 `.185`의 해당 포트로 패킷을 보내는지 확인해야 한다.
+반대로 Cmd Control은 Ubuntu에서 Windows `192.168.0.148:9093`으로 보낸다.
+
+먼저 두 컴퓨터의 주소가 지금도 같은지 확인한다.
+
+**Ubuntu 호스트 터미널:**
+
+```bash
+ip -br -4 addr
+ip route get 192.168.0.148
+ping -c 3 192.168.0.148
+```
+
+**Windows 관리자 PowerShell:**
+
+```powershell
+ipconfig
+ping 192.168.0.185
+```
+
+Windows 실제 주소가 `.148`이 아니거나 Ubuntu 주소가 `.185`가 아니면 MORAI와
+`highway.env`의 주소를 실제 값으로 함께 바꾼다. 두 PC가 같은 `192.168.0.*` 대역이어야 한다.
+ping이 막혀도 UDP가 통과할 수 있으므로 ping 실패만으로 결론 내리지 않는다.
+
+**Ubuntu에서 센서 패킷 확인:** MORAI 시나리오와 센서를 실행한 뒤 다음을 붙인다.
+
+```bash
+sudo -v
+sudo timeout --signal=INT --kill-after=2s 10s tcpdump -nn -i any \
+  'udp and host 192.168.0.148 and (port 3001 or port 4001 or port 1911 or port 1101 or port 1131 or port 2001)'
+```
+
+`listening on any` 아래에 UDP 줄이 계속 나오면 네트워크는 도착하고 있다.
+아무 줄도 없으면 MORAI Destination IP/Port, Windows 방화벽, Wi-Fi의 게스트/클라이언트
+격리, 다른 네트워크 연결을 확인한다. 두 PC가 서로 다른 공유기나 게스트 Wi-Fi에 있으면
+같은 숫자 대역이어도 차단될 수 있다.
+
+**Ubuntu 방화벽:** `sudo ufw status`가 `Status: active`이고 센서 줄이 없을 때만:
+
+```bash
+for port in 1101 1131 1911 2001 3001 4001; do
+  sudo ufw allow from 192.168.0.148 to any port "$port" proto udp
+done
+```
+
+**Windows 관리자 PowerShell에서 제어 수신 허용:**
+
+```powershell
+New-NetFirewallRule -DisplayName 'MORAI control from Ubuntu' -Direction Inbound -Action Allow -Protocol UDP -LocalPort 9093 -RemoteAddress 192.168.0.185
+```
+
+센서 패킷이 도착하는데 ROS 토픽만 없다면 Docker가 호스트 네트워크인지 확인한다.
+
+```bash
+cd "$HOME/AutoVehicle/morai_ws/docker/final_ws"
+source highway.env
+sudo docker --context default inspect "$CONTAINER_NAME" --format '{{.HostConfig.NetworkMode}}'
+sudo docker --context default exec "$CONTAINER_NAME" env | grep -E '^(ROS_IP|ROS_MASTER_URI|MORAI_IP)='
+```
+
+첫 출력은 `host`, 환경 변수는 `ROS_IP=192.168.0.185`, `MORAI_IP=192.168.0.148`이어야 한다.
+`bridge`이거나 주소가 다르면 기존 컨테이너를 그대로 재사용하지 말고 13번의 새 컨테이너
+절차를 적용한다. `run_highway.sh`는 새 컨테이너에 `--network host`를 사용한다.
+
+**제어 패킷 확인:** 센서 수신이 정상인 상태에서 monitor를 종료하고 drive를 실행한 뒤,
+다른 Ubuntu 호스트 터미널에서 확인한다.
+
+```bash
+sudo timeout --signal=INT --kill-after=2s 10s tcpdump -nn -i any \
+  'udp and dst host 192.168.0.148 and dst port 9093'
+```
+
+이 줄이 보이면 Ubuntu에서 MORAI로 제어 패킷을 보내고 있는 것이다. 그런데도 차량이
+반응하지 않으면 Windows Cmd Control 수신 포트 `9093`, Vehicle Controller 외부제어 모드,
+Status Initialization 반복 적용 상태를 확인한다.
+
 nvidia runtime 오류는 3번, Docker 연결 오류는 `sudo systemctl start docker`와
 `sudo docker --context default info`부터 확인한다. Docker 그룹 변경/재로그인은 필수가 아니다.
 실행 도구가 필요하면 sudo를 사용한다.
