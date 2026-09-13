@@ -13,6 +13,8 @@ import sys
 
 
 SUITES = {
+    "avoidance": "src/control/purepursuit_mgeo/test",
+    "lidar": "src/detection/lidar_perception/test",
     "camera": "src/detection/camera_perception/test",
     "stopline": "src/control/stopline_control/test",
     "turn": "src/control/turn_signal_controller/test",
@@ -24,13 +26,15 @@ SUITES = {
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--workspace", type=Path, default=Path(__file__).resolve().parents[2])
-    parser.add_argument("--suite", choices=list(SUITES), help="Run only one suite; default: all five")
+    parser.add_argument("--suite", choices=list(SUITES), help="Run only one suite; default: all suites")
     args = parser.parse_args()
     workspace = args.workspace.resolve()
     selected = {args.suite: SUITES[args.suite]} if args.suite else SUITES
     env = os.environ.copy()
     env["PYTHONDONTWRITEBYTECODE"] = "1"
     source_roots = [workspace / "src/detection/camera_perception/src",
+                    workspace / "src/control/purepursuit_mgeo/src",
+                    workspace / "src/detection/lidar_perception/src",
                     workspace / "src/control/stopline_control/src",
                     workspace / "src/control/turn_signal_controller/src",
                     workspace / "src/experimental/curvature_speed_purepursuit/src"]

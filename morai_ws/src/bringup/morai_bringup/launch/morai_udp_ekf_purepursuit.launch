@@ -9,6 +9,7 @@
   <arg name="morai_host_ip" default="192.168.0.148" />
   <arg name="control_remote_port" default="9093" />
   <arg name="control_source_port" default="9094" />
+  <arg name="enable_purepursuit" default="true" />
   <arg name="enable_control" default="false" />
   <arg name="wheelbase_m" default="3.0" />
   <arg name="command_topic" default="/ctrl_cmd" />
@@ -114,12 +115,14 @@
     <arg name="gps_innovation_gate_m" value="$(arg gps_innovation_gate_m)" />
   </include>
 
+  <group if="$(arg enable_purepursuit)">
   <!-- 6. EKF pose + 경로 -> 조향 및 종방향 CtrlCmd -->
   <group unless="$(arg use_curvature_speed_planner)">
     <include file="$(find purepursuit_mgeo)/launch/purepursuit_mgeo.launch">
       <arg name="workspace_path" value="$(arg workspace_path)" />
       <arg name="path_file" value="$(arg path_file)" />
-      <arg name="enable_control" value="$(arg enable_control)" />
+      <arg name="enable_purepursuit" default="true" />
+  <arg name="enable_control" value="$(arg enable_control)" />
       <arg name="wheelbase_m" value="$(arg wheelbase_m)" />
       <arg name="command_topic" value="$(arg command_topic)" />
       <arg name="longl_cmd_type" value="$(arg longl_cmd_type)" />
@@ -174,5 +177,6 @@
       <param name="progress_search_window_points" value="250" />
       <param name="progress_backtrack_tolerance_m" value="2.0" />
     </node>
+  </group>
   </group>
 </launch>

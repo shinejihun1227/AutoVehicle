@@ -128,3 +128,10 @@ roslaunch morai_bringup final_ws_bringup.launch enable_control:=false
 ```
 
 센서 토픽과 안전정지 상태를 확인한 뒤에만 `enable_control:=true`로 전환합니다.
+# 새 차선 모델·회피 통합과 두 PC Docker 실행
+
+- [Windows MORAI + Ubuntu 192.168.0.185 Docker 처음 설정](docs/TWO_PC_DOCKER_HIGHWAY_KO.md)
+- [dev/test_highway 연계 파일, 끼어들기 및 장애물 회피 흐름](docs/HIGHWAY_TEAM_INTEGRATION_KO.md)
+- 통합 launch: `roslaunch morai_bringup final_ws_highway_bringup.launch`
+- Docker 도우미: `bash docker/final_ws/run_highway.sh build`, `start`, `monitor`, `drive`, `shell`.
+- 기본 최고속도는 30 km/h이며 실제 송신은 `drive` 또는 `enable_control:=true`로 켠다.

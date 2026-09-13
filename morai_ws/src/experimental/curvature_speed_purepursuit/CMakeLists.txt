@@ -16,6 +16,7 @@ catkin_package()
 
 catkin_install_python(PROGRAMS
   scripts/curvature_speed_purepursuit_node.py
+  scripts/adaptive_curvature_purepursuit_node.py
   DESTINATION ${CATKIN_PACKAGE_BIN_DESTINATION}
 )
 

@@ -44,6 +44,9 @@ COPY config ./config
 COPY data ./data
 COPY docker/final_ws ./docker/final_ws
 
+# Camera team's six-class checkpoint is pinned separately from legacy models.
+RUN python docker/final_ws/fetch_highway_model.py
+
 # Pin a competition beta_drive SHA, then check the generated field contract.
 RUN [[ "${MORAI_MSGS_REF}" =~ ^[0-9a-fA-F]{40}$ ]] \
     && git clone --branch beta_drive --single-branch https://github.com/MORAI-Autonomous/MORAI-ROS_morai_msgs.git src/common/morai_msgs \
@@ -59,6 +62,8 @@ RUN source /opt/ros/noetic/setup.bash \
     && python docker/final_ws/check_morai_messages.py \
     && python -c 'import rospy, cv2, torch, torchvision, ultralytics; from morai_msgs.msg import CtrlCmd, GPSMessage, EgoVehicleStatus; from morai_perception_msgs.msg import StopLineDetection; from common.msg import ObjectInfoArray' \
     && python docker/final_ws/run_regression.py \
+    && python docker/final_ws/check_highway_launch.py \
+    && python docker/final_ws/smoke_highway_model.py \
     && python -m pip freeze > /opt/morai-build/pip-freeze.txt \
     && dpkg-query -W > /opt/morai-build/apt-packages.txt \
     && printf '%s\n' "${CODE_REVISION}" > /opt/morai-build/code-revision.txt \
