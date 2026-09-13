@@ -12,6 +12,8 @@ sed -i 's/^MAX_SPEED_KPH=.*/MAX_SPEED_KPH=45.0/' highway-test.env
 
 bash run_test.sh show
 
-cd "$HOME/AutoVehicle/morai_ws/docker/final_ws" bash run_highway.sh shell 
+cd "$HOME/AutoVehicle/morai_ws/docker/final_ws" 
+bash run_highway.sh shell 
 컨테이너에 들어간 다음: 
-timeout -k 2s 8s rostopic echo /control/mux_status timeout -k 2s 8s rostopic echo /control/curvature_status
+timeout -k 2s 8s rostopic echo /control/mux_status 
+timeout -k 2s 8s rostopic echo /control/curvature_status
