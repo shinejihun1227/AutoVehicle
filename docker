@@ -1,0 +1,36 @@
+set -euo pipefail
+
+for source_file in /etc/apt/sources.list.d/*.list /etc/apt/sources.list.d/*.sources; do
+  [ -f "$source_file" ] || continue
+  if sudo grep -qE 'packages\.ros\.org/ros/ubuntu|nvidia\.github\.io|download\.docker\.com' "$source_file"; then
+    sudo mv "$source_file" "$source_file.disabled"
+  fi
+done
+
+if [ -f /etc/apt/sources.list ]; then
+  sudo sed -i.bak -E \
+    '/packages\.ros\.org\/ros\/ubuntu|nvidia\.github\.io|download\.docker\.com/ s/^/# disabled for MORAI Docker: /' \
+    /etc/apt/sources.list
+fi
+
+sudo apt-get update
+sudo apt-get install -y ca-certificates curl gnupg git pciutils
+
+sudo install -m 0755 -d /etc/apt/keyrings
+curl -fsSL https://download.docker.com/linux/ubuntu/gpg \
+  | sudo gpg --dearmor --yes -o /etc/apt/keyrings/docker.gpg
+sudo chmod a+r /etc/apt/keyrings/docker.gpg
+
+sudo tee /etc/apt/sources.list.d/docker.sources >/dev/null <<EOF
+Types: deb
+URIs: https://download.docker.com/linux/ubuntu
+Suites: $(. /etc/os-release && echo "${UBUNTU_CODENAME:-$VERSION_CODENAME}")
+Components: stable
+Architectures: $(dpkg --print-architecture)
+Signed-By: /etc/apt/keyrings/docker.gpg
+EOF
+
+sudo apt-get update
+sudo apt-get install -y docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin
+sudo systemctl enable --now docker
+sudo docker --context default run --rm hello-world
