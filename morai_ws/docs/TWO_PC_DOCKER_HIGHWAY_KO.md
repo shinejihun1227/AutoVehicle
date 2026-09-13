@@ -53,23 +53,33 @@ Docker Desktop이 있어도 이 문서의 대상은 호스트 Engine의 `default
 ```bash
 (
 set -euo pipefail
+# 이전에 설치를 시도한 ROS1 jammy/NVIDIA ubuntu18.04 저장소는 Ubuntu 22.04
+# 호스트에서 이 Docker 설치에 필요하지 않다. 파일을 삭제하지 않고 비활성화한다.
+for source_file in /etc/apt/sources.list.d/*.list /etc/apt/sources.list.d/*.sources; do
+  [ -f "$source_file" ] || continue
+  if sudo grep -qE 'packages\.ros\.org/ros/ubuntu|nvidia\.github\.io|download\.docker\.com' "$source_file"; then
+    sudo mv "$source_file" "$source_file.disabled"
+  fi
+done
+if [ -f /etc/apt/sources.list ]; then
+  sudo sed -i.bak -E '/packages\.ros\.org\/ros\/ubuntu|nvidia\.github\.io|download\.docker\.com/ s/^/# disabled for MORAI Docker: /' /etc/apt/sources.list
+fi
 sudo apt-get update
 sudo apt-get install -y ca-certificates curl gnupg git pciutils
-if ! systemctl cat docker.service >/dev/null 2>&1; then
-  sudo install -m 0755 -d /etc/apt/keyrings
-  sudo curl -fsSL https://download.docker.com/linux/ubuntu/gpg -o /etc/apt/keyrings/docker.asc
-  sudo chmod a+r /etc/apt/keyrings/docker.asc
-  sudo tee /etc/apt/sources.list.d/docker.sources >/dev/null <<EOF
+sudo install -m 0755 -d /etc/apt/keyrings
+curl -fsSL https://download.docker.com/linux/ubuntu/gpg \
+  | sudo gpg --dearmor --yes -o /etc/apt/keyrings/docker.gpg
+sudo chmod a+r /etc/apt/keyrings/docker.gpg
+sudo tee /etc/apt/sources.list.d/docker.sources >/dev/null <<EOF
 Types: deb
 URIs: https://download.docker.com/linux/ubuntu
 Suites: $(. /etc/os-release && echo "${UBUNTU_CODENAME:-$VERSION_CODENAME}")
 Components: stable
 Architectures: $(dpkg --print-architecture)
-Signed-By: /etc/apt/keyrings/docker.asc
+Signed-By: /etc/apt/keyrings/docker.gpg
 EOF
-  sudo apt-get update
-  sudo apt-get install -y docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin
-fi
+sudo apt-get update
+sudo apt-get install -y docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin
 sudo systemctl enable --now docker
 sudo docker --context default run --rm hello-world
 )
