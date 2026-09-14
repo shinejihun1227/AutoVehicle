@@ -402,6 +402,13 @@ timeout -k 2s 5s rostopic echo -n 1 /ctrl_cmd
 이 모드의 `/ctrl_cmd` Publisher는 `/curvature_speed_purepursuit`다. mux 토픽은 없다.
 직선에서 곡률 0은 가능하다. 커브에서도 계속 0이면 경로·위치·진행 지점을 확인한다.
 
+### 10-1-1. 곡률 + 정지선·경로별 신호만
+
+`TEST_PROFILE=curvature_signal`은 원본 경로 곡률 제어와 정지선·신호등 제어만 실행한다.
+LiDAR·회피·끼어들기·차선 조향 보정은 실행하지 않는다.
+기존 컨테이너에 새 launch 설치와 Camera 1131 보정 설정이 필요하다.
+[설치·실행·재시작 안내](CURVATURE_SIGNAL_ONLY_KO.md)를 먼저 따른다.
+
 ### 10-2. 팀원 차선 인식 + 장애물 우회
 
 **호스트 터미널 A:**

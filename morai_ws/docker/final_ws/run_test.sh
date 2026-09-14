@@ -41,6 +41,19 @@ case "$TEST_PROFILE" in
     LAUNCH=morai_udp_ekf_purepursuit.launch
     PROFILE_ARGS=("use_curvature_speed_planner:=true" "command_topic:=/ctrl_cmd")
     ;;
+  curvature_signal)
+    LAUNCH=final_ws_curvature_signal.launch
+    PROFILE_ARGS=(
+      "signal_config_file:=$SIGNAL_CONFIG_FILE"
+      "lane_info_port:=$LANE_INFO_PORT" "yolo_port:=$YOLO_PORT"
+      "lane_info_device:=$LANE_INFO_DEVICE" "lane_info_every:=$LANE_INFO_EVERY"
+      "lane_min_confidence:=$LANE_MIN_CONFIDENCE" "lane_info_timeout_s:=$LANE_INFO_TIMEOUT_S"
+      "stopline_front_reference_offset_m:=$STOPLINE_FRONT_REFERENCE_OFFSET_M"
+      "stopline_hold_distance_m:=$STOPLINE_HOLD_DISTANCE_M"
+      "stopline_planning_decel_mps2:=$STOPLINE_PLANNING_DECEL_MPS2"
+      "right_on_green:=$SIGNAL_RIGHT_ON_GREEN"
+    )
+    ;;
   full|obstacle|merge)
     LAUNCH=final_ws_highway_bringup.launch
     YOLO=false; HIGHWAY=true
@@ -73,12 +86,18 @@ if [[ "$ACTION" == show ]]; then
   exit 0
 fi
 
-if [[ "$TEST_PROFILE" != curvature ]]; then
+if [[ "$TEST_PROFILE" != curvature && "$TEST_PROFILE" != curvature_signal ]]; then
   exec bash "$SCRIPT_DIR/run_highway.sh" "$ACTION" "${COMMON_ARGS[@]}" "${PROFILE_ARGS[@]}"
 fi
-echo 'Curvature-only: original route; camera/LiDAR/signal stops are not launched.'
+DISPLAY_ARGS=()
+if [[ "$TEST_PROFILE" == curvature_signal ]]; then
+  echo 'Original route + curvature + route-associated stopline/signals; no LiDAR/avoidance/merge/lane steering.'
+  DISPLAY_ARGS=(xvfb-run -a)
+else
+  echo 'Curvature-only: original route; camera/LiDAR/signal stops are not launched.'
+fi
 DOCKER=(docker --context default)
 if ! "${DOCKER[@]}" info >/dev/null 2>&1; then DOCKER=(sudo docker --context default); fi
 exec "${DOCKER[@]}" exec -it "$CONTAINER_NAME" /usr/local/bin/morai-entrypoint \
-  roslaunch morai_bringup "$LAUNCH" "enable_control:=$CONTROL" \
+  "${DISPLAY_ARGS[@]}" roslaunch morai_bringup "$LAUNCH" "enable_control:=$CONTROL" \
   "${COMMON_ARGS[@]}" "${PROFILE_ARGS[@]}"
