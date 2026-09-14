@@ -1,17 +1,20 @@
 # final_ws_curvature_signal.launch 전용. 조향/속도는 launch 또는 highway-test.env에서 설정.
-# MORAI 신호등 카메라(UDP 1131)의 실제 보정값을 입력한다.
+# MORAI 신호등 카메라 4(UDP 1131): 2026-09-14 사용자 제공 장착값.
 # 차선 카메라(1101)의 cam_set.json 값을 그대로 복사하면 안 된다.
-# calibrated=true만 바꾸면 안 된다. 실제 영상과 지도 신호등 투영이 맞아야 한다.
+# 보고된 MORAI FOV는 90도이며 수평/수직 축은 아직 미확인이다.
+# horizontal_fov_deg=90은 수평 FOV로 해석한 후보값이다.
+# 수직 FOV=90이면 640x480 기준 수평 FOV는 106.2602047083도다.
+# 실제 영상과 지도 신호등 투영을 확인한 뒤 calibrated=true로 설정한다.
 signal_camera:
   calibrated: false
-  width: 0
-  height: 0
-  horizontal_fov_deg: 0.0
-  x: 0.0
-  y: 0.0
-  z: 0.0
+  width: 640
+  height: 480
+  horizontal_fov_deg: 90.0  # FOV 축 확인 전 후보값. 위 주석 참조.
+  x: 3.43
+  y: 0.01
+  z: 0.61
   pitch_deg: 0.0  # 이 코드에서는 위를 향하면 양수. MORAI 표기와 축을 확인한다.
-  yaw_deg: 0.0    # 차량 전방 x / 좌측 y / 위쪽 z, 좌향 양수. 카메라 roll=0 가정.
+  yaw_deg: 0.0    # 차량 전방 x / 좌측 y / 위쪽 z, 좌향 양수. 사용자 제공 roll=0도.
 
 input_timeout_sec: 0.5
 signal_timeout_sec: 0.8

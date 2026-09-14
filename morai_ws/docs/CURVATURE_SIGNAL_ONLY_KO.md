@@ -38,7 +38,26 @@ bash install_curvature_signal.sh
 ## 2. 신호등 카메라 설정 — 처음 한 번
 
 `morai_ws/config/curvature_signal.yaml`의 `signal_camera`에는 **MORAI Camera 1131의 실제 값**이 필요하다.
-저장소 기본값은 미입력 상태다. 이 상태에서는 교차로 신호 통행을 허용하지 않는다.
+2026-09-14 사용자가 알려준 카메라 4 설정을 다음과 같이 저장했다.
+같은 값은 일반 융합 제어의 `turn_signal_controller/config/turn_signal_maneuvers.yaml`에도 반영했다.
+
+| MORAI 카메라 4 설정 | 사용자 제공값 |
+|---|---|
+| 위치 X / Y / Z (m) | `3.43 / 0.01 / 0.61` |
+| Roll / Pitch / Yaw (도) | `0.0 / 0.0 / 0.0` |
+| 해상도 | `640 × 480` |
+| MORAI 화면의 FOV (도) | `90.0` — 수평/수직 축은 아직 미확인 |
+
+**장착값 입력과 영상 투영 검증은 별도다.** 현재 `horizontal_fov_deg: 90.0`은
+보고된 FOV를 수평으로 해석한 후보값이며, `calibrated: false`를 유지한다.
+이 상태에서는 교차로 신호 통행을 허용하지 않는다. 실제 MORAI 화면과 투영 정렬은 아직 검증하지 않았다.
+MORAI [센서 설정 파라미터 문서](https://help-morai-sim.scrollhelp.site/ko/morai-sim-drive/26.R1/-34)는
+FOV 항목을 설명하지만 그 축을 명시하지 않는다. 메인 뷰 카메라의 FOV 표기를 센서 카메라에 그대로 적용하지 않는다.
+
+- 카메라 센서의 FOV가 **수평 90도**이면 `horizontal_fov_deg: 90.0`을 사용한다.
+- **수직 90도**이면 640×480에서 `horizontal_fov_deg: 106.2602047083`으로 변환한다.
+  변환식은 `HFOV = 2 × atan((width / height) × tan(VFOV / 2))`다.
+- 실제 영상에서 신호등 위치와 투영 위치가 일치하는지 확인한 뒤 `calibrated: true`로 설정한다.
 
 | 설정 | 입력할 값 |
 |---|---|
@@ -48,7 +67,9 @@ bash install_curvature_signal.sh
 | `pitch_deg`, `yaw_deg` | 이 투영 코드의 pitch는 위를 향하면 양수, yaw는 좌향 양수. MORAI 표기 축을 확인 |
 | `calibrated` | 위 값과 영상의 지도 신호등 투영이 맞는 것을 확인한 뒤 `true` |
 
-카메라 roll은 0인 모델이다. 차선 카메라 1101의 값을 대신 사용하거나 `calibrated`만 바꾸지 않는다.
+카메라 roll은 0인 모델이며 사용자 제공 roll과 일치한다.
+차선 카메라 1101의 값을 대신 사용하거나 `calibrated`만 바꾸지 않는다.
+설정에 기록한 Z는 차량 기준 카메라 위치이며 지면으로부터의 높이로 다시 해석하지 않는다.
 
 **호스트에서 설정을 편집하고 컨테이너에 적용:**
 
@@ -60,6 +81,16 @@ bash install_curvature_signal.sh --config
 
 `--config`는 호스트의 설정 파일로 컨테이너 설정을 덮어쓴다. 적용은 다음 launch 실행부터다.
 별도 파일을 쓰려면 `highway-test.env`의 `SIGNAL_CONFIG_FILE`에 **컨테이너 내부 경로**를 지정한다.
+별도 경로를 지정했다면 설치 스크립트가 복사하는 기본 파일과 실제 읽는 파일이 다를 수 있다.
+기존 `$HOME/morai-native-config/turn_signal_maneuvers.yaml` 같은 사용자 파일도 `git pull`로 바뀌지 않는다.
+
+`monitor`로 실행한 뒤 컨테이너의 새 터미널에서 실제 로드된 값을 확인한다.
+
+```bash
+rosparam get /curvature_signal_controller/signal_camera
+```
+
+이 값 조회는 설정 로드 확인이며, 영상 투영 검증을 대신하지 않는다.
 
 ## 3. 프로필 선택과 실행 — Ubuntu 호스트 터미널
 
