@@ -27,6 +27,7 @@ from __future__ import annotations
 
 import json
 import math
+import threading
 from dataclasses import dataclass
 from typing import List, Optional, Sequence, Tuple
 
@@ -37,6 +38,7 @@ from std_msgs.msg import Bool, Float64, String
 
 from lidar_perception.msg import LidarObstacleArray
 from purepursuit_mgeo.path import PathPoint, load_mgeo_path
+from purepursuit_mgeo.plan_transport import read_trajectory, trajectory_payload, plan_locked
 from purepursuit_mgeo.motion import diagonal_progress
 
 
@@ -124,6 +126,10 @@ class HighwayLaneStrategyNode:
 
     def __init__(self) -> None:
         rospy.init_node("highway_lane_strategy", anonymous=False)
+        self._plan_lock = threading.RLock()
+        self.base_trajectory_topic = rospy.get_param("~base_trajectory_topic", "")
+        self.base_reason = ""
+        self.trajectory_seq = 0
 
         self.map_frame = rospy.get_param("~map_frame", "map")
         self.path_file = rospy.get_param("~path_file")
@@ -307,13 +313,17 @@ class HighwayLaneStrategyNode:
         self.inner_lane_candidate_since: Optional[rospy.Time] = None
 
         self.path_pub = rospy.Publisher("~active_path", RosPath, queue_size=1)
+        self.trajectory_pub = rospy.Publisher("~trajectory", String, queue_size=1)
         self.stop_pub = rospy.Publisher("~stop_required", Bool, queue_size=1)
         self.speed_pub = rospy.Publisher("~target_speed_mps", Float64, queue_size=1)
         self.active_pub = rospy.Publisher("~active", Bool, queue_size=1)
         self.state_pub = rospy.Publisher("~state", String, queue_size=1)
 
-        rospy.Subscriber(self.base_path_topic, RosPath, self._base_path_cb, queue_size=1)
-        rospy.Subscriber(self.base_stop_topic, Bool, self._base_stop_cb, queue_size=1)
+        if self.base_trajectory_topic:
+            rospy.Subscriber(self.base_trajectory_topic, String, self._base_trajectory_cb, queue_size=1)
+        else:
+            rospy.Subscriber(self.base_path_topic, RosPath, self._base_path_cb, queue_size=1)
+            rospy.Subscriber(self.base_stop_topic, Bool, self._base_stop_cb, queue_size=1)
         rospy.Subscriber(self.odom_topic, Odometry, self._odom_cb, queue_size=5)
         rospy.Subscriber(self.obstacle_topic, LidarObstacleArray, self._obstacles_cb, queue_size=1)
         rospy.Subscriber(self.lane_info_topic, String, self._lane_info_cb, queue_size=1)
@@ -329,12 +339,30 @@ class HighwayLaneStrategyNode:
         )
 
     def _base_path_cb(self, msg: RosPath) -> None:
+        if self.base_trajectory_topic:
+            return
         self.latest_base_path = msg
         self.base_path_at = rospy.Time.now()
 
     def _base_stop_cb(self, msg: Bool) -> None:
+        if self.base_trajectory_topic:
+            return
         self.base_stop = bool(msg.data)
         self.base_stop_at = rospy.Time.now()
+
+    @plan_locked
+    def _base_trajectory_cb(self, msg: String) -> None:
+        try:
+            path, stop, _speed, reason = read_trajectory(
+                msg.data, self.map_frame, rospy.Time.now().to_sec(), self.base_timeout_s,
+                path_type=RosPath, pose_type=PoseStamped, stamp_type=rospy.Time)
+        except (KeyError, TypeError, ValueError) as exc:
+            self.base_path_at = self.base_stop_at = None
+            self.base_stop = True
+            self.base_reason = 'invalid_base_trajectory:' + str(exc)
+            return
+        self.latest_base_path, self.base_stop, self.base_reason = path, stop, reason
+        self.base_path_at = self.base_stop_at = path.header.stamp
 
     def _odom_cb(self, msg: Odometry) -> None:
         self.latest_odom = msg
@@ -1286,17 +1314,26 @@ class HighwayLaneStrategyNode:
 
     def _publish(self, path: Optional[RosPath], stop: bool, speed: float, active: bool, status: dict, now: rospy.Time, dt: float) -> None:
         if path is not None:
-            path.header.stamp = now
-            if not path.header.frame_id:
-                path.header.frame_id = self.map_frame
-            self.path_pub.publish(path)
+            # Do not refresh the source stamp of latest_base_path in place.
+            output = RosPath()
+            output.poses = path.poses
         else:
             stop = True
+            output = RosPath()
+        self.trajectory_seq = (self.trajectory_seq + 1) & 0xFFFFFFFF
+        output.header.seq = self.trajectory_seq
+        output.header.stamp = now
+        output.header.frame_id = self.map_frame
         speed_out = self._limit_speed_rate(0.0 if stop else speed, dt)
+        self.trajectory_pub.publish(String(data=trajectory_payload(output, stop, speed_out, status.get('reason', ''))))
+        self.path_pub.publish(output)
         self.stop_pub.publish(Bool(data=bool(stop)))
         self.speed_pub.publish(Float64(data=float(speed_out)))
         self.active_pub.publish(Bool(data=bool(active)))
         status.update({"state": self.state, "active": bool(active), "stop": bool(stop), "target_speed_mps": round(speed_out,2), "lane_changes_done": self.lane_changes_done})
+        status.update({"mission_request_active": self._activation_present(),
+                       "lane_change_enabled": self.enabled, "base_stop": self.base_stop,
+                       "base_reason": self.base_reason, "trajectory_seq": self.trajectory_seq})
         self.state_pub.publish(String(data=json.dumps(status, separators=(",", ":"))))
         if stop:
             rospy.logwarn_throttle(0.5, "HIGHWAY STOP state=%s reason=%s follow=%s", self.state, str(status.get("reason")), json.dumps(status.get("follow", {}), separators=(",", ":")))
@@ -1305,9 +1342,16 @@ class HighwayLaneStrategyNode:
         adaptive, emergency, follow = self._adaptive_speed(self.cruise_speed_mps) if obstacles_fresh else (0.0, True, {})
         safe, guard_reason = self._dynamic_path_safe(self.latest_base_path, adaptive) if obstacles_fresh and path_fresh else (False, "upstream_stale")
         stop = not path_fresh or not stop_fresh or self.base_stop or emergency or not safe
+        causes = []
+        if not path_fresh: causes.append('base_path_stale')
+        if not stop_fresh: causes.append('base_stop_stale')
+        if self.base_stop: causes.append('base_stop:' + (self.base_reason or 'requested'))
+        if emergency: causes.append('following_emergency' if obstacles_fresh else 'obstacles_stale')
+        if not safe: causes.append(guard_reason)
         self._publish(self.latest_base_path if path_fresh else None, stop, adaptive, False,
-                      {"reason": guard_reason if not safe else reason, "follow": follow}, now, dt)
+                      {"reason": ','.join(causes) if causes else reason, "follow": follow}, now, dt)
 
+    @plan_locked
     def _tick(self, _event) -> None:
         now = rospy.Time.now()
         if self.last_timer_time is None:

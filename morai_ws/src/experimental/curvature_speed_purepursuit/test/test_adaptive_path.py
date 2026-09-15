@@ -9,6 +9,7 @@ from unittest.mock import Mock, patch
 import unittest
 from test_node_startup import Message
 from curvature_speed_purepursuit.planner import PathPoint
+from purepursuit_mgeo.plan_transport import trajectory_payload
 
 
 class AdaptivePathTest(unittest.TestCase):
@@ -16,6 +17,7 @@ class AdaptivePathTest(unittest.TestCase):
         self.now=100.0
         ros=Mock(); ros.get_param.side_effect=lambda key,default=None: default
         ros.Time.now.side_effect=lambda: NS(to_sec=lambda:self.now)
+        ros.Time.from_sec.side_effect=lambda seconds: NS(to_sec=lambda:seconds)
         ros.get_time.side_effect=lambda:self.now
         ros.Publisher.side_effect=lambda *args,**kw: Mock()
         modules={'rospy':ros,'geometry_msgs.msg':NS(PointStamped=Message,PoseStamped=Message),
@@ -77,6 +79,41 @@ class AdaptivePathTest(unittest.TestCase):
         self.n._active_path_cb(self.path()); self.tick()
         self.now+=2.0; self.n._control_cb(None)
         self.assertEqual(self.n.command_pub.publish.call_args.args[0].brake,1.0)
+
+    def atomic(self, stop=False, curve=False):
+        self.n.trajectory_topic='/highway_lane_strategy/trajectory'
+        self.n.use_target_speed_override=True
+        self.n._trajectory_cb(Message(trajectory_payload(self.path(curve), stop, 2.0, 'test')))
+
+    def test_atomic_curve_and_clear_arrive_together_legacy_inputs_are_ignored(self):
+        self.atomic(stop=True)
+        self.assertEqual(self.tick().brake, 1.0)
+        self.atomic(curve=True)
+        self.n._active_path_cb(self.path(curve=False))
+        self.n._stop_cb(Message(True))
+        self.n._target_speed_cb(Message(0.0))
+        command=self.tick()
+        self.assertGreater(command.steering, 0.0)
+        self.assertGreater(command.accel, 0.0)
+        self.assertEqual(self.n.target_speed_override_mps, 2.0)
+
+    def test_atomic_stop_stale_and_malformed_never_keep_old_permission(self):
+        self.atomic(); self.assertGreater(self.tick().accel, 0.0)
+        self.atomic(stop=True); self.assertEqual(self.tick().brake, 1.0)
+        self.atomic(); self.now += 2.0
+        self.assertEqual(self.tick().brake, 1.0)
+        self.atomic(); self.n._trajectory_cb(Message('{}'))
+        self.assertEqual(self.tick().brake, 1.0)
+
+    def test_delayed_atomic_source_does_not_get_fresh_timeout_on_arrival(self):
+        self.n.trajectory_topic='/highway_lane_strategy/trajectory'
+        self.n.use_target_speed_override=True
+        data=trajectory_payload(self.path(), False, 2.0, 'test')
+        self.now += 0.9
+        self.n._trajectory_cb(Message(data))
+        self.assertGreater(self.tick().accel, 0.0)
+        self.now += 0.2
+        self.assertEqual(self.tick().brake, 1.0)
 
 
 if __name__=='__main__': unittest.main()

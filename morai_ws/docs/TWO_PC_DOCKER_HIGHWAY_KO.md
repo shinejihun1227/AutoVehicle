@@ -439,6 +439,10 @@ obstacle을 켠다고 그 보정까지 켜지는 것은 아니다.
 
 ### 10-3. 차량 사이로 끼어들기/왼쪽 차로 변경
 
+장애물 앞에서 정지하거나 출발·정지를 반복한다면 먼저
+[통합 검증과 Docker 코드 갱신 안내](AVOIDANCE_MERGE_VERIFICATION_KO.md)를 확인한다.
+최신 버전에서는 호스트의 `bash run_test.sh diagnose`로 8초간 정지 이유를 수집할 수 있다.
+
 **호스트 터미널 A:**
 
 ```bash
@@ -459,7 +463,7 @@ rostopic pub -r 5 /planning/highway_lane_change_request std_msgs/Bool 'data: tru
 
 ```bash
 timeout -k 2s 5s rostopic echo -n 1 /highway_lane_strategy/state
-timeout -k 2s 5s rostopic echo -n 1 /perception/merge_gap/results
+timeout -k 2s 5s rostopic echo -n 1 /morai/lidar/merge_gap/results
 ```
 
 간격 부족 시 WAIT_GAP에서 원 경로를 유지하며 속도를 조절한다. 점선·인접 차로 실제 경계·
@@ -737,7 +741,7 @@ IP만 변경했다면 build는 생략할 수 있다. 같은 LAN/IP 유지는 PC�
 mkdir -p /root/.ros/bags
 rosbag record -O "/root/.ros/bags/highway_$(date +%Y%m%d-%H%M%S).bag" \
   /localization/odometry /perception/camera/lane_info /perception/camera/stopline \
-  /perception/lidar/tracked_obstacles_map /perception/merge_gap/results \
+  /perception/lidar/tracked_obstacles_map /morai/lidar/merge_gap/results \
   /avoidance_path_manager/active_path /highway_lane_strategy/active_path \
   /highway_lane_strategy/state /control/curvature_status /control/stopline_status \
   /control/mux_status /ctrl_cmd

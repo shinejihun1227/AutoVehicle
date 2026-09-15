@@ -27,6 +27,7 @@ from __future__ import annotations
 import bisect
 import json
 import math
+import threading
 from typing import List, Optional, Sequence, Tuple
 
 import rospy
@@ -36,6 +37,7 @@ from std_msgs.msg import Bool, String
 
 from lidar_perception.msg import LidarObstacleArray
 from purepursuit_mgeo.path import PathPoint, load_mgeo_path
+from purepursuit_mgeo.plan_transport import read_path, plan_locked, trajectory_payload, validate_plan_status
 from purepursuit_mgeo.frenet_path import ReferencePath
 from purepursuit_mgeo.trajectory_safety import ObstacleBox, check_path_collision
 
@@ -105,6 +107,10 @@ class AvoidancePathManager:
 
     def __init__(self) -> None:
         rospy.init_node("avoidance_path_manager", anonymous=False)
+        self._plan_lock = threading.RLock()
+        self.require_atomic_plan_path = bool(rospy.get_param("~require_atomic_plan_path", False))
+        self.atomic_plan_path_seen = False
+        self.trajectory_seq = 0
 
         path_file = rospy.get_param("~path_file")
         self.map_frame = rospy.get_param("~map_frame", "map")
@@ -269,6 +275,7 @@ class AvoidancePathManager:
         self.threat_clear_started_at: Optional[rospy.Time] = None
 
         self.active_path_pub = rospy.Publisher("~active_path", RosPath, queue_size=1)
+        self.trajectory_pub = rospy.Publisher("~trajectory", String, queue_size=1)
         self.committed_path_pub = rospy.Publisher(
             "~committed_path", RosPath, queue_size=1, latch=True
         )
@@ -340,16 +347,29 @@ class AvoidancePathManager:
         self.latest_obstacles = msg
         self.latest_obstacles_at = rospy.Time.now()
 
+    @plan_locked
     def _selected_path_cb(self, msg: RosPath) -> None:
+        if self.require_atomic_plan_path or self.atomic_plan_path_seen:
+            return
         self.selected_points = _points_from_ros_path(msg)
         self.selected_path_at = rospy.Time.now()
         self.selected_path_seq = int(msg.header.seq)
 
+    @plan_locked
     def _plan_status_cb(self, msg: String) -> None:
         if not self.use_atomic_plan_status:
             return
         try:
             payload = json.loads(str(msg.data or "{}"))
+            validate_plan_status(payload)
+            if 'path' in payload or self.require_atomic_plan_path or self.atomic_plan_path_seen:
+                path = read_path(payload['path'], payload['seq'], self.map_frame,
+                                 rospy.Time.now().to_sec(), self.selected_path_timeout_s,
+                                 path_type=RosPath, pose_type=PoseStamped, stamp_type=rospy.Time)
+                self.selected_points = _points_from_ros_path(path)
+                self.selected_path_at = path.header.stamp
+                self.selected_path_seq = int(path.header.seq)
+                self.atomic_plan_path_seen = True
             self.plan_status_seq = int(payload.get("seq", -1))
             self.planner_ready = bool(payload.get("planner_ready", False))
             self.avoidance_required = bool(payload.get("avoidance_required", False))
@@ -359,6 +379,8 @@ class AvoidancePathManager:
             self.atomic_status_seen = True
             self._mark_planner_status()
         except Exception as exc:
+            self.planner_ready = False
+            self.planner_status_at = None
             rospy.logwarn_throttle(1.0, "Invalid atomic plan_status: %s", str(exc))
 
     def _planner_ready_cb(self, msg: Bool) -> None:
@@ -718,6 +740,7 @@ class AvoidancePathManager:
             escape_prefix_m=self.escape_prefix_m,
         )
 
+    @plan_locked
     def _timer_cb(self, _event) -> None:
         now = rospy.Time.now()
         if self.latest_odom is None:
@@ -894,11 +917,8 @@ class AvoidancePathManager:
                 active_source = "global"
                 remaining = self._normal_path(ego_projection)
 
-            self.active_path_pub.publish(self._ros_path(remaining))
-
         else:
-            normal_points = self._normal_path(ego_projection)
-            self.active_path_pub.publish(self._ros_path(normal_points))
+            remaining = self._normal_path(ego_projection)
 
             if not sensors_fresh:
                 self.state = self.STOP_PLANNER
@@ -910,7 +930,6 @@ class AvoidancePathManager:
                         remaining_fraction = fraction
                         remaining_distance = rem_dist
                         active_source = "committed_%s" % (self.commit_kind or "maneuver")
-                        self.active_path_pub.publish(self._ros_path(remaining))
                         stop_required = False
                     else:
                         self.state = self.STOP_NO_SAFE
@@ -925,6 +944,12 @@ class AvoidancePathManager:
                 self.state = self.NORMAL
                 stop_required = False
 
+        # Publish exactly one chosen path and one atomic control decision per tick.
+        path_msg = self._ros_path(remaining)
+        self.trajectory_seq = (self.trajectory_seq + 1) & 0xFFFFFFFF
+        path_msg.header.seq = self.trajectory_seq
+        self.trajectory_pub.publish(String(data=trajectory_payload(path_msg, stop_required, 0.0, self.state)))
+        self.active_path_pub.publish(path_msg)
         self.stop_required_pub.publish(Bool(data=stop_required))
 
         payload = {

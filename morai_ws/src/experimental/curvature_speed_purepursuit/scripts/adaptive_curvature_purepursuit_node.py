@@ -27,6 +27,7 @@ from purepursuit_mgeo.longitudinal_controller import (
     MPS_TO_KPH,
     SpeedPIController,
 )
+from purepursuit_mgeo.plan_transport import read_trajectory, plan_locked
 from curvature_speed_purepursuit.planner import (
     PathPoint,
     build_speed_profile,
@@ -151,6 +152,9 @@ class AdaptiveCurvaturePurePursuit:
         )
 
         self._lock = threading.RLock()
+        self._plan_lock = self._lock
+        self.trajectory_topic = rospy.get_param("~trajectory_topic", "")
+        self.trajectory_reason = ""
         self.latest_odom: Optional[Odometry] = None
         self.latest_odom_wall_time: Optional[float] = None
         self.active_points: List[PathPoint] = list(self.base_points)
@@ -205,11 +209,13 @@ class AdaptiveCurvaturePurePursuit:
         )
 
         rospy.Subscriber(self.pose_topic, Odometry, self._odom_cb, queue_size=10)
-        if self.use_active_path:
+        if self.trajectory_topic:
+            rospy.Subscriber(self.trajectory_topic, String, self._trajectory_cb, queue_size=1)
+        elif self.use_active_path:
             rospy.Subscriber(self.active_path_topic, Path, self._active_path_cb, queue_size=1)
-        if self.require_fresh_stop_status:
+        if self.require_fresh_stop_status and not self.trajectory_topic:
             rospy.Subscriber(self.stop_required_topic, Bool, self._stop_cb, queue_size=1)
-        if self.use_target_speed_override:
+        if self.use_target_speed_override and not self.trajectory_topic:
             rospy.Subscriber(
                 self.target_speed_override_topic,
                 Float64,
@@ -260,16 +266,48 @@ class AdaptiveCurvaturePurePursuit:
         self.latest_odom_wall_time = time.monotonic()
 
     def _stop_cb(self, msg: Bool) -> None:
+        if self.trajectory_topic:
+            return
         self.stop_required = bool(msg.data)
         self.stop_status_wall_time = time.monotonic()
 
     def _target_speed_cb(self, msg: Float64) -> None:
+        if self.trajectory_topic:
+            return
         value = float(msg.data)
         if math.isfinite(value):
             self.target_speed_override_mps = max(0.0, value)
             self.target_speed_override_wall_time = time.monotonic()
 
     def _active_path_cb(self, msg: Path) -> None:
+        if self.trajectory_topic:
+            return
+        self._accept_active_path(msg)
+
+    @plan_locked
+    def _trajectory_cb(self, msg: String) -> None:
+        try:
+            path, stop, speed, reason = read_trajectory(
+                msg.data, self.map_frame, rospy.get_time(),
+                min(self.active_path_timeout_sec, self.stop_status_timeout_sec,
+                    self.target_speed_override_timeout_sec),
+                path_type=Path, pose_type=PoseStamped, stamp_type=rospy.Time)
+            # A rejected new plan must not inherit the previous plan's permit.
+            self.active_path_received = False
+            self._accept_active_path(path)
+        except (KeyError, TypeError, ValueError) as exc:
+            self.active_path_received = False
+            self.stop_required = True
+            self.trajectory_reason = 'invalid_trajectory:' + str(exc)
+            return
+        source_age = max(0.0, rospy.get_time() - path.header.stamp.to_sec())
+        received_at = time.monotonic() - source_age
+        self.active_path_wall_time = received_at
+        self.stop_required, self.target_speed_override_mps = stop, speed
+        self.stop_status_wall_time = self.target_speed_override_wall_time = received_at
+        self.trajectory_reason = reason
+
+    def _accept_active_path(self, msg: Path) -> None:
         if (msg.header.frame_id != self.map_frame or not -0.05 <= rospy.get_time()-msg.header.stamp.to_sec() <= self.active_path_timeout_sec):
             rospy.logwarn_throttle(
                 2.0,
@@ -427,6 +465,7 @@ class AdaptiveCurvaturePurePursuit:
             msg.velocity = 0.0
         return msg
 
+    @plan_locked
     def _control_cb(self, _event) -> None:
         if self.latest_odom is None or self.latest_odom_wall_time is None:
             self.command_speed_mps = 0.0
@@ -503,6 +542,7 @@ class AdaptiveCurvaturePurePursuit:
             self.last_steering_rad = steering
         self.status_pub.publish(String(data=json.dumps({"stop":bool(stop),
             "reason":fault or ("managed_stop" if self.stop_required else "goal" if stop else "tracking"),
+            "trajectory_reason":self.trajectory_reason,"trajectory_seq":self.active_path_seq,
             "target_speed_kph":target_speed_kph,"measured_speed_kph":speed_mps*MPS_TO_KPH,
             "path_speed_limit_kph":path_speed_limit_kph,"curvature":curvature})))
         pedal = self.speed_controller.update(

@@ -23,6 +23,10 @@ class Stamp:
     def now():
         return Stamp()
 
+    @staticmethod
+    def from_sec(seconds):
+        return Stamp(seconds)
+
     def __sub__(self, other):
         return Stamp(self.seconds - other.seconds)
 
@@ -39,7 +43,7 @@ class PoseStamped:
 
 class RosPath:
     def __init__(self):
-        self.header = NS(stamp=Stamp(), frame_id="map")
+        self.header = NS(seq=0, stamp=Stamp(), frame_id="map")
         self.poses = []
 
 

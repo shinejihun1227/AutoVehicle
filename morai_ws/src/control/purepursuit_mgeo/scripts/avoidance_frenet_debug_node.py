@@ -40,6 +40,7 @@ from purepursuit_mgeo.trajectory_safety import ObstacleBox, CandidateEvaluation,
 
 from lidar_perception.msg import LidarObstacleArray
 from purepursuit_mgeo.path import PathPoint, load_mgeo_path
+from purepursuit_mgeo.plan_transport import path_payload
 from purepursuit_mgeo.frenet_path import FrenetProjection, ReferencePath
 from purepursuit_mgeo.frenet_sampling_planner import (
     FrenetBypassCandidate,
@@ -379,9 +380,8 @@ class AvoidanceFrenetDebugNode:
         selected_kind: str = "",
         selected_side: str = "",
     ) -> None:
-        # Publish path first, then one atomic JSON status carrying the exact same
-        # sequence.  The path manager accepts a selected path only when both seqs
-        # match.  This removes the F5 race between five independent scalar topics.
+        # The JSON includes the geometry as well as its decision. The separate
+        # Path is for visualization; ROS cannot order deliveries across topics.
         seq = self._next_plan_seq()
         path_msg.header.seq = seq
         path_msg.header.stamp = rospy.Time.now()
@@ -392,6 +392,7 @@ class AvoidanceFrenetDebugNode:
 
         payload = {
             "seq": seq,
+            "path": path_payload(path_msg),
             "planner_ready": bool(planner_ready),
             "avoidance_required": bool(avoidance_required),
             "safe_path_available": bool(safe_path_available),

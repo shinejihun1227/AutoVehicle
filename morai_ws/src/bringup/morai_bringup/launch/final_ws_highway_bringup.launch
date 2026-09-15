@@ -87,6 +87,7 @@
     <arg name="max_lateral_accel_mps2" value="$(arg lateral_accel_limit_mps2)" />
   </include>
   <node pkg="purepursuit_mgeo" type="bypass_lane_guard_node.py" name="bypass_lane_guard" output="screen">
+    <param name="require_atomic_plan_path" value="true" />
     <param name="path_file" value="$(arg path_file)" />
     <param name="map_frame" value="map" />
     <param name="base_selected_path_topic" value="/avoidance_frenet_debug/selected_path" />
@@ -125,6 +126,7 @@
     <param name="selected_side_topic" value="/bypass_lane_guard/selected_side" />
     <param name="plan_status_topic" value="/bypass_lane_guard/plan_status" />
     <param name="use_atomic_plan_status" value="true" />
+    <param name="require_atomic_plan_path" value="true" />
     <param name="allow_lane_change_control" value="true" />
     <param name="rate_hz" value="10.0" />
     <param name="normal_back_m" value="3.0" />
@@ -147,6 +149,7 @@
     <param name="map_frame" value="map" />
     <param name="base_path_topic" value="/avoidance_path_manager/active_path" />
     <param name="base_stop_topic" value="/avoidance_path_manager/stop_required" />
+    <param name="base_trajectory_topic" value="/avoidance_path_manager/trajectory" />
     <param name="odom_topic" value="/localization/odometry" />
     <param name="obstacle_topic" value="/perception/lidar/tracked_obstacles_map" />
     <param name="lane_info_topic" value="$(arg lane_info_topic)" />
@@ -270,6 +273,7 @@
     <param name="use_active_path" value="true" />
     <param name="use_target_speed_override" value="true" />
     <param name="active_path_topic" value="/highway_lane_strategy/active_path" />
+    <param name="trajectory_topic" value="/highway_lane_strategy/trajectory" />
     <param name="stop_required_topic" value="/highway_lane_strategy/stop_required" />
     <param name="target_speed_override_topic" value="/highway_lane_strategy/target_speed_mps" />
     <param name="require_active_path" value="true" />

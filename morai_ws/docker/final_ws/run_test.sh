@@ -3,8 +3,8 @@
 set -euo pipefail
 SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 ACTION="${1:-show}"
-if [[ $# -gt 1 || ! "$ACTION" =~ ^(show|monitor|drive)$ ]]; then
-  echo 'Usage: bash run_test.sh {show|monitor|drive}; edit highway-test.env for parameters.' >&2
+if [[ $# -gt 1 || ! "$ACTION" =~ ^(show|monitor|drive|diagnose)$ ]]; then
+  echo 'Usage: bash run_test.sh {show|monitor|drive|diagnose}; edit highway-test.env for parameters.' >&2
   exit 2
 fi
 if [[ ! -f "$SCRIPT_DIR/highway.env" || ! -f "$SCRIPT_DIR/highway-test.env" ]]; then
@@ -15,6 +15,13 @@ source "$SCRIPT_DIR/highway.env"
 # The versioned example supplies defaults for fields added by later updates.
 source "$SCRIPT_DIR/highway-test.env.example"
 source "$SCRIPT_DIR/highway-test.env"
+if [[ "$ACTION" == diagnose ]]; then
+  DOCKER=(docker --context default)
+  if ! "${DOCKER[@]}" info >/dev/null 2>&1; then DOCKER=(sudo docker --context default); fi
+  exec "${DOCKER[@]}" exec "$CONTAINER_NAME" /usr/local/bin/morai-entrypoint \
+    timeout --signal=INT --kill-after=2s 15s python \
+    /opt/AutoVehicle/morai_ws/docker/final_ws/diagnose_highway.py
+fi
 CONTROL=false
 [[ "$ACTION" != drive ]] || CONTROL=true
 

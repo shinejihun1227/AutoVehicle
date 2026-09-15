@@ -36,6 +36,7 @@ from __future__ import annotations
 import json
 import math
 import statistics
+import threading
 from dataclasses import dataclass
 from typing import Dict, List, Optional, Sequence, Tuple
 
@@ -46,6 +47,7 @@ from std_msgs.msg import Bool, String
 
 from lidar_perception.msg import LidarObstacleArray
 from purepursuit_mgeo.path import PathPoint, load_mgeo_path
+from purepursuit_mgeo.plan_transport import path_payload, read_path, plan_locked, validate_plan_status
 from purepursuit_mgeo.frenet_path import ReferencePath
 from purepursuit_mgeo.trajectory_safety import ObstacleBox, CandidateEvaluation, evaluate_candidate
 
@@ -123,6 +125,9 @@ class LaneChangeAvoidanceCandidate:
 class BypassLaneGuard:
     def __init__(self) -> None:
         rospy.init_node("bypass_lane_guard", anonymous=False)
+        self._plan_lock = threading.RLock()
+        self.require_atomic_plan_path = bool(rospy.get_param("~require_atomic_plan_path", False))
+        self.atomic_plan_path_seen = False
 
         path_file = rospy.get_param("~path_file")
         global_points = load_mgeo_path(path_file)
@@ -350,15 +355,31 @@ class BypassLaneGuard:
         except Exception:
             return [float(x) for x in default]
 
+    @plan_locked
     def _base_path_cb(self, msg: RosPath) -> None:
+        if self.require_atomic_plan_path or self.atomic_plan_path_seen:
+            return
         self.base_path = msg
         self.base_path_at = rospy.Time.now()
         self.base_path_seq = int(msg.header.seq)
 
+    @plan_locked
     def _base_status_cb(self, msg: String) -> None:
         try:
             payload = json.loads(str(msg.data or "{}"))
+            validate_plan_status(payload)
+            seq = int(payload['seq'])
+            if 'path' in payload or self.require_atomic_plan_path or self.atomic_plan_path_seen:
+                path = read_path(payload['path'], seq, self.map_frame,
+                                 rospy.Time.now().to_sec(), self.base_timeout_s,
+                                 path_type=RosPath, pose_type=PoseStamped, stamp_type=rospy.Time)
+                self.base_path = path
+                self.base_path_at = path.header.stamp
+                self.base_path_seq = seq
+                self.atomic_plan_path_seen = True
         except Exception as exc:
+            self.base_status = {'planner_ready': False}
+            self.base_status_at = None
             rospy.logwarn_throttle(1.0, "Invalid base plan_status JSON: %s", str(exc))
             return
         self.base_status = payload
@@ -960,6 +981,7 @@ class BypassLaneGuard:
 
         status = {
             "seq": seq,
+            "path": path_payload(path_msg),
             "planner_ready": bool(planner_ready),
             "avoidance_required": bool(avoidance_required),
             "safe_path_available": bool(safe_path_available),
@@ -972,11 +994,12 @@ class BypassLaneGuard:
         self.safe_path_available_pub.publish(Bool(data=bool(safe_path_available)))
         self.selected_kind_pub.publish(String(data=str(selected_kind or "")))
         self.selected_side_pub.publish(String(data=str(selected_side or "")))
-        debug_payload["output"] = status
+        debug_payload["output"] = {k: v for k, v in status.items() if k != "path"}
         self.status_pub.publish(
             String(data=json.dumps(debug_payload, ensure_ascii=False, separators=(",", ":")))
         )
 
+    @plan_locked
     def _timer_cb(self, _event) -> None:
         now = rospy.Time.now()
         empty = RosPath()
