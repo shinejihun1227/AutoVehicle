@@ -1,8 +1,9 @@
 # MORAI 통합 작업공간
 
 현장에서 실행할 시험 순서·명령·통과 기준·결과 기록표는
-[MORAI 현장 테스트 절차 — 2026-09-21](docs/FIELD_TEST_CHECKLIST_20260921_KO.md)를 사용합니다.
-T01~T06의 빌드·센서·Cam4·출발·속도·신호 정지 시험부터 진행합니다.
+[MORAI 현장 테스트 체크리스트 — 2026-09-25 개정](docs/FIELD_TEST_CHECKLIST_20260921_KO.md)를 사용합니다.
+현재 GitHub 코드의 T01~T07(준비·센서·출발·속도·Cam4·신호 정지·속도 비교)부터 진행하고,
+통과한 뒤 `obstacle`·`merge`·`full` 프로필의 회피·차로 변경·통합 시험으로 넘어갑니다.
 
 **Ubuntu 22.04 + RTX 4090 두 PC 구성:**
 [복사해서 따라 하는 Docker 설치·재시작·파라미터 테스트 안내](docs/TWO_PC_DOCKER_HIGHWAY_KO.md).
