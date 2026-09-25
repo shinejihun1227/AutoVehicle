@@ -45,8 +45,8 @@ sudo docker ps -a
 네트워크 예시를 실제 PC 주소로 바꾼다.
 
 ```text
-MORAI Windows PC : 192.168.0.148   (명령의 목적지)
-Ubuntu host PC   : 192.168.0.200   (센서의 목적지)
+MORAI Windows PC : 192.168.0.147   (명령의 목적지)
+Ubuntu host PC   : 192.168.0.185   (센서의 목적지)
 ```
 
 Linux Engine의 `--network host`를 사용한다. `-p` 포트 매핑은 추가하지 않는다. 이 방식은 호스트와 네트워크를 공유하므로 같은 UDP 수신 포트를 쓰는 다른 주행 프로그램을 동시에 실행할 수 없다. [Docker host 네트워크 설명](https://docs.docker.com/engine/network/drivers/host/)
@@ -253,7 +253,7 @@ xvfb-run -a -s '-screen 0 1920x1080x24' \
   roslaunch morai_bringup final_ws_bringup.launch \
   workspace_path:="$MORAI_WS" \
   path_file:="$MORAI_WS/data/routes/2026_molit_comp_global_path.txt" \
-  morai_host_ip:=192.168.0.148 \
+  morai_host_ip:=192.168.0.147 \
   turn_signal_maneuvers_file:=/opt/morai-config/turn_signal_maneuvers.yaml \
   enable_control:=false enable_turn_signal:=false \
   roi_lidar_rviz:=false max_speed_kph:=3.0 fallback_speed_cap_kph:=3.0
@@ -285,7 +285,7 @@ rostopic info /ctrl_cmd
 
 ```bash
 sudo timeout 20 tcpdump -ni any \
-  'udp and dst host 192.168.0.148 and (dst port 9093 or dst port 9097)'
+  'udp and dst host 192.168.0.147 and (dst port 9093 or dst port 9097)'
 ```
 
 ## 9. 보정과 주행 전 통과 조건
@@ -312,7 +312,7 @@ xvfb-run -a -s '-screen 0 1920x1080x24' \
   roslaunch morai_bringup final_ws_bringup.launch \
   workspace_path:="$MORAI_WS" \
   path_file:="$MORAI_WS/data/routes/2026_molit_comp_global_path.txt" \
-  morai_host_ip:=192.168.0.148 \
+  morai_host_ip:=192.168.0.147 \
   turn_signal_maneuvers_file:=/opt/morai-config/turn_signal_maneuvers.yaml \
   enable_control:=true enable_turn_signal:=true \
   turn_signal_lead_time_sec:=5.0 \

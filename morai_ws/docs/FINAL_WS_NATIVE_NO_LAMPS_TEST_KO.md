@@ -201,8 +201,8 @@ if [ -f "$HOME/morai-final-venv/bin/activate" ]; then
 fi
 export MORAI_WS="$HOME/AutoVehicle/morai_ws"
 source "$MORAI_WS/devel/setup.bash" || return 1
-export ROS_MASTER_URI=http://192.168.0.200:11311
-export ROS_IP=192.168.0.200
+export ROS_MASTER_URI=http://192.168.0.185:11311
+export ROS_IP=192.168.0.185
 unset ROS_HOSTNAME
 export YOLO_AUTOINSTALL=false
 export QT_X11_NO_MITSHM=1
@@ -215,13 +215,13 @@ ROS master는 Ubuntu에 둔다. MORAI Windows PC의 `.148`을 `ROS_IP`에 넣지
 
 ## 5. MORAI 네트워크
 
-Ubuntu PC에 `192.168.0.200`이 실제로 할당되어 있어야 한다.
-MORAI PC는 `192.168.0.148`, 센서 전송 대상 PC는 `192.168.0.200`으로 맞춘다.
+Ubuntu PC에 `192.168.0.185`이 실제로 할당되어 있어야 한다.
+MORAI PC는 `192.168.0.147`, 센서 전송 대상 PC는 `192.168.0.185`으로 맞춘다.
 네트워크 확인:
 
 ```bash
 ip -br addr
-ping -c 4 192.168.0.148
+ping -c 4 192.168.0.147
 ```
 
 ping 응답만으로 UDP 수신까지 검증되는 것은 아니다. Windows에서 ICMP가 차단될 수도 있다.
@@ -253,7 +253,7 @@ MORAI 문서에서 Sensor Sync Data는 `SaveSensorData` 센서 저장 명령으�
 ```bash
 ss -lunp
 sudo tcpdump -ni any -c 30 \
-  'src host 192.168.0.148 and udp and (dst port 1911 or dst port 1101 or dst port 1131 or dst port 2001 or dst port 3001 or dst port 4001)'
+  'src host 192.168.0.147 and udp and (dst port 1911 or dst port 1101 or dst port 1131 or dst port 2001 or dst port 3001 or dst port 4001)'
 ```
 
 동일 UDP 포트에 기존 ROS 노드나 별도 파서를 중복 실행하지 않는다.

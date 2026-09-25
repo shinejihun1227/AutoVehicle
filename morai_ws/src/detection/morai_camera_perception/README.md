@@ -60,7 +60,7 @@ camera_lane_team_node.py
 roslaunch stability_stack morai_udp_ekf_curvature_camera_fallback.launch \
   workspace_path:=/root/morai_ws \
   path_file:=/root/morai_ws/data/routes/2026_molit_comp_global_path.txt \
-  morai_host_ip:=192.168.0.148 \
+  morai_host_ip:=192.168.0.147 \
   enable_control:=false \
   use_camera_team_model:=true \
   show_camera_windows:=true

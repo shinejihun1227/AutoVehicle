@@ -4,7 +4,7 @@ SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 WS="$(cd -- "$SCRIPT_DIR/../.." && pwd)"
 if [[ -f "$SCRIPT_DIR/highway.env" ]]; then source "$SCRIPT_DIR/highway.env"; fi
 UBUNTU_IP="${UBUNTU_IP:-192.168.0.185}"
-MORAI_IP="${MORAI_IP:-192.168.0.148}"
+MORAI_IP="${MORAI_IP:-192.168.0.147}"
 CONTAINER_NAME="${CONTAINER_NAME:-morai-highway}"
 IMAGE_NAME="${IMAGE_NAME:-morai-final:highway}"
 TORCH_FLAVOR="${TORCH_FLAVOR:-cpu}"

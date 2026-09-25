@@ -7,8 +7,8 @@ Ubuntu 설치 후 첫 터미널부터 센서 확인과 주행 시험까지 순�
 
 | 항목 | 이번 구성 |
 |---|---|
-| Ubuntu 알고리즘 PC | `192.168.0.200` |
-| MORAI 시뮬레이터 PC | `192.168.0.148` |
+| Ubuntu 알고리즘 PC | `192.168.0.185` |
+| MORAI 시뮬레이터 PC | `192.168.0.147` |
 | 주행 코드 | `shinejihun1227/AutoVehicle`의 **`final_ws`** |
 | 대회 메시지 | `MORAI-Autonomous/MORAI-ROS_morai_msgs`의 **`beta_drive`** |
 | 설치 위치 | `$HOME/AutoVehicle/morai_ws` |
@@ -40,7 +40,7 @@ ip route
 
 각각 Ubuntu 20.04, `x86_64`, Python 3.8 계열을 확인한다. `ROS_IP`를 설정하는 것만으로
 PC의 IP가 바뀌지는 않는다. Ubuntu **설정 → 네트워크 → 유선 연결의 설정 → IPv4**에서
-실제 네트워크에 맞게 `192.168.0.200`을 할당한다. 공유기에서 주소를 예약하는 방법도 가능하다.
+실제 네트워크에 맞게 `192.168.0.185`을 할당한다. 공유기에서 주소를 예약하는 방법도 가능하다.
 넷마스크·게이트웨이·DNS는 현재 네트워크 값을 사용한다. `/24` 네트워크라면 넷마스크는
 `255.255.255.0`이며, 게이트웨이를 무조건 `.1`로 가정하지 않는다.
 
@@ -50,7 +50,7 @@ Ubuntu와 MORAI가 같은 장치의 IP를 중복 사용하면 안 된다. VM의 
 CUDA 사용 가능 여부를 판단하지 말고 5절의 실제 GPU 검사를 사용한다.
 
 ```bash
-ping -c 4 192.168.0.148
+ping -c 4 192.168.0.147
 ```
 
 설치 중에는 Ubuntu에서 인터넷에도 접속할 수 있어야 한다. ping 성공은 UDP 수신 확인과 별개이며,
@@ -229,8 +229,8 @@ source /opt/ros/noetic/setup.bash || return 1
 source "$HOME/morai-final-venv/bin/activate" || return 1
 export MORAI_WS="$HOME/AutoVehicle/morai_ws"
 source "$MORAI_WS/devel/setup.bash" || return 1
-export ROS_MASTER_URI=http://192.168.0.200:11311
-export ROS_IP=192.168.0.200
+export ROS_MASTER_URI=http://192.168.0.185:11311
+export ROS_IP=192.168.0.185
 unset ROS_HOSTNAME
 export YOLO_AUTOINSTALL=false
 export QT_X11_NO_MITSHM=1
@@ -276,7 +276,7 @@ $HOME/AutoVehicle/morai_ws/data/routes/2026_molit_comp_global_path.txt
 
 시나리오를 불러온 뒤 센서가 실제 배치되어 있고 UDP 출력이 연결됐는지 확인한다.
 [MORAI Network Settings](https://help-morai-sim.scrollhelp.site/ko/morai-sim-drive/24.R2/ui)에서
-Host IP는 `192.168.0.148`, Destination IP는 `192.168.0.200`으로 맞추고 연결한다.
+Host IP는 `192.168.0.147`, Destination IP는 `192.168.0.185`으로 맞추고 연결한다.
 이번 launch는 **MORAI와 UDP로 통신하고 Ubuntu 내부에서 ROS 토픽을 사용한다.**
 별도 rosbridge 서버나 MORAI 측 ROS 토픽 설정을 추가하는 구성은 아니다.
 
@@ -343,7 +343,7 @@ MORAI에서 Ego 차량을 정지시킨 상태로 센서 출력을 시작한다. 
 source "$HOME/morai_native_env.sh"
 roslaunch morai_bringup final_ws_native_no_lamps.launch \
   enable_control:=false \
-  morai_host_ip:=192.168.0.148 \
+  morai_host_ip:=192.168.0.147 \
   ego_status_port:=1911 \
   control_remote_port:="$MORAI_CONTROL_REMOTE_PORT" \
   turn_signal_maneuvers_file:="$HOME/morai-native-config/turn_signal_maneuvers.yaml"
@@ -379,7 +379,7 @@ LiDAR 원시 토픽이 있어도 추적 결과가 없으면 위치 추정·추�
 ```bash
 ss -lunp
 sudo timeout 8s tcpdump -ni any -nn -c 5 \
-  'udp and src host 192.168.0.148 and dst port 2001'
+  'udp and src host 192.168.0.147 and dst port 2001'
 ```
 
 도착이 없으면 네트워크·MORAI 송신 설정을, 도착하지만 토픽이 없으면 포트 바인드·파서·노드를 확인한다.
@@ -399,7 +399,7 @@ mkdir -p "$HOME/morai-native-logs"
 set -o pipefail
 roslaunch morai_bringup final_ws_native_no_lamps.launch \
   enable_control:=true \
-  morai_host_ip:=192.168.0.148 \
+  morai_host_ip:=192.168.0.147 \
   ego_status_port:=1911 \
   control_remote_port:="$MORAI_CONTROL_REMOTE_PORT" \
   max_speed_kph:=30.0 \
@@ -449,7 +449,7 @@ AV-ExternalCtrl로도 전환되지 않으면 주행 launch를 켠 채 아래를 
 source "$HOME/morai_native_env.sh"
 timeout 5s rosnode ping -c 2 /morai_udp_drive_bridge
 rosparam get /morai_udp_drive_bridge
-sudo timeout 5s tcpdump -ni any -nn -c 5 'udp and dst host 192.168.0.148'
+sudo timeout 5s tcpdump -ni any -nn -c 5 'udp and dst host 192.168.0.147'
 ```
 
 코드 기본값에서는 `.200:9094 → .148:9093`, 제어 패킷 길이 55바이트가 기대된다.
@@ -510,7 +510,7 @@ sudo systemctl enable --now ssh
 
 ```powershell
 # Windows에서: msclab은 실제 Ubuntu 사용자명으로 바꾼다.
-ssh msclab@192.168.0.200
+ssh msclab@192.168.0.185
 ```
 
 첫 접속의 호스트 키 지문은 Ubuntu에서 `ssh-keygen -lf /etc/ssh/ssh_host_ed25519_key.pub`로

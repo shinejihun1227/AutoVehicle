@@ -21,7 +21,7 @@ Ubuntu 제어 PC: 192.168.0.185
       morai-highway-gpu = 우리가 만들 컨테이너
         Ubuntu 20.04 환경 + ROS Noetic + 인식/주행 코드
                     ↕ 센서 수신 / 차량 제어 송신
-Windows MORAI PC: 192.168.0.148
+Windows MORAI PC: 192.168.0.147
   MORAI 시뮬레이터
 ```
 
@@ -150,7 +150,7 @@ cd "$HOME/AutoVehicle/morai_ws/docker/final_ws"
 if [ -f highway.env ]; then cp -p highway.env "highway.env.backup-$(date +%Y%m%d-%H%M%S)"; fi
 cat > highway.env <<'EOF'
 UBUNTU_IP=192.168.0.185
-MORAI_IP=192.168.0.148
+MORAI_IP=192.168.0.147
 CONTAINER_NAME=morai-highway-gpu
 IMAGE_NAME=morai-final:highway-gpu
 TORCH_FLAVOR=cu121
@@ -223,14 +223,14 @@ sudo docker --context default exec "$CONTAINER_NAME" /usr/local/bin/morai-entryp
 
 | MORAI 항목 | 설정 |
 |---|---|
-| Windows IP | `192.168.0.148` |
+| Windows IP | `192.168.0.147` |
 | GPS | Destination Port `3001` |
 | IMU | Destination Port `4001` |
 | Ego Vehicle Status | Host Port `1910`, Destination Port `1911` |
 | 차선 인식 Camera 1 | Destination Port `1101` |
 | YOLO 카메라 | Destination Port `1131` |
 | LiDAR | Host Port `2000`, Destination Port `2001` |
-| Cmd Control | MORAI 수신 `192.168.0.148:9093`, Ubuntu 송신 포트 `9094` |
+| Cmd Control | MORAI 수신 `192.168.0.147:9093`, Ubuntu 송신 포트 `9094` |
 | Sensor Sync | 기존 `9097/9098`; 이 launch에서는 사용하지 않음 |
 
 GPS·IMU·카메라 Host Port는 실제 MORAI 설정을 유지한다. 두 카메라 포트는 별도 스트림이며
@@ -606,7 +606,7 @@ timeout -k 2s 5s rostopic echo -n 1 /highway_lane_strategy/state
 ```bash
 sudo -v
 sudo timeout --signal=INT --kill-after=2s 8s tcpdump -nn -i any \
-  'udp and host 192.168.0.148 and (port 3001 or port 4001 or port 1911 or port 1101 or port 1131 or port 2001 or port 9093)'
+  'udp and host 192.168.0.147 and (port 3001 or port 4001 or port 1911 or port 1101 or port 1131 or port 2001 or port 9093)'
 ```
 
 `listening on any`는 대기 시작이다. 아래 IP/포트 패킷 줄이 있어야 수신 증거다.
@@ -615,15 +615,15 @@ Ubuntu 방화벽이 켜져 있고 센서 UDP를 막을 때만:
 
 ```bash
 sudo ufw status
-sudo ufw allow from 192.168.0.148 to 192.168.0.185 port 1101,1131,1911,2001,3001,4001 proto udp
+sudo ufw allow from 192.168.0.147 to 192.168.0.185 port 1101,1131,1911,2001,3001,4001 proto udp
 ```
 
 ## 12-1. 두 PC가 연결되지 않을 때
 
-MORAI UDP 센서 설정에서 **Host IP는 Windows MORAI PC `192.168.0.148`**,
+MORAI UDP 센서 설정에서 **Host IP는 Windows MORAI PC `192.168.0.147`**,
 **Destination IP는 Ubuntu 제어 PC `192.168.0.185`**다. UDP에는 TCP처럼 연결 버튼이나
 연결 상태가 없다. MORAI가 `.185`의 해당 포트로 패킷을 보내는지 확인해야 한다.
-반대로 Cmd Control은 Ubuntu에서 Windows `192.168.0.148:9093`으로 보낸다.
+반대로 Cmd Control은 Ubuntu에서 Windows `192.168.0.147:9093`으로 보낸다.
 
 먼저 두 컴퓨터의 주소가 지금도 같은지 확인한다.
 
@@ -631,8 +631,8 @@ MORAI UDP 센서 설정에서 **Host IP는 Windows MORAI PC `192.168.0.148`**,
 
 ```bash
 ip -br -4 addr
-ip route get 192.168.0.148
-ping -c 3 192.168.0.148
+ip route get 192.168.0.147
+ping -c 3 192.168.0.147
 ```
 
 **Windows 관리자 PowerShell:**
@@ -651,7 +651,7 @@ ping이 막혀도 UDP가 통과할 수 있으므로 ping 실패만으로 결론 
 ```bash
 sudo -v
 sudo timeout --signal=INT --kill-after=2s 10s tcpdump -nn -i any \
-  'udp and host 192.168.0.148 and (port 3001 or port 4001 or port 1911 or port 1101 or port 1131 or port 2001)'
+  'udp and host 192.168.0.147 and (port 3001 or port 4001 or port 1911 or port 1101 or port 1131 or port 2001)'
 ```
 
 `listening on any` 아래에 UDP 줄이 계속 나오면 네트워크는 도착하고 있다.
@@ -663,7 +663,7 @@ sudo timeout --signal=INT --kill-after=2s 10s tcpdump -nn -i any \
 
 ```bash
 for port in 1101 1131 1911 2001 3001 4001; do
-  sudo ufw allow from 192.168.0.148 to any port "$port" proto udp
+  sudo ufw allow from 192.168.0.147 to any port "$port" proto udp
 done
 ```
 
@@ -682,7 +682,7 @@ sudo docker --context default inspect "$CONTAINER_NAME" --format '{{.HostConfig.
 sudo docker --context default exec "$CONTAINER_NAME" env | grep -E '^(ROS_IP|ROS_MASTER_URI|MORAI_IP)='
 ```
 
-첫 출력은 `host`, 환경 변수는 `ROS_IP=192.168.0.185`, `MORAI_IP=192.168.0.148`이어야 한다.
+첫 출력은 `host`, 환경 변수는 `ROS_IP=192.168.0.185`, `MORAI_IP=192.168.0.147`이어야 한다.
 `bridge`이거나 주소가 다르면 기존 컨테이너를 그대로 재사용하지 말고 13번의 새 컨테이너
 절차를 적용한다. `run_highway.sh`는 새 컨테이너에 `--network host`를 사용한다.
 
@@ -691,7 +691,7 @@ sudo docker --context default exec "$CONTAINER_NAME" env | grep -E '^(ROS_IP|ROS
 
 ```bash
 sudo timeout --signal=INT --kill-after=2s 10s tcpdump -nn -i any \
-  'udp and dst host 192.168.0.148 and dst port 9093'
+  'udp and dst host 192.168.0.147 and dst port 9093'
 ```
 
 이 줄이 보이면 Ubuntu에서 MORAI로 제어 패킷을 보내고 있는 것이다. 그런데도 차량이

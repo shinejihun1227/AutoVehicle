@@ -14,8 +14,8 @@
 source /opt/ros/noetic/setup.bash
 export MORAI_WS="$HOME/AutoVehicle/morai_ws"
 source "$MORAI_WS/devel/setup.bash"
-export ROS_MASTER_URI=http://192.168.0.200:11311
-export ROS_IP=192.168.0.200
+export ROS_MASTER_URI=http://192.168.0.185:11311
+export ROS_IP=192.168.0.185
 unset ROS_HOSTNAME
 ```
 
@@ -24,10 +24,10 @@ unset ROS_HOSTNAME
 ## 통합 시험
 
 아래는 카메라 차선·YOLO는 켜고 ROI LiDAR는 끈 상태다. MORAI 제어 명령은
-`192.168.0.148:9093`으로 전송하고 Ubuntu 송신 포트는 `9094`다.
+`192.168.0.147:9093`으로 전송하고 Ubuntu 송신 포트는 `9094`다.
 `final_ws_bringup.launch`에서는 이 주소를 `morai_host_ip`로 지정하며, 하위
 `morai_udp_drive_bridge`의 `control_remote_ip`로 그대로 전달된다. 브리지만 직접
-실행할 때는 `control_remote_ip:=192.168.0.148`을 사용한다.
+실행할 때는 `control_remote_ip:=192.168.0.147`을 사용한다.
 
 ### 1. 곡률 기반 기준선
 
@@ -36,7 +36,7 @@ roslaunch morai_bringup final_ws_bringup.launch \
 workspace_path:="$MORAI_WS" \
 path_file:="$MORAI_WS/data/routes/2026_molit_comp_global_path.txt" \
 enable_control:=true \
-morai_host_ip:=192.168.0.148 \
+morai_host_ip:=192.168.0.147 \
 ego_status_port:=1911 \
 control_remote_port:=9093 \
 control_source_port:=9094 \

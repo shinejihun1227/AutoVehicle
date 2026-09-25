@@ -1,6 +1,9 @@
 # MORAI 현장 테스트 체크리스트
 
-**개정일: 2026-09-25 · 코드 기준: `final_ws` / `9856893`**
+**개정일: 2026-09-25 · 주행 로직 기준: `final_ws` / `9856893`**
+
+**현재 네트워크:** Ubuntu 제어 PC `192.168.0.185`, Windows MORAI PC `192.168.0.147`.
+MORAI 센서의 Destination IP는 Ubuntu `.185`, 차량 제어 명령의 목적지는 MORAI `.147:9093`으로 설정한다.
 
 이 문서는 현재 GitHub에 반영된 개발 코드를 Ubuntu·MORAI에서 검증하는 절차다. 기존 링크를 유지하기 위해 파일명은 `FIELD_TEST_CHECKLIST_20260921_KO.md`를 그대로 사용한다.
 
@@ -79,11 +82,28 @@ nano highway.env
 nano highway-test.env
 ```
 
+기존 `highway.env`는 개인 설정이므로 `git pull`로 바뀌지 않는다. 파일의 다른 설정을 보존하면서 현재 IP 두 항목만 적용하려면 다음을 실행한다.
+
+```bash
+cd "$HOME/AutoVehicle/morai_ws/docker/final_ws"
+[ -f highway.env ] || cp highway.env.example highway.env
+[ -f highway-test.env ] || cp highway-test.env.example highway-test.env
+cp -p highway.env "highway.env.backup-$(date +%Y%m%d-%H%M%S)"
+sed -i -e 's/^UBUNTU_IP=.*/UBUNTU_IP=192.168.0.185/' \
+       -e 's/^MORAI_IP=.*/MORAI_IP=192.168.0.147/' highway.env
+bash run_test.sh show
+```
+
+`Ubuntu=192.168.0.185  MORAI=192.168.0.147`과 `morai_host_ip:=192.168.0.147`을 확인한다.
+변경값은 다음 launch 실행부터 반영되므로 실행 중인 주행을 종료한 뒤 다시 `monitor`로 확인한다.
+MORAI 주소만 바꾸는 경우 `run_test.sh`가 새 주소를 launch에 전달하므로 그 변경만을 위해 이미지를 다시 빌드할 필요는 없다.
+기존 컨테이너의 `ROS_IP`가 `.185`가 아니라면 ROS 네트워크 설정도 갱신해야 하므로 [Docker 실행 안내](TWO_PC_DOCKER_HIGHWAY_KO.md)에 따라 새 컨테이너 이름으로 시작한다.
+
 확인할 값:
 
 | 설정 파일 | 확인 내용 |
 | --- | --- |
-| `highway.env` | 실제 `UBUNTU_IP`, `MORAI_IP`, `CONTAINER_NAME`, `IMAGE_NAME`; GPU 이미지는 `TORCH_FLAVOR=cu121` |
+| `highway.env` | `UBUNTU_IP=192.168.0.185`, `MORAI_IP=192.168.0.147`, 사용 중인 `CONTAINER_NAME`, `IMAGE_NAME`; GPU 이미지는 `TORCH_FLAVOR=cu121` |
 | `highway-test.env` | 첫 시험 `TEST_PROFILE=curvature`, `MAX_SPEED_KPH=3.0`; GPU 시험은 `LANE_INFO_DEVICE=cuda` |
 | 같은 파일 | GPS 3001, IMU 4001, 차량 상태 1911, 차량 제어 9093, 카메라 1101/1131, LiDAR 2000/2001을 실제 MORAI 설정과 대조 |
 | 같은 파일 | `LIDAR_X_M/Y_M/Z_M/YAW_DEG`는 실제 장착값; Cam4 좌표를 LiDAR 설정에 복사하지 않음 |
