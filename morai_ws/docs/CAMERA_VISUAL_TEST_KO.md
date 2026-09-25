@@ -88,6 +88,8 @@ cd "$HOME/AutoVehicle/morai_ws/docker/final_ws" && bash run_test.sh diagnose 2
 
 약 6초 동안 경로·위치·제어 입력을 수집한다. 출력 전체를 사진으로 남긴다. `pub=NONE`은 발행 노드 미등록, `count=0`은 진단 중 메시지 미수신이다. 기준 경로는 최초 1회 수신으로 정상이며, GPS·IMU의 수신 횟수만으로 위치가 유효하다고 판단하지 않는다.
 
+`stopline`에는 검출 여부·거리·신뢰도, `lights`에는 신호등 개수·분류가 나온다. `cam1_rviz`·`cam4_rviz` 수신이 없으면 컨테이너의 화면 코드 업데이트와 카메라 추론 실행 상태를 확인한다. `nominal`은 가속인데 `final`은 브레이크이면 신호·정지선 제어의 `status.reason`을 확인한다.
+
 | 표시 | 확인 내용 |
 |---|---|
 | `MONITOR — 차량 제어 송신 꺼짐` | 영상 확인 모드다. 종료 후 `drive 2`로 실행한다. |
@@ -95,6 +97,7 @@ cd "$HOME/AutoVehicle/morai_ws/docker/final_ws" && bash run_test.sh diagnose 2
 | `camera_observation_stream_stale` | CAM1·CAM4 Destination IP가 `192.168.0.185`인지, 포트가 1101·1131인지, 모델이 실행됐는지 확인한다. |
 | `signal_camera_uncalibrated` | Cam4 보정 미확인 상태다. [보정 절차](CURVATURE_SIGNAL_ONLY_KO.md)에 따라 영상·지도 투영을 검증한다. 이 값만 임의로 true로 바꾸지 않는다. |
 | `unassociated_visible_signal` | 신호등 검출은 있지만 진행 경로의 신호등으로 연결하지 못했다. 선택 신호 ID와 보정값·위치를 확인한다. |
+| `unmapped_signal_or_stopline` | 연결된 교차로가 없는 상태에서 신호등 또는 유효한 정지선이 관측됐다. 연결을 확보하거나 재시작하기 전까지 유지될 수 있다. CAM1 마스크와 CAM4 상자를 실제 도로와 대조한다. |
 | `signal_localization_unreliable` / `odometry_or_route_unavailable` | GPS·IMU 수신과 차량의 경로상 위치를 확인한다. |
 | `nominal_stale_or_not_type1` | 곡률 제어 노드가 종료됐거나 정상 명령을 내보내지 못했다. 주행 터미널 오류를 확인한다. |
 | 가속 명령이 있는데 계속 정지 | MORAI 외부 제어 모드, 수신 주소 `192.168.0.147:9093`, 기어와 차량 상태를 확인한다. |

@@ -12,6 +12,8 @@ from unittest.mock import Mock, patch
 spec = importlib.util.spec_from_file_location('diagnose_signal', Path(__file__).with_name('diagnose_curvature_signal.py'))
 diagnostic = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(diagnostic)
+WORKSPACE = Path(__file__).resolve().parents[2]
+sys.path.insert(0, str(WORKSPACE/'src/experimental/curvature_speed_purepursuit/src'))
 
 
 class DiagnosticTest(unittest.TestCase):
@@ -30,12 +32,14 @@ class DiagnosticTest(unittest.TestCase):
                  get_master=lambda: NS(getSystemState=lambda: (1, '', ([], [], []))))
         modules = {'rospy': ros, 'rospkg': NS(RosPack=Mock(side_effect=RuntimeError('missing package'))),
                    'morai_msgs.msg': NS(CtrlCmd=object),
+                   'morai_perception_msgs.msg': NS(StopLineDetection=object),
+                   'common.msg': NS(ObjectInfoArray=object),
                    'nav_msgs.msg': NS(Odometry=object, Path=object), 'std_msgs.msg': NS(String=object)}
         output = io.StringIO()
         with patch.dict(sys.modules, modules), patch.object(diagnostic, 'recent_errors', return_value=[]), \
              patch.object(diagnostic, 'time', NS(monotonic=lambda: now[0], sleep=advance)), redirect_stdout(output):
             diagnostic.main()
-        self.assertEqual(output.getvalue().count('count=0 age=NONE pub=NONE'), 7)
+        self.assertEqual(output.getvalue().count('count=0 age=NONE pub=NONE'), 11)
         self.assertIn('CURVATURE_SOURCE_ERROR missing package', output.getvalue())
         self.assertIn('DIAGNOSIS_DONE', output.getvalue())
         for sub in subscribers:
@@ -76,6 +80,25 @@ class DiagnosticTest(unittest.TestCase):
             self.assertIn('ImportError', lines[0])
             self.assertIn('process has died', lines[1])
         self.assertEqual(list(diagnostic.recent_errors(directory)), [])
+
+    def test_photo_position_projects_despite_duplicates_in_competition_route(self):
+        route = WORKSPACE/'data/routes/2026_molit_comp_global_path.txt'
+        original = route.read_bytes()
+        projection, raw_count, clean_count = diagnostic.project_route(route, NS(x=-106.89, y=-384.2))
+        self.assertEqual((raw_count, clean_count), (4430, 4392))
+        self.assertAlmostEqual(projection.distance_m, .22295, places=4)
+        self.assertAlmostEqual(projection.progress_s, 50.62138, places=4)
+        self.assertEqual(route.read_bytes(), original)
+
+    def test_line_and_light_observations_are_distinguishable(self):
+        header = NS(frame_id='base_link', stamp=NS(to_sec=lambda: 99.8))
+        line = diagnostic.summarize('stopline', NS(header=header, valid=True, distance_m=8.3, confidence=.9), 100)
+        self.assertEqual((line['valid'], line['distance_m'], line['source_age_s']), (True, 8.3, .2))
+        objects = NS(header=header, objects=[NS(class_name='RED', conf=.88)]*8)
+        result = diagnostic.summarize('lights', objects, 100)
+        self.assertEqual(result['objects'], 8)
+        self.assertEqual(len(result['detections']), 5)
+        self.assertEqual(result['detections'][0]['label'], 'RED')
 
 
 if __name__ == '__main__':

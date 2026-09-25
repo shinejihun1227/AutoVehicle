@@ -16,18 +16,43 @@ def summarize(kind, msg, ros_now):
     if kind == 'status':
         data = json.loads(msg.data)
         keys = ('mode', 'reason', 'reference_path_match', 'progress_s_m',
+                'event', 'route_context_count', 'route_context_error',
                 'signal_selection_reason', 'accel', 'brake')
-        return {key: data[key] for key in keys if key in data}
+        result = {key: data[key] for key in keys if key in data}
+        if isinstance(result.get('event'), dict):
+            event = result['event']
+            result['event'] = {key: event[key] for key in ('id', 'start', 'end', 'direction', 'committed') if key in event}
+        return result
     if kind in ('nominal', 'final'):
         return dict(type=msg.longlCmdType, accel=round(msg.accel, 3), brake=round(msg.brake, 3))
     if kind == 'reference':
         return dict(frame=msg.header.frame_id, points=len(msg.poses))
+    if kind == 'stopline':
+        return dict(valid=msg.valid, distance_m=round(msg.distance_m, 2),
+                    confidence=round(msg.confidence, 3), frame=msg.header.frame_id,
+                    source_age_s=round(ros_now-msg.header.stamp.to_sec(), 3))
+    if kind == 'lights':
+        return dict(objects=len(msg.objects),
+                    detections=[dict(label=o.class_name, confidence=round(o.conf, 3))
+                                for o in msg.objects[:5]],
+                    source_age_s=round(ros_now-msg.header.stamp.to_sec(), 3))
     if kind == 'odom':
         p, v = msg.pose.pose.position, msg.twist.twist.linear
         return dict(frame=msg.header.frame_id, x=round(p.x, 2), y=round(p.y, 2),
                     speed_kph=round(math.hypot(v.x, v.y)*3.6, 2),
                     source_age_s=round(ros_now-msg.header.stamp.to_sec(), 3))
     return {}  # GPS/IMU wire activity only; not a claim of valid localization.
+
+
+def project_route(path_file, position):
+    # Match the actual controller: the route file contains repeated vertices.
+    from curvature_speed_purepursuit.planner import (
+        load_path_file, clean_consecutive_duplicates, cumulative_arc_lengths, nearest_projection,
+    )
+    raw = load_path_file(path_file)
+    points = clean_consecutive_duplicates(raw)
+    return (nearest_projection(points, cumulative_arc_lengths(points), position.x, position.y),
+            len(raw), len(points))
 
 
 def recent_errors(log_root):
@@ -49,6 +74,8 @@ def main():
     import rospy
     import rospkg
     from morai_msgs.msg import CtrlCmd
+    from morai_perception_msgs.msg import StopLineDetection
+    from common.msg import ObjectInfoArray
     from nav_msgs.msg import Odometry, Path as RosPath
     from std_msgs.msg import String
 
@@ -57,7 +84,8 @@ def main():
     rospy.init_node('curvature_signal_read_only_diagnosis', anonymous=True, disable_signals=True)
     for name in ('/curvature_speed_purepursuit/publish_command',
                  '/curvature_speed_purepursuit/command_topic',
-                 '/morai_udp_drive_bridge/control_output_enabled', '/use_sim_time'):
+                 '/morai_udp_drive_bridge/control_output_enabled', '/use_sim_time',
+                 '/curvature_signal_controller/signal_camera/calibrated'):
         print(name + '=' + str(rospy.get_param(name, 'NOT_SET')), flush=True)
     try:
         path = Path(rospkg.RosPack().get_path('curvature_speed_purepursuit'))
@@ -75,6 +103,10 @@ def main():
         'nominal': ('/control/ctrl_cmd', CtrlCmd),
         'final': ('/ctrl_cmd', CtrlCmd),
         'status': ('/control/maneuver_status', String),
+        'stopline': ('/perception/camera/stopline', StopLineDetection),
+        'lights': ('/detection/traffic_light', ObjectInfoArray),
+        'cam1_rviz': ('/debug/cameras/cam1/image', rospy.AnyMsg),
+        'cam4_rviz': ('/debug/cameras/cam4/image', rospy.AnyMsg),
     }
     samples, lock = {}, threading.Lock()
 
@@ -104,13 +136,12 @@ def main():
     # Distinguish a fresh pose outside the route from no localization at all.
     if 'odom' in snapshot:
         try:
-            from curvature_speed_purepursuit.planner import load_path_file, cumulative_arc_lengths, nearest_projection
             path_file = rospy.get_param('/curvature_signal_controller/path_file')
-            points = load_path_file(path_file)
             position = snapshot['odom'][2].pose.pose.position
-            projection = nearest_projection(points, cumulative_arc_lengths(points), position.x, position.y)
-            print('ROUTE distance_m=%.2f allowed_m=%s (latest pose, full route)' %
-                  (projection.distance_m, rospy.get_param('/curvature_signal_controller/max_route_error_m', 3.0)), flush=True)
+            projection, raw_count, clean_count = project_route(path_file, position)
+            print('ROUTE distance_m=%.2f allowed_m=%s points=%d->%d (latest pose, full route)' %
+                  (projection.distance_m, rospy.get_param('/curvature_signal_controller/max_route_error_m', 3.0),
+                   raw_count, clean_count), flush=True)
         except Exception as exc:
             print('ROUTE_CHECK_ERROR ' + str(exc), flush=True)
     for sub in subscribers:
