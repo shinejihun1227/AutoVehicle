@@ -103,6 +103,8 @@ class PreviewImageTest(unittest.TestCase):
         writer = DebugImagePublisher.__new__(DebugImagePublisher)
         writer.image_type, writer.text_type = Image, NS
         writer.image, writer.raw, writer.meta = Mock(), Mock(), Mock()
+        writer.rviz_type, writer.rviz = Image, Mock()
+        writer.rviz.get_num_connections.return_value = 1
         writer.camera_id = 'cam4'
         stamp = NS(to_sec=lambda: 72.)
         frame = np.zeros((48, 64, 3), np.uint8)
@@ -114,6 +116,35 @@ class PreviewImageTest(unittest.TestCase):
             self.assertTrue(msg.data.startswith(b'\xff\xd8'))
         data = json.loads(writer.meta.publish.call_args.args[0].data)
         self.assertEqual((data['stamp'], data['sequence']), (72., 31))
+        preview = writer.rviz.publish.call_args.args[0]
+        self.assertIs(preview.header.stamp, stamp)
+        self.assertEqual(preview.header.seq, 31)
+        self.assertEqual((preview.height, preview.width, preview.encoding, preview.step), (48, 64, 'bgr8', 192))
+        np.testing.assert_array_equal(np.frombuffer(preview.data, np.uint8).reshape(48, 64, 3), frame)
+        writer.rviz.publish.reset_mock()
+        writer.rviz.get_num_connections.return_value = 0
+        writer._publish(frame, lambda: frame.copy(), stamp, 32, {})
+        writer.rviz.publish.assert_not_called()
+
+    def test_rviz_receives_overlay_not_original_and_caps_preview_width(self):
+        import numpy as np
+        writer = DebugImagePublisher.__new__(DebugImagePublisher)
+        class Image:
+            def __init__(self):
+                self.header = NS()
+        writer.image_type, writer.text_type, writer.rviz_type = Image, NS, Image
+        writer.image, writer.raw, writer.meta, writer.rviz = Mock(), Mock(), Mock(), Mock()
+        writer.rviz.get_num_connections.return_value = 1
+        writer.camera_id = 'cam1'
+        frame = np.zeros((600, 1000, 3), np.uint8)
+        overlay = frame.copy()
+        overlay[:, :, 2] = 255
+        writer._publish(frame, lambda: overlay, NS(to_sec=lambda: 1.), 1, {})
+        preview = writer.rviz.publish.call_args.args[0]
+        self.assertEqual((preview.width, preview.height), (800, 480))
+        pixels = np.frombuffer(preview.data, np.uint8).reshape(480, 800, 3)
+        self.assertTrue((pixels[:, :, 2] == 255).all())
+        self.assertFalse(frame.any())
 
     def test_slow_preview_replaces_pending_work_without_waiting_for_encoding(self):
         writer = DebugImagePublisher.__new__(DebugImagePublisher)

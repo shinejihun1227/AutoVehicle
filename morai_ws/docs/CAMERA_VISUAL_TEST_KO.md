@@ -1,6 +1,6 @@
 # 2번 주행 — CAM1·CAM4 화면과 정지 사유 확인
 
-**Ubuntu 일반 터미널에서 실행한다.** 화면은 Ubuntu 브라우저에 표시된다.
+**Ubuntu 바탕화면의 일반 터미널에서 실행한다. 명령 앞에 sudo를 붙이지 않는다.** CAM1·CAM4는 RViz 또는 브라우저로 볼 수 있다.
 
 ## 업데이트 — 한 번
 
@@ -34,14 +34,36 @@ bash run_test.sh monitor 2
 bash run_test.sh drive 2
 ```
 
-Ubuntu 브라우저가 자동으로 열린다. 열리지 않으면 주소창에 **`http://127.0.0.1:8765`**를 입력한다.
-새 터미널에서 다음 명령을 실행해도 된다.
+## RViz로 보기
+
+위의 `monitor 2` 또는 `drive 2`는 켜 둔다. **새 Ubuntu 터미널**에서:
+
+```bash
+cd "$HOME/AutoVehicle/morai_ws/docker/final_ws" && bash run_test.sh rviz
+```
+
+`CAM1 - Lane and Stop Line`, `CAM4 - Traffic Light` 이미지 패널이 등록된 RViz가 열린다. 패널 제목을 끌어 나란히 배치할 수 있다. 기존 모델의 차선·정지선 마스크와 신호등 검출 상자를 보여주며, 별도 카메라 수신이나 추론을 실행하지 않는다.
+
+| RViz Image Topic | Transport Hint | 영상 |
+|---|---|---|
+| `/debug/cameras/cam1/image` | `raw` | CAM1 인식 결과 |
+| `/debug/cameras/cam4/image` | `raw` | CAM4 인식 결과 |
+
+현재 주행 이미지로 화면 전용 임시 컨테이너를 띄우므로 Ubuntu 호스트에 ROS를 따로 설치할 필요가 없다. RViz를 닫으면 화면만 종료되고 주행은 계속된다. `xauth`가 없다는 메시지가 나올 때만 `sudo apt-get install xauth`를 실행한다. `No Image received`이면 위 **업데이트**를 컨테이너까지 적용했는지와 CAM1·CAM4 수신 상태를 확인한다.
+
+RViz는 영상 확인용이다. 정지 사유는 `bash run_test.sh diagnose 2` 또는 아래 브라우저에서 확인한다. RViz 수신 카운트가 증가하는지도 확인한다.
+
+## 브라우저로 보기
+
+주소창에 **`http://127.0.0.1:8765`**를 입력한다. 새 Ubuntu 터미널에서 다음 명령을 실행해도 된다.
 
 ```bash
 cd "$HOME/AutoVehicle/morai_ws/docker/final_ws" && bash run_test.sh view
 ```
 
-## 화면에서 확인할 것
+`view`는 서버 미응답·데스크톱 세션 없음·브라우저 실행 실패를 구분해 출력한다. 주소를 직접 입력해도 연결되지 않으면 주행 터미널의 `camera_debug_dashboard` 오류와 컨테이너 업데이트 여부를 확인한다.
+
+## 브라우저 화면에서 확인할 것
 
 | 화면 | 표시 내용 |
 |---|---|

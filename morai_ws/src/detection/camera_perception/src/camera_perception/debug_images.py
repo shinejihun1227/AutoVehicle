@@ -61,12 +61,14 @@ def render_objects(frame, detections):
 class DebugImagePublisher:
     def __init__(self, camera_id, fps=5.0):
         import rospy
-        from sensor_msgs.msg import CompressedImage
+        from sensor_msgs.msg import CompressedImage, Image
         from std_msgs.msg import String
         self.ros, self.image_type, self.text_type = rospy, CompressedImage, String
+        self.rviz_type = Image
         root = '/debug/cameras/' + camera_id
         self.image = rospy.Publisher(root + '/image/compressed', CompressedImage, queue_size=1)
         self.raw = rospy.Publisher(root + '/raw/compressed', CompressedImage, queue_size=1)
+        self.rviz = rospy.Publisher(root + '/image', Image, queue_size=1)
         self.meta = rospy.Publisher(root + '/metadata', String, queue_size=1)
         self.camera_id = camera_id
         self.interval = 1.0 / max(1.0, min(float(fps), 10.0))
@@ -101,9 +103,19 @@ class DebugImagePublisher:
         import cv2
         images = (render(), frame)
         messages = []
-        for image in images:
+        for index, image in enumerate(images):
             if image.shape[1] > 800:
                 image = cv2.resize(image, (800, round(image.shape[0]*800/image.shape[1])))
+            # RViz's standard Image display needs no compressed transport plugin.
+            # Only serialize this additional copy when an image viewer subscribes.
+            if index == 0 and self.rviz.get_num_connections() > 0:
+                preview = self.rviz_type()
+                preview.header.stamp, preview.header.seq = stamp, int(sequence)
+                preview.header.frame_id = self.camera_id
+                preview.height, preview.width = image.shape[:2]
+                preview.encoding, preview.is_bigendian = 'bgr8', 0
+                preview.step, preview.data = preview.width*3, image.tobytes()
+                self.rviz.publish(preview)
             ok, encoded = cv2.imencode('.jpg', image, [cv2.IMWRITE_JPEG_QUALITY, 75])
             if not ok:
                 return

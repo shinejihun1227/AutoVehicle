@@ -13,6 +13,8 @@ trap cleanup EXIT
 cp "$SCRIPT_DIR/"{run_test.sh,run_highway.sh,open_camera_dashboard.sh,diagnose_curvature_signal.py,highway-test.env.example} "$FIXTURE/"
 cp "$SCRIPT_DIR/highway.env.example" "$FIXTURE/highway.env"
 cp "$SCRIPT_DIR/highway-test.env.example" "$FIXTURE/highway-test.env"
+# Separate launcher tests cover Docker/X11. Here verify only action dispatch.
+printf '#!/usr/bin/env bash\nprintf RVIZ_ACTION_CALLED\n' > "$FIXTURE/open_camera_rviz.sh"
 printf '\nOPEN_CAMERA_DASHBOARD=false\n' >> "$FIXTURE/highway-test.env"
 cp "$FIXTURE/highway-test.env" "$FIXTURE/original.env"
 mkdir "$FIXTURE/bin"
@@ -99,4 +101,8 @@ absent 'pub' "$DOCKER_LOG"
 bash "$FIXTURE/run_test.sh" diagnose > /dev/null
 has '/opt/AutoVehicle/morai_ws/docker/final_ws/diagnose_highway.py' "$DOCKER_LOG"
 if bash "$FIXTURE/run_test.sh" diagnose 3 > /dev/null 2>&1; then fail 'Accepted unsupported diagnosis'; fi
+: > "$DOCKER_LOG"
+[[ "$(bash "$FIXTURE/run_test.sh" rviz)" == RVIZ_ACTION_CALLED ]] || fail 'RViz action not dispatched'
+[[ ! -s "$DOCKER_LOG" ]] || fail 'RViz action started driving through run_test'
+if bash "$FIXTURE/run_test.sh" rviz 2 > /dev/null 2>&1; then fail 'Accepted extra RViz argument'; fi
 echo 'RUN_TEST_RECIPES_PASS (Docker mocked; no driving)'
