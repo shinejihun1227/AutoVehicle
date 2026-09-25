@@ -27,11 +27,13 @@ LiDAR, 장애물 회피, 끼어들기, 차선 조향 보정, blackout fallback, 
 cd "$HOME/AutoVehicle"
 git pull --ff-only origin final_ws
 cd "$HOME/AutoVehicle/morai_ws/docker/final_ws"
-bash run_highway.sh start
+bash run_highway.sh stop
 bash install_curvature_signal.sh
+bash run_highway.sh start
 ```
 
-설치 스크립트는 새 launch와 설정 파일만 기존 컨테이너에 복사한다. 차량은 출발하지 않는다.
+설치 스크립트는 launch와 카메라 표시 코드·웹 화면을 기존 컨테이너에 복사한다. 차량은 출발하지 않는다.
+기존 코드는 `~/morai-update-backups/`에 백업한다. CAM1·CAM4 및 정지 사유는 Ubuntu 브라우저의 `http://127.0.0.1:8765`에서 확인한다.
 컨테이너에 이미 `curvature_signal.yaml`이 있으면 보정값을 보존한다.
 `git pull`만으로 기존 컨테이너 안의 파일은 바뀌지 않으므로 설치 명령도 필요하다.
 
@@ -76,7 +78,7 @@ FOV 항목을 설명하지만 그 축을 명시하지 않는다. 메인 뷰 카�
 ```bash
 nano "$HOME/AutoVehicle/morai_ws/config/curvature_signal.yaml"
 cd "$HOME/AutoVehicle/morai_ws/docker/final_ws"
-bash install_curvature_signal.sh --config
+bash run_highway.sh stop && bash install_curvature_signal.sh --config && bash run_highway.sh start
 ```
 
 `--config`는 호스트의 설정 파일로 컨테이너 설정을 덮어쓴다. 적용은 다음 launch 실행부터다.

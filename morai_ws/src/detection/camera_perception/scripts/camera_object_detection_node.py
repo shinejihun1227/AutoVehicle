@@ -153,6 +153,10 @@ def main(ip=IP, port=PORT, base_model_path=BASE_MODEL_PATH,
         )
 
     rospy.init_node("yolo_camera", anonymous=False)
+    preview = None
+    if os.environ.get('MORAI_CAMERA_DEBUG', '').lower() in ('1', 'true'):
+        from camera_perception.debug_images import DebugImagePublisher, render_objects
+        preview = DebugImagePublisher('cam4')
     car_detected_publisher = rospy.Publisher(
         car_detected_topic, Bool, queue_size=1
     )
@@ -467,6 +471,15 @@ def main(ip=IP, port=PORT, base_model_path=BASE_MODEL_PATH,
                         object_array(sequence, (), received_stamp)
                     )
 
+                if preview is not None:
+                    drawn = tuple(base_detections + (custom_detections if custom_model is not None else []))
+                    preview.submit(image, lambda f=image, d=drawn: render_objects(f, d),
+                        received_stamp if received_stamp is not None else rospy.Time(), sequence,
+                        dict(base_model=_resolve_model_path(base_model_path),
+                             custom_model=resolved_custom_path, custom_loaded=custom_model is not None,
+                             inference_ms=(time.monotonic()-started_at)*1000.,
+                             detections=[dict(label=d[4], confidence=d[5]) for d in drawn]))
+
             except Exception as error:
                 rospy.logerr_throttle(1.0, "YOLO inference error: %s", error)
 
@@ -615,7 +628,8 @@ def main(ip=IP, port=PORT, base_model_path=BASE_MODEL_PATH,
             result_sequence = int(shown_result["sequence"])
             matched_source = shown_result["source_image"]
             if (
-                matched_source is not None
+                preview is None
+                and matched_source is not None
                 and result_revision > last_detection_display_revision
             ):
                 matched_frame = matched_source.copy()
@@ -672,6 +686,8 @@ def main(ip=IP, port=PORT, base_model_path=BASE_MODEL_PATH,
     with pending_condition:
         pending_condition.notify_all()
     worker.join(timeout=1.0)
+    if preview is not None:
+        preview.close()
     try:
         with detection_state_lock:
             detection_state["car"] = False

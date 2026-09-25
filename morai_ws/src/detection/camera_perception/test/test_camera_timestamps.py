@@ -300,7 +300,7 @@ class CameraTimestampTest(unittest.TestCase):
             [Stamp(), Stamp(), Stamp()],
         )
 
-    def run_yolo(self, custom=True, stamps=None):
+    def run_yolo(self, custom=True, stamps=None, preview=False):
         ros_deps, publishers = ros_modules()
         ros = ros_deps["rospy"]
         clock = Clock(101.0)
@@ -376,7 +376,11 @@ class CameraTimestampTest(unittest.TestCase):
             return pub
 
         ros.Publisher.side_effect = publisher
-        with patch.dict(sys.modules, deps), patch.object(yolo.os.path, "isfile", return_value=custom):
+        preview_writer = Mock()
+        deps['camera_perception.debug_images'] = SimpleNamespace(
+            DebugImagePublisher=Mock(return_value=preview_writer), render_objects=Mock())
+        with patch.dict(sys.modules, deps), patch.object(yolo.os.path, "isfile", return_value=custom), \
+                patch.dict(yolo.os.environ, {'MORAI_CAMERA_DEBUG': 'true' if preview else 'false'}):
             yolo.main(custom_model_path="test.pt")
         self.assertTrue(finished.is_set(), "worker must publish newest pending frame")
         ros.logerr_throttle.assert_not_called()
@@ -384,7 +388,18 @@ class CameraTimestampTest(unittest.TestCase):
         yolo.LatestCameraReceiver.assert_called_once_with(yolo.IP, yolo.PORT, stamp_clock=ros.Time.now)
         self.assertEqual([call.kwargs["source"].data for call in base.predict.call_args_list], [b"\x01", b"\x03"])
         receiver.close.assert_called_once()
+        if preview:
+            self.assertEqual([call.args[3] for call in preview_writer.submit.call_args_list], [1, 3])
+            for call in preview_writer.submit.call_args_list:
+                seq = call.args[3]
+                self.assertEqual(call.args[0].data, frames[seq-1].jpeg_data)
+                self.assertIs(call.args[2], frames[seq-1].received_stamp)
+                self.assertEqual(call.args[4]['custom_loaded'], custom)
+            preview_writer.close.assert_called_once()
         return publishers, frames, publish_times
+
+    def test_yolo_preview_reuses_inferred_frame_and_original_stamp(self):
+        self.run_yolo(preview=True)
 
     def test_yolo_pending_replacement_and_two_inferences_preserve_frame_age(self):
         pubs, frames, published_at = self.run_yolo()

@@ -10,9 +10,10 @@ cleanup() {
   rm -rf -- "$FIXTURE"
 }
 trap cleanup EXIT
-cp "$SCRIPT_DIR/"{run_test.sh,run_highway.sh,highway-test.env.example} "$FIXTURE/"
+cp "$SCRIPT_DIR/"{run_test.sh,run_highway.sh,open_camera_dashboard.sh,highway-test.env.example} "$FIXTURE/"
 cp "$SCRIPT_DIR/highway.env.example" "$FIXTURE/highway.env"
 cp "$SCRIPT_DIR/highway-test.env.example" "$FIXTURE/highway-test.env"
+printf '\nOPEN_CAMERA_DASHBOARD=false\n' >> "$FIXTURE/highway-test.env"
 cp "$FIXTURE/highway-test.env" "$FIXTURE/original.env"
 mkdir "$FIXTURE/bin"
 export DOCKER_LOG="$FIXTURE/docker.log"

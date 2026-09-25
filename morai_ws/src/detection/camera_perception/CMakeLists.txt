@@ -14,6 +14,7 @@ endif()
 catkin_install_python(PROGRAMS
   scripts/camera_feature_runner.py
   scripts/highway_lane_camera_node.py
+  scripts/camera_debug_dashboard.py
   scripts/lane_info_contract_node.py
   scripts/camera_object_detection_node.py
   scripts/highway_environment_gate_node.py
@@ -23,7 +24,7 @@ catkin_install_python(PROGRAMS
   DESTINATION ${CATKIN_PACKAGE_BIN_DESTINATION}
 )
 
-install(DIRECTORY launch
+install(DIRECTORY launch web
   DESTINATION ${CATKIN_PACKAGE_SHARE_DESTINATION}
 )
 

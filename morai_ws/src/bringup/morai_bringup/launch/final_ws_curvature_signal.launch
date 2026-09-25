@@ -6,6 +6,8 @@
   <arg name="signal_config_file" default="$(arg workspace_path)/config/curvature_signal.yaml" />
   <arg name="signal_mgeo_path" default="$(find camera_perception)/lane/mgeo/R_KR_PR_K-city_2025" />
   <arg name="enable_control" default="false" />
+  <arg name="enable_camera_dashboard" default="true" />
+  <arg name="camera_dashboard_port" default="8765" />
   <arg name="bind_ip" default="0.0.0.0" />
   <arg name="morai_host_ip" default="192.168.0.147" />
   <arg name="gps_port" default="3001" />
@@ -94,7 +96,13 @@
 
   <!-- The real_lane model supplies stop-line observations, not steering. -->
   <node pkg="camera_perception" type="highway_lane_camera_node.py" name="highway_lane_camera"
-        output="screen" args="--ip $(arg bind_ip) --port $(arg lane_info_port) --checkpoint $(arg lane_info_checkpoint) --cam-set $(arg lane_info_cam_set) --device $(arg lane_info_device) --every $(arg lane_info_every) --topic /perception/camera/lane_info_raw" />
+        output="screen" args="--ip $(arg bind_ip) --port $(arg lane_info_port) --checkpoint $(arg lane_info_checkpoint) --cam-set $(arg lane_info_cam_set) --device $(arg lane_info_device) --every $(arg lane_info_every) --topic /perception/camera/lane_info_raw">
+    <env name="MORAI_CAMERA_DEBUG" value="$(arg enable_camera_dashboard)" />
+  </node>
+  <node if="$(arg enable_camera_dashboard)" pkg="camera_perception" type="camera_debug_dashboard.py"
+        name="camera_debug_dashboard" output="screen">
+    <param name="port" value="$(arg camera_dashboard_port)" />
+  </node>
   <node pkg="camera_perception" type="lane_info_contract_node.py" name="lane_info_contract" output="screen">
     <param name="timeout_sec" value="$(arg lane_info_timeout_s)" />
     <param name="min_confidence" value="$(arg lane_min_confidence)" />
@@ -103,6 +111,7 @@
     <arg name="camera_ip" value="$(arg bind_ip)" />
     <arg name="enable_lane" value="false" />
     <arg name="enable_yolo" value="true" />
+    <arg name="enable_debug_images" value="$(arg enable_camera_dashboard)" />
     <arg name="yolo_port" value="$(arg yolo_port)" />
     <arg name="enable_highway_gate" value="false" />
     <arg name="enable_pedestrian_crossing" value="false" />

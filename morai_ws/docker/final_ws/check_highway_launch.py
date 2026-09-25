@@ -28,7 +28,7 @@ def main():
         assert len(names)==len(set(names)), output
         for required in ('/curvature_speed_purepursuit','/curvature_signal_controller',
                          '/highway_lane_camera','/lane_info_contract',
-                         '/yolo_camera','/traffic_light_stop'):
+                         '/yolo_camera','/traffic_light_stop','/camera_debug_dashboard'):
             assert required in names, (required,output)
         for excluded in ('/control_mux','/final_ws_stopline_controller',
                          '/avoidance_path_manager','/bypass_lane_guard',

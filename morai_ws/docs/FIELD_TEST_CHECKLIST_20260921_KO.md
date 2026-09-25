@@ -29,6 +29,11 @@ bash run_test.sh drive 1
 bash run_test.sh drive 2
 ```
 
+Ubuntu 브라우저에 **CAM1 차선·정지선 + CAM4 신호등 + 정지 사유** 화면이 열린다.
+자동으로 열리지 않으면 새 Ubuntu 터미널에서 `bash run_test.sh view`를 실행하거나
+브라우저 주소에 `http://127.0.0.1:8765`를 입력한다.
+표시 화면이 없는 이전 버전이라면 [카메라 화면 업데이트](CAMERA_VISUAL_TEST_KO.md)를 적용한다.
+
 적색 신호에서 정지선 앞 정지 → 허용 신호에서 재출발을 확인한다.
 Cam4 보정이 완료되어야 한다. `signal_camera_uncalibrated`로 멈추면 [보정 안내](CURVATURE_SIGNAL_ONLY_KO.md)를 따른다.
 

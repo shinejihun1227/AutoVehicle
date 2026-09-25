@@ -477,6 +477,10 @@ def main(argv=None):
         sock = (socket.socket(socket.AF_INET, socket.SOCK_DGRAM), (host, int(port)))
 
     runner = Runner(args)
+    preview = None
+    if use_ros and os.environ.get('MORAI_CAMERA_DEBUG', '').lower() in ('1', 'true'):
+        from camera_perception.debug_images import DebugImagePublisher, render_lane
+        preview = DebugImagePublisher('cam1')
     info = runner.seg.info
     print(f"[real_lane] {os.path.basename(info['path'])}  epoch {info['epoch']} "
           f"{info['backbone']}  {info['num_classes']}클래스 {info['scheme']}  "
@@ -550,9 +554,21 @@ def main(argv=None):
                       f"우{'O' if rr else 'X'}  "
                       f"정지선 {payload['stopline_distance_m']}  "
                       f"{payload['infer_ms']}+{payload['post_ms']}ms")
+            if preview is not None:
+                preview.submit(frame,
+                    lambda f=frame, m=res.mask, p=payload: render_lane(
+                        f, m, p, runner.seg.cam, runner.seg.crop_top),
+                    meta.received_stamp if meta is not None and meta.received_stamp is not None
+                    else rospy.Time.from_sec(stamp), seq,
+                    dict(model=info['path'], device=str(runner.seg.device),
+                         infer_ms=payload['infer_ms'], post_ms=payload['post_ms'],
+                         camera_size=[runner.seg.cam.width, runner.seg.cam.height + runner.seg.crop_top],
+                         crop_top=runner.seg.crop_top))
     except KeyboardInterrupt:
         pass
     finally:
+        if preview is not None:
+            preview.close()
         cam.stop()
         if runner.imu is not None:
             runner.imu.stop()

@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Add only the new launch/config to an existing final_ws container. No rebuild.
+# Update signal launch and read-only camera dashboard in a stopped container.
 set -euo pipefail
 SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 WS="$(cd -- "$SCRIPT_DIR/../.." && pwd)"
@@ -12,9 +12,42 @@ source "$SCRIPT_DIR/highway.env"
 : "${CONTAINER_NAME:?Set CONTAINER_NAME in highway.env}"
 DOCKER=(docker --context default)
 if ! "${DOCKER[@]}" info >/dev/null 2>&1; then DOCKER=(sudo docker --context default); fi
-"${DOCKER[@]}" container inspect "$CONTAINER_NAME" >/dev/null
-"${DOCKER[@]}" cp "$WS/src/bringup/morai_bringup/launch/final_ws_curvature_signal.launch" \
-  "$CONTAINER_NAME:/opt/AutoVehicle/morai_ws/src/bringup/morai_bringup/launch/final_ws_curvature_signal.launch"
+RUNNING="$("${DOCKER[@]}" inspect --format '{{.State.Running}}' "$CONTAINER_NAME")"
+[[ "$RUNNING" == false ]] || {
+  echo 'Stop the launch, then bash run_highway.sh stop before updating. Restart after installation.' >&2
+  exit 2
+}
+DEST=/opt/AutoVehicle/morai_ws
+CAM=src/detection/camera_perception
+FILES=(
+  src/bringup/morai_bringup/launch/final_ws_curvature_signal.launch
+  "$CAM/launch/camera_perception.launch"
+  "$CAM/post_processing/real_lane_node.py"
+  "$CAM/scripts/camera_object_detection_node.py"
+  "$CAM/scripts/camera_debug_dashboard.py"
+  "$CAM/src/camera_perception/debug_images.py"
+  "$CAM/src/camera_perception/debug_dashboard.py"
+  "$CAM/CMakeLists.txt"
+  "$CAM/package.xml"
+  "$CAM/test/test_debug_dashboard.py"
+  "$CAM/test/test_camera_timestamps.py"
+  docker/final_ws/check_highway_launch.py
+)
+for file in "${FILES[@]}" "$CAM/web/camera_dashboard.html" config/curvature_signal.yaml; do
+  [[ -f "$WS/$file" ]] || { echo "Missing host file: $WS/$file" >&2; exit 2; }
+done
+BACKUP="$HOME/morai-update-backups/$CONTAINER_NAME-camera-$(date +%Y%m%d-%H%M%S)"
+mkdir -p "$BACKUP"
+for file in "${FILES[@]}" "$CAM/web/camera_dashboard.html" config/curvature_signal.yaml; do
+  mkdir -p "$BACKUP/$(dirname -- "$file")"
+  "${DOCKER[@]}" cp "$CONTAINER_NAME:$DEST/$file" "$BACKUP/$file" 2>/dev/null || true
+done
+# The new executable can run directly from scripts/ in the existing catkin source workspace.
+chmod +x "$WS/$CAM/scripts/camera_debug_dashboard.py"
+for file in "${FILES[@]}"; do
+  "${DOCKER[@]}" cp "$WS/$file" "$CONTAINER_NAME:$DEST/$file"
+done
+"${DOCKER[@]}" cp "$WS/$CAM/web" "$CONTAINER_NAME:$DEST/$CAM/"
 CONFIG=/opt/AutoVehicle/morai_ws/config/curvature_signal.yaml
 # Preserve a previously calibrated container file unless --config is explicit.
 # docker cp works with stopped containers too; no control or ROS node is started.
@@ -26,4 +59,6 @@ else
   "${DOCKER[@]}" cp "$WS/config/curvature_signal.yaml" "$CONTAINER_NAME:$CONFIG"
 fi
 echo "Installed curvature_signal launch in $CONTAINER_NAME. No driving process was started."
-echo 'Set TEST_PROFILE=curvature_signal, then bash run_test.sh show / monitor / drive.'
+echo "Camera dashboard installed. Backup: $BACKUP"
+echo 'bash run_highway.sh start, then bash run_test.sh monitor 2 or drive 2.'
+echo 'Ubuntu browser: http://127.0.0.1:8765'

@@ -1,0 +1,54 @@
+<!doctype html>
+<html lang="ko">
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>MORAI · 카메라와 주행 상태</title>
+<style>
+:root{font-family:"Noto Sans KR","Malgun Gothic",sans-serif;color:#202b35;background:#edf0f2;font-size:14px}
+*{box-sizing:border-box}body{margin:0;padding:22px;max-width:1600px;margin-inline:auto}header{display:flex;align-items:center;justify-content:space-between;gap:16px}h1{font-size:22px;margin:0 0 8px}h2{font-size:17px;margin:0}p{line-height:1.6;margin:6px 0}.muted{color:#64727e;font-size:12px}#banner{margin:18px 0 14px;padding:16px 20px;background:#fff;border-left:5px solid #7b8790;border-radius:4px}#banner[data-state=stop]{border-color:#ae4d40;background:#fff5f2}#banner[data-state=command]{border-color:#47745d}#banner[data-state=monitor]{border-color:#927746}#title{font-size:18px;font-weight:700}#notes{margin:8px 0 0;padding-left:20px}#notes li{margin:5px 0;overflow-wrap:anywhere}main{display:grid;grid-template-columns:1fr 1fr;gap:16px}.panel{background:#fff;border:1px solid #d9e0e5;border-radius:5px;overflow:hidden}.panel-head{padding:14px 16px;display:flex;justify-content:space-between;align-items:center}.image{position:relative;background:#18212b;aspect-ratio:4/3;display:flex;align-items:center;justify-content:center}.image img{width:100%;height:100%;object-fit:contain}.image.stale img{opacity:.4}.image .notice{position:absolute;top:12px;left:12px;right:12px;color:white;background:#202832dd;padding:10px;font-size:13px;display:none}.image.stale .notice{display:block}.detail{padding:12px 16px;line-height:1.8;min-height:120px;overflow-wrap:anywhere}.model{font:12px monospace;overflow-wrap:anywhere;color:#56626d}.stats{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin:16px 0}.stat{padding:13px 16px;background:white;border:1px solid #d9e0e5;border-radius:4px}.stat b{display:block;font-size:20px;margin-top:7px}details{background:#fff;padding:14px 16px;border:1px solid #d9e0e5;border-radius:4px}pre{white-space:pre-wrap;overflow-wrap:anywhere;max-height:360px;overflow:auto;font-size:12px}label{font-size:12px;white-space:nowrap}footer{margin:14px 0;font-size:12px;color:#56626d;line-height:1.7}@media(max-width:900px){main{grid-template-columns:1fr}.stats{grid-template-columns:1fr 1fr}body{padding:12px}}
+</style>
+<header><div><h1>카메라 인식 · 주행 상태</h1><p class="muted">CAM1 차선·정지선 / CAM4 신호등 · 현재 주행 모델의 처리 결과</p></div><span id="connection" class="muted">연결 대기</span></header>
+<section id="banner" data-state="waiting"><div id="title">주행 상태 수신 대기</div><ul id="notes"></ul></section>
+<main>
+<article class="panel"><div class="panel-head"><h2>CAM1 · 차선 / 정지선</h2><label><input type="checkbox" id="raw-cam1"> 원본 보기</label></div><div id="box-cam1" class="image stale"><img id="image-cam1" alt="CAM1 추론 프레임"><div class="notice" id="notice-cam1">CAM1 영상 대기 · UDP 1101</div></div><div class="detail"><div id="age-cam1" class="muted">프레임 없음</div><div id="lane">차선 상태 대기</div><div id="stopline">정지선 상태 대기</div><div id="model-cam1" class="model"></div><div class="muted">마스크: 흰색 실선 · 청록 점선 · 노랑 황색선 · 빨강 정지선 · 보라 유도선<br>굵은 선: 후처리된 경계·정지선. 신뢰도는 모델 추정값입니다.</div></div></article>
+<article class="panel"><div class="panel-head"><h2>CAM4 · 신호등</h2><label><input type="checkbox" id="raw-cam4"> 원본 보기</label></div><div id="box-cam4" class="image stale"><img id="image-cam4" alt="CAM4 추론 프레임"><div class="notice" id="notice-cam4">CAM4 영상 대기 · UDP 1131</div></div><div class="detail"><div id="age-cam4" class="muted">프레임 없음</div><div id="signal">신호 상태 대기</div><div id="selected">경로 연결 대기</div><div id="calibration"></div><div id="model-cam4" class="model"></div></div></article>
+</main>
+<section class="stats"><div class="stat">실제 속도<b id="speed">—</b></div><div class="stat">곡률 제어 목표속도<b id="target">—</b></div><div class="stat">최종 가속 / 브레이크<b id="command">—</b></div><div class="stat">주행 경로 / 도착 상태<b id="route">—</b></div></section>
+<details><summary>상세 상태 — 정지 사유와 원본 진단값</summary><pre id="telemetry">수신 대기</pre></details>
+<footer>각 카메라의 검출은 해당 모델이 처리한 원본 프레임에 표시됩니다. 두 카메라의 촬영 시각은 서로 다를 수 있습니다. 표시 최대 5 FPS · 화면을 닫아도 주행은 계속됩니다. 이 화면에는 차량 제어 기능이 없습니다.</footer>
+<script>
+const el=id=>document.getElementById(id), number=(v,n=2)=>typeof v==='number'&&Number.isFinite(v)?v.toFixed(n):'—';
+const text=(id,v)=>el(id).textContent=v;
+let images={},lastData=null;
+function value(data,key,limit=1){const x=data.values[key];return x&&x.age_s>=0&&x.age_s<=limit&&(x.source_age_s==null||x.source_age_s>=-.05&&x.source_age_s<=limit)?x.value:null;}
+function paint(data){
+ lastData=data;const status=value(data,'maneuver'),lane=value(data,'lane',.6),line=value(data,'stopline',.8),signal=value(data,'signal',.8),config=value(data,'config',3);
+ text('connection','연결됨 · '+new Date().toLocaleTimeString());el('banner').dataset.state=data.diagnosis.state;text('title',data.diagnosis.title);el('notes').replaceChildren();
+ for(const n of data.diagnosis.notes){const li=document.createElement('li');li.textContent=n.text+(n.text===n.code?'':'  ['+n.code+']');el('notes').appendChild(li);}
+ for(const c of ['cam1','cam4']){
+  const raw=el('raw-'+c).checked,m=data.images[c]?.[raw?'raw':'overlay'],limit=c==='cam1' ? 0.6 : 0.8;
+  const stale=!m||m.age_s>limit||m.source_age_s>limit||m.source_age_s<-.05;
+  el('box-'+c).classList.toggle('stale',stale);
+  text('notice-'+c,m?'프레임 지연 / 입력 중단 — 마지막 영상입니다.':c.toUpperCase()+' 영상 대기 · 카메라 송신 및 모델 실행 확인');
+  text('age-'+c,m?'프레임 #'+m.sequence+' · 입력 후 '+number(m.source_age_s)+'초':'프레임 없음');
+  const key=m?[raw,m.sequence,m.stamp].join(':'):'';
+  if(m&&images[c]!==key){images[c]=key;el('image-'+c).src='/image/'+c+'?raw='+(raw?1:0)+'&seq='+m.sequence;}
+ }
+ const boundary=x=>!x?.detected?'없음':(x.type||'검출')+' '+number(x.confidence)+(x.coasted?' (추적 예측)':'');
+ text('lane',lane?'좌측: '+boundary(lane.left_lane)+' / 우측: '+boundary(lane.right_lane):'차선 상태 미수신 / 지연');
+ text('stopline',line?(line.valid?'정지선: '+number(line.distance_m)+' m · 신뢰도 '+number(line.confidence):'유효한 정지선 없음'):'정지선 관측 미수신 / 지연');
+ text('signal',signal?'관측 신호: '+signal.state+' · 신뢰도 '+number(signal.confidence)+(signal.valid?'':' · 무효'):'신호 관측 미수신 / 지연');
+ text('selected',status?'진행 방향: '+status.route_direction+' / 선택 신호: '+(status.selected_signal_state||'없음')+' / ID: '+(status.selected_signal_id||'없음'):'경로 연결 상태 대기');
+ text('calibration',config?'Cam4 보정: '+(config.signal_camera?.calibrated===true?'확인됨':'미완료 — 영상·지도 투영 검증 필요'):'Cam4 설정 대기');
+ const cam1=value(data,'cam1',3),cam4=value(data,'cam4',3);
+ text('model-cam1',cam1?cam1.model+' · '+cam1.device+' · 추론 '+number(cam1.infer_ms,0)+' ms · 입력 '+cam1.source_size.join('×')+' / 보정 '+cam1.camera_size.join('×'):'차선 모델 정보 수신 대기');
+ text('model-cam4',cam4?cam4.custom_model+' · '+(cam4.custom_loaded?'로드됨':'모델 누락!')+' · 추론 '+number(cam4.inference_ms,0)+' ms · '+cam4.source_size.join('×'):'신호 모델 정보 수신 대기');
+ const odom=value(data,'odom',.5),cmd=value(data,'final',.6),goal=value(data,'goal',86400);
+ text('speed',number(odom?.speed_kph,1)+' km/h');text('target',number(value(data,'speed_target'),1)+' km/h');text('command',number(cmd?.accel)+' / '+number(cmd?.brake));
+ text('route',status?(status.reference_path_match?'일치':'불일치')+' / '+(goal===true?'도착':'진행'):'—');text('telemetry',JSON.stringify(data,null,2));
+}
+for(const c of ['cam1','cam4'])el('raw-'+c).addEventListener('change',()=>{if(lastData)paint(lastData);});
+async function poll(){try{const response=await fetch('/api/status',{cache:'no-store',signal:AbortSignal.timeout(2500)});if(!response.ok)throw Error(response.status);paint(await response.json());}
+catch(e){text('connection','연결 끊김');text('title','진단 화면 연결 끊김 — 마지막 상태를 현재 상태로 판단하지 마세요.');el('banner').dataset.state='waiting';for(const c of ['cam1','cam4']){el('box-'+c).classList.add('stale');text('notice-'+c,'화면 연결 끊김 — 마지막 영상입니다.');}}
+finally{setTimeout(poll,250);}}
+poll();
+</script></html>

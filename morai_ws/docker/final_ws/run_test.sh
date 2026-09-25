@@ -3,9 +3,9 @@
 set -euo pipefail
 SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 ACTION="${1:-show}"
-if [[ $# -gt 2 || ! "$ACTION" =~ ^(show|monitor|drive|diagnose|speed|request-merge)$ ]] ||
-   [[ "$ACTION" =~ ^(diagnose|request-merge)$ && $# -gt 1 ]]; then
-  echo 'Usage: bash run_test.sh {show|monitor|drive} [1-5]; or {speed KMH|request-merge|diagnose}' >&2
+if [[ $# -gt 2 || ! "$ACTION" =~ ^(show|monitor|drive|diagnose|speed|request-merge|view)$ ]] ||
+   [[ "$ACTION" =~ ^(diagnose|request-merge|view)$ && $# -gt 1 ]]; then
+  echo 'Usage: bash run_test.sh {show|monitor|drive} [1-5]; or {speed KMH|request-merge|diagnose|view}' >&2
   exit 2
 fi
 if [[ ! -f "$SCRIPT_DIR/highway.env" || ! -f "$SCRIPT_DIR/highway-test.env" ]]; then
@@ -16,6 +16,9 @@ source "$SCRIPT_DIR/highway.env"
 # The versioned example supplies defaults for fields added by later updates.
 source "$SCRIPT_DIR/highway-test.env.example"
 source "$SCRIPT_DIR/highway-test.env"
+if [[ "$ACTION" == view ]]; then
+  exec bash "$SCRIPT_DIR/open_camera_dashboard.sh"
+fi
 if [[ "$ACTION" == speed ]]; then
   VALUE="${2:-}"
   [[ "$VALUE" =~ ^[0-9]+([.][0-9]+)?$ && "$VALUE" =~ [1-9] ]] || {
@@ -136,6 +139,10 @@ fi
 DISPLAY_ARGS=()
 if [[ "$TEST_PROFILE" == curvature_signal ]]; then
   echo 'Original route + curvature + route-associated stopline/signals; no LiDAR/avoidance/merge/lane steering.'
+  echo 'CAM1 + CAM4 and stop reasons: http://127.0.0.1:8765 (Ubuntu browser)'
+  if [[ "$OPEN_CAMERA_DASHBOARD" == true && -n "${DISPLAY:-}${WAYLAND_DISPLAY:-}" ]]; then
+    bash "$SCRIPT_DIR/open_camera_dashboard.sh" --wait >/dev/null 2>&1 &
+  fi
   DISPLAY_ARGS=(xvfb-run -a)
 else
   echo 'Curvature-only: original route; camera/LiDAR/signal stops are not launched.'
