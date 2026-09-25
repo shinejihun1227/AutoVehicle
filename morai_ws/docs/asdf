@@ -1,1 +1,2 @@
-cd "$HOME/AutoVehicle/morai_ws/docker/final_ws" && source highway.env && sudo docker --context default exec "$CONTAINER_NAME" /usr/local/bin/morai-entrypoint timeout 5s rostopic echo -n 1 /control/maneuver_status
+cd "$HOME/AutoVehicle" && git pull --ff-only origin final_ws
+cd "$HOME/AutoVehicle/morai_ws/docker/final_ws" && bash run_test.sh diagnose 2
