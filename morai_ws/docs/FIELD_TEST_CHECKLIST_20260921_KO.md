@@ -344,7 +344,91 @@ bash run_test.sh drive
 
 ## 5. T05 — Cam4 보정과 경로별 신호 연결
 
-프로필을 `curvature_signal`로 바꾸고 먼저 `monitor`를 실행한다. 설정은 `SIGNAL_CONFIG_FILE`이 가리키는 **컨테이너 내부 파일**에서 읽는다.
+T05는 `curvature_signal` 프로필의 **제어 OFF 관측 시험**이다. 아래 준비·실행 명령은 **일반 Ubuntu 터미널 A**에서 입력한다. T03~T04의 launch가 남아 있다면 MORAI에서 차량 정지·외부 제어 해제를 확인하고 그 launch를 `Ctrl+C`로 종료한다.
+
+### T05-1. 실제 컨테이너 이름 확인 — Ubuntu 터미널 A
+
+아래 명령은 **한 블록씩 입력하고 Enter를 누른 뒤** 다음 블록으로 진행한다.
+
+```bash
+docker --context default ps -a
+```
+
+컨테이너 목록의 `NAMES`, `IMAGE`, `STATUS`를 확인한다. 이어서 별도로 설정 파일을 조회한다.
+
+```bash
+grep -E '^(CONTAINER_NAME|IMAGE_NAME)=' "$HOME/AutoVehicle/morai_ws/docker/final_ws/highway.env"
+```
+
+`unknown shorthand flag: 'E' in -E`가 나오면 `grep -E ...`가 앞의 Docker 명령과 한 줄로 합쳐졌는지 확인한다. 위 첫 번째 명령만 다시 입력한다.
+
+`highway.env`의 `CONTAINER_NAME`이 목록의 **실제 주행용 컨테이너 이름**과 같아야 한다. `IMAGE_NAME`은 이미지 이름이며 컨테이너 이름과 구분한다. 다르면 `nano "$HOME/AutoVehicle/morai_ws/docker/final_ws/highway.env"`에서 `CONTAINER_NAME`만 실제 이름으로 수정한다. IP·GPU·다른 개인 설정은 유지한다.
+
+- `No such container: ...`는 선택된 Docker 엔진에 해당 이름의 컨테이너가 없다는 뜻이다. 단순히 정지한 컨테이너는 `ps -a`에 `Exited`로 표시된다.
+- 목록이 비었거나 주행용 컨테이너를 구분할 수 없으면 이름을 추측하지 않는다. `docker context ls`와 `docker --context default images`로 기존 설치 위치·이미지를 확인하고 2.2의 준비 절차로 돌아간다. 이 단계에서 기존 컨테이너나 이미지를 삭제하지 않는다.
+- Docker 권한 오류가 나면 이 절의 직접 실행하는 `docker --context default ...` 명령 앞에 `sudo`를 붙인다. 아래 `run_highway.sh` 등의 스크립트는 같은 권한 처리를 내부에서 수행한다.
+
+이름을 확인·수정한 뒤 조회가 성공하는지 확인한다.
+
+```bash
+cd "$HOME/AutoVehicle/morai_ws/docker/final_ws"
+source highway.env
+docker --context default container inspect "$CONTAINER_NAME" \
+  --format 'name={{.Name}} status={{.State.Status}} image={{.Config.Image}}'
+```
+
+**조회가 성공한 뒤에만** 아래 단계로 진행한다. 존재하지 않는 이름으로 `run_highway.sh start`를 실행하면 설정된 이미지로 새 컨테이너를 만들 수 있으므로, 기존 컨테이너 복구와 구분한다.
+
+### T05-2. 신호 전용 프로필로 전환하고 관측 시작 — Ubuntu 터미널 A
+
+```bash
+cd "$HOME/AutoVehicle/morai_ws/docker/final_ws"
+bash run_highway.sh start && bash install_curvature_signal.sh
+```
+
+시작·설치가 성공하면 다음을 실행한다. 설치 스크립트는 신호 전용 launch를 복사하고 **기존 컨테이너의 보정 파일은 보존**한다. 여기서는 `--config`를 사용하지 않는다. 오래된 이미지의 나머지 코드까지 갱신하는 명령은 아니므로 T01의 검사 통과가 선행되어야 한다.
+
+```bash
+cp -p highway-test.env "highway-test.env.backup-$(date +%Y%m%d-%H%M%S)"
+sed -i -e 's/^TEST_PROFILE=.*/TEST_PROFILE=curvature_signal/' \
+       -e 's/^MAX_SPEED_KPH=.*/MAX_SPEED_KPH=3.0/' highway-test.env
+bash run_test.sh show
+```
+
+출력에서 다음을 확인한다. 컨테이너 이름은 T05-1에서 확인한 이름이어야 한다.
+
+```text
+Profile=curvature_signal  action=show  max_speed_kph=3.0
+Ubuntu=192.168.0.185  MORAI=192.168.0.147
+Launch=final_ws_curvature_signal.launch
+```
+
+`Profile=curvature`나 `Curvature-only`가 보이면 신호·카메라 시험 구성이 아니다. `max_speed_kph=45.0` 등 이전 값이 남았다면 설정을 다시 확인한다. 다음 명령은 제어 송신을 켜지 않지만, 뒤의 T06에서도 사용할 첫 시험 속도를 3 km/h로 맞춘다.
+
+```bash
+bash run_test.sh monitor
+```
+
+이 터미널은 계속 실행해 둔다. 정상 시작한 뒤 별도 **일반 Ubuntu 터미널 B**에서 컨테이너에 접속한다.
+
+```bash
+cd "$HOME/AutoVehicle/morai_ws/docker/final_ws"
+bash run_highway.sh shell
+```
+
+다음은 **컨테이너 안**에서 실행한다.
+
+```bash
+rosparam get /morai_udp_drive_bridge/control_output_enabled
+rosparam get /curvature_signal_controller/signal_camera
+timeout -k 2s 5s rostopic echo -n 1 /control/maneuver_status
+```
+
+첫 값은 `false`여야 한다. `signal_camera` 파라미터가 없으면 터미널 A에서 `curvature_signal`이 시작됐는지와 노드 오류를 먼저 확인한다. `No such container`로 끝난 상태에서는 ROS 노드가 시작되지 않았으므로 보정값 검사를 할 수 없다.
+
+### T05-3. Cam4 장착값과 실제 신호 연결 확인
+
+설정은 `SIGNAL_CONFIG_FILE`이 가리키는 **컨테이너 내부 파일**에서 읽는다.
 
 | 항목 | 현재 입력값 / 확인 사항 |
 | --- | --- |
