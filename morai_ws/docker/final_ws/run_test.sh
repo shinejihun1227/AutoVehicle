@@ -4,8 +4,9 @@ set -euo pipefail
 SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 ACTION="${1:-show}"
 if [[ $# -gt 2 || ! "$ACTION" =~ ^(show|monitor|drive|diagnose|speed|request-merge|view)$ ]] ||
-   [[ "$ACTION" =~ ^(diagnose|request-merge|view)$ && $# -gt 1 ]]; then
-  echo 'Usage: bash run_test.sh {show|monitor|drive} [1-5]; or {speed KMH|request-merge|diagnose|view}' >&2
+   [[ "$ACTION" =~ ^(request-merge|view)$ && $# -gt 1 ]] ||
+   [[ "$ACTION" == diagnose && $# -gt 1 && "$2" != 2 ]]; then
+  echo 'Usage: bash run_test.sh {show|monitor|drive} [1-5]; or {speed KMH|request-merge|diagnose [2]|view}' >&2
   exit 2
 fi
 if [[ ! -f "$SCRIPT_DIR/highway.env" || ! -f "$SCRIPT_DIR/highway-test.env" ]]; then
@@ -43,6 +44,12 @@ fi
 if [[ "$ACTION" == diagnose ]]; then
   DOCKER=(docker --context default)
   if ! "${DOCKER[@]}" info >/dev/null 2>&1; then DOCKER=(sudo docker --context default); fi
+  if [[ "${2:-}" == 2 ]]; then
+    echo "READ_ONLY profile=2 container=$CONTAINER_NAME expected_ROS_IP=$UBUNTU_IP"
+    # Send the HOST diagnostic through stdin: an old container need not be patched first.
+    exec "${DOCKER[@]}" exec -i "$CONTAINER_NAME" /usr/local/bin/morai-entrypoint \
+      timeout --signal=INT --kill-after=2s 20s python - < "$SCRIPT_DIR/diagnose_curvature_signal.py"
+  fi
   exec "${DOCKER[@]}" exec "$CONTAINER_NAME" /usr/local/bin/morai-entrypoint \
     timeout --signal=INT --kill-after=2s 15s python \
     /opt/AutoVehicle/morai_ws/docker/final_ws/diagnose_highway.py

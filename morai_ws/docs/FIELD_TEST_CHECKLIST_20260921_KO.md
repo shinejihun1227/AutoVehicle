@@ -37,6 +37,8 @@ Ubuntu 브라우저에 **CAM1 차선·정지선 + CAM4 신호등 + 정지 사유
 적색 신호에서 정지선 앞 정지 → 허용 신호에서 재출발을 확인한다.
 Cam4 보정이 완료되어야 한다. `signal_camera_uncalibrated`로 멈추면 [보정 안내](CURVATURE_SIGNAL_ONLY_KO.md)를 따른다.
 
+출발하지 않으면 새 터미널에서 `bash run_test.sh diagnose 2`를 실행한다. [진단·업데이트 안내](CAMERA_VISUAL_TEST_KO.md).
+
 ## 3. 곡률 주행 + 정지선·신호등 + 장애물 회피
 
 ```bash
@@ -108,10 +110,10 @@ cd "$HOME/AutoVehicle/morai_ws/docker/final_ws"
 [ -f highway-test.env ] || cp highway-test.env.example highway-test.env
 ```
 
-사진에서 확인된 기존 GPU 컨테이너 `morai-highway-gpu`와 현재 IP를 지정한다.
+현재 IP를 지정한다. `CONTAINER_NAME`은 실제 사용하는 컨테이너 이름을 유지한다.
 
 ```bash
-sed -i.bak -e 's/^CONTAINER_NAME=.*/CONTAINER_NAME=morai-highway-gpu/' -e 's/^UBUNTU_IP=.*/UBUNTU_IP=192.168.0.185/' -e 's/^MORAI_IP=.*/MORAI_IP=192.168.0.147/' highway.env
+sed -i.bak -e 's/^UBUNTU_IP=.*/UBUNTU_IP=192.168.0.185/' -e 's/^MORAI_IP=.*/MORAI_IP=192.168.0.147/' highway.env
 ```
 
 호스트에서 받은 코드를 기존 컨테이너에도 복사한다. 기존 파일은 백업하며 신호 카메라 보정값은 보존한다.
@@ -121,7 +123,7 @@ bash run_highway.sh stop && bash install_avoidance_transport.sh && bash install_
 ```
 
 ```bash
-sudo docker --context default exec morai-highway-gpu printenv ROS_IP ROS_MASTER_URI
+source highway.env && sudo docker --context default exec "$CONTAINER_NAME" printenv ROS_IP ROS_MASTER_URI
 ```
 
 출력은 `192.168.0.185`, `http://192.168.0.185:11311`이어야 한다. 다른 주소이면 [컨테이너 네트워크 갱신 안내](TWO_PC_DOCKER_HIGHWAY_KO.md)를 먼저 따른다.

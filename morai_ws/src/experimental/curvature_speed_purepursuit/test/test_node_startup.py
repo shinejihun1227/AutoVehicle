@@ -117,6 +117,14 @@ class StartupTest(unittest.TestCase):
         self.assertEqual((command.accel, command.brake), (0., 1.))
         self.assertEqual(self.node.command_speed_mps, 0.)
 
+    def test_reference_is_published_before_first_odometry(self):
+        self.assertIsNone(self.node.latest_odom)
+        self.node.reference_path_pub.publish.assert_called_once()
+        reference = self.node.reference_path_pub.publish.call_args.args[0]
+        self.assertEqual(reference.header.frame_id, 'map')
+        self.assertEqual(len(reference.poses), len(self.points))
+        self.node.command_pub.publish.assert_not_called()
+
     def test_invalid_initial_speed_cannot_remove_the_start_cap(self):
         for value in (-1., float("nan"), float("inf")):
             with self.subTest(value=value), self.assertRaises(ValueError):

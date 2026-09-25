@@ -18,7 +18,7 @@ cd "$HOME/AutoVehicle/morai_ws/docker/final_ws"
 bash run_highway.sh stop && bash install_curvature_signal.sh && bash run_highway.sh start
 ```
 
-`highway.env`에 지정된 현재 컨테이너를 갱신한다. 기존 코드·설정은 백업하고, 카메라 보정 파일과 모델 가중치는 보존한다. 별도 모델을 다시 학습하거나 교체하지 않는다.
+`highway.env`에 지정된 현재 컨테이너의 곡률 제어 노드·계산 모듈·카메라 화면을 함께 갱신한다. 기존 코드·설정은 백업하고, 카메라 보정 파일과 모델 가중치는 보존한다.
 
 ## 실행
 
@@ -54,9 +54,22 @@ cd "$HOME/AutoVehicle/morai_ws/docker/final_ws" && bash run_test.sh view
 
 ## 출발하지 않을 때
 
+**2번 실행을 켜 둔 채 새 Ubuntu 터미널**에서, 아래 블록을 하나씩 실행한다. 첫 명령은 진단 도구를 호스트에 받으며 실행 중인 컨테이너는 수정하지 않는다.
+
+```bash
+cd "$HOME/AutoVehicle" && git pull --ff-only origin final_ws
+```
+
+```bash
+cd "$HOME/AutoVehicle/morai_ws/docker/final_ws" && bash run_test.sh diagnose 2
+```
+
+약 6초 동안 경로·위치·제어 입력을 수집한다. 출력 전체를 사진으로 남긴다. `pub=NONE`은 발행 노드 미등록, `count=0`은 진단 중 메시지 미수신이다. 기준 경로는 최초 1회 수신으로 정상이며, GPS·IMU의 수신 횟수만으로 위치가 유효하다고 판단하지 않는다.
+
 | 표시 | 확인 내용 |
 |---|---|
 | `MONITOR — 차량 제어 송신 꺼짐` | 영상 확인 모드다. 종료 후 `drive 2`로 실행한다. |
+| `reference_path_not_received` | 곡률 제어 노드의 기준 경로 미수신이다. 최신 노드는 위치 입력 전에도 경로를 발행한다. 노드 시작 오류·컨테이너 코드 버전·ROS 연결을 확인한다. |
 | `camera_observation_stream_stale` | CAM1·CAM4 Destination IP가 `192.168.0.185`인지, 포트가 1101·1131인지, 모델이 실행됐는지 확인한다. |
 | `signal_camera_uncalibrated` | Cam4 보정 미확인 상태다. [보정 절차](CURVATURE_SIGNAL_ONLY_KO.md)에 따라 영상·지도 투영을 검증한다. 이 값만 임의로 true로 바꾸지 않는다. |
 | `unassociated_visible_signal` | 신호등 검출은 있지만 진행 경로의 신호등으로 연결하지 못했다. 선택 신호 ID와 보정값·위치를 확인한다. |
@@ -65,5 +78,7 @@ cd "$HOME/AutoVehicle/morai_ws/docker/final_ws" && bash run_test.sh view
 | 가속 명령이 있는데 계속 정지 | MORAI 외부 제어 모드, 수신 주소 `192.168.0.147:9093`, 기어와 차량 상태를 확인한다. |
 
 저장소 기본 Cam4는 **`calibrated: false`**다. 이것만으로 현재 정지 원인을 단정할 수는 없으며, 화면의 실제 `reason`과 `signal_selection_reason`을 함께 읽는다.
+
+`SAFE_STOP`, `accel: 0`, `brake: 1`이면 제어기가 의도적으로 제동 중이다. `reference_path_not_received`, `odometry_or_route_unavailable`, `nominal_stale_or_not_type1`이 함께 나오면 경로·위치·곡률 명령부터 확인한다. 이 로그만으로 신호등 모델 오류라고 판단하거나 정지 조건을 해제하지 않는다.
 
 화면은 기존 추론의 결과를 최대 5 FPS로 복사해 보여준다. 카메라 UDP 수신·모델 추론을 추가로 실행하지 않고, 제어 판단이나 정지 조건도 바꾸지 않는다. 브라우저를 닫아도 주행은 계속된다.

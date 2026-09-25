@@ -10,7 +10,7 @@ cleanup() {
   rm -rf -- "$FIXTURE"
 }
 trap cleanup EXIT
-cp "$SCRIPT_DIR/"{run_test.sh,run_highway.sh,open_camera_dashboard.sh,highway-test.env.example} "$FIXTURE/"
+cp "$SCRIPT_DIR/"{run_test.sh,run_highway.sh,open_camera_dashboard.sh,diagnose_curvature_signal.py,highway-test.env.example} "$FIXTURE/"
 cp "$SCRIPT_DIR/highway.env.example" "$FIXTURE/highway.env"
 cp "$SCRIPT_DIR/highway-test.env.example" "$FIXTURE/highway-test.env"
 printf '\nOPEN_CAMERA_DASHBOARD=false\n' >> "$FIXTURE/highway-test.env"
@@ -20,6 +20,7 @@ export DOCKER_LOG="$FIXTURE/docker.log"
 cat > "$FIXTURE/bin/docker" <<'STUB'
 #!/usr/bin/env bash
 printf '%s\n' "$@" >> "$DOCKER_LOG"
+if [[ "${!#}" == - ]]; then cat > "$DOCKER_LOG.stdin"; fi
 STUB
 chmod +x "$FIXTURE/bin/docker"
 export PATH="$FIXTURE/bin:$PATH"
@@ -85,4 +86,17 @@ bash "$FIXTURE/run_test.sh" request-merge > /dev/null
 has 'rostopic' "$DOCKER_LOG"
 has '/planning/highway_lane_change_request' "$DOCKER_LOG"
 has 'data: true' "$DOCKER_LOG"
+: > "$DOCKER_LOG"
+bash "$FIXTURE/run_test.sh" diagnose 2 > /dev/null
+has '-i' "$DOCKER_LOG"
+has '20s' "$DOCKER_LOG"
+has 'python' "$DOCKER_LOG"
+cmp "$FIXTURE/diagnose_curvature_signal.py" "$DOCKER_LOG.stdin"
+absent 'roslaunch' "$DOCKER_LOG"
+absent 'cp' "$DOCKER_LOG"
+absent 'pub' "$DOCKER_LOG"
+: > "$DOCKER_LOG"
+bash "$FIXTURE/run_test.sh" diagnose > /dev/null
+has '/opt/AutoVehicle/morai_ws/docker/final_ws/diagnose_highway.py' "$DOCKER_LOG"
+if bash "$FIXTURE/run_test.sh" diagnose 3 > /dev/null 2>&1; then fail 'Accepted unsupported diagnosis'; fi
 echo 'RUN_TEST_RECIPES_PASS (Docker mocked; no driving)'
