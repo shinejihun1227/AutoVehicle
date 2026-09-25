@@ -3,8 +3,9 @@
 set -euo pipefail
 SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 ACTION="${1:-show}"
-if [[ $# -gt 1 || ! "$ACTION" =~ ^(show|monitor|drive|diagnose)$ ]]; then
-  echo 'Usage: bash run_test.sh {show|monitor|drive|diagnose}; edit highway-test.env for parameters.' >&2
+if [[ $# -gt 2 || ! "$ACTION" =~ ^(show|monitor|drive|diagnose|speed|request-merge)$ ]] ||
+   [[ "$ACTION" =~ ^(diagnose|request-merge)$ && $# -gt 1 ]]; then
+  echo 'Usage: bash run_test.sh {show|monitor|drive} [1-5]; or {speed KMH|request-merge|diagnose}' >&2
   exit 2
 fi
 if [[ ! -f "$SCRIPT_DIR/highway.env" || ! -f "$SCRIPT_DIR/highway-test.env" ]]; then
@@ -15,6 +16,27 @@ source "$SCRIPT_DIR/highway.env"
 # The versioned example supplies defaults for fields added by later updates.
 source "$SCRIPT_DIR/highway-test.env.example"
 source "$SCRIPT_DIR/highway-test.env"
+if [[ "$ACTION" == speed ]]; then
+  VALUE="${2:-}"
+  [[ "$VALUE" =~ ^[0-9]+([.][0-9]+)?$ && "$VALUE" =~ [1-9] ]] || {
+    echo 'Usage: bash run_test.sh speed KMH (positive number, e.g. 10)' >&2; exit 2;
+  }
+  cp -p "$SCRIPT_DIR/highway-test.env" "$SCRIPT_DIR/highway-test.env.bak"
+  if grep -q '^MAX_SPEED_KPH=' "$SCRIPT_DIR/highway-test.env"; then
+    sed -i "s/^MAX_SPEED_KPH=.*/MAX_SPEED_KPH=$VALUE/" "$SCRIPT_DIR/highway-test.env"
+  else
+    printf '\nMAX_SPEED_KPH=%s\n' "$VALUE" >> "$SCRIPT_DIR/highway-test.env"
+  fi
+  echo "MAX_SPEED_KPH=$VALUE saved. Restart the driving launch to apply; no live parameter was changed."
+  exit 0
+fi
+if [[ "$ACTION" == request-merge ]]; then
+  DOCKER=(docker --context default)
+  if ! "${DOCKER[@]}" info >/dev/null 2>&1; then DOCKER=(sudo docker --context default); fi
+  echo 'Requesting a left lane change at 5 Hz. Keep this terminal open; Ctrl+C ends the request.'
+  exec "${DOCKER[@]}" exec -it "$CONTAINER_NAME" /usr/local/bin/morai-entrypoint \
+    rostopic pub -r 5 /planning/highway_lane_change_request std_msgs/Bool 'data: true'
+fi
 if [[ "$ACTION" == diagnose ]]; then
   DOCKER=(docker --context default)
   if ! "${DOCKER[@]}" info >/dev/null 2>&1; then DOCKER=(sudo docker --context default); fi
@@ -22,6 +44,16 @@ if [[ "$ACTION" == diagnose ]]; then
     timeout --signal=INT --kill-after=2s 15s python \
     /opt/AutoVehicle/morai_ws/docker/final_ws/diagnose_highway.py
 fi
+# An explicit case selects the configuration without rewriting saved settings.
+case "${2:-$TEST_PROFILE}" in
+  1|curvature) TEST_PROFILE=curvature ;;
+  2|curvature_signal) TEST_PROFILE=curvature_signal ;;
+  3|obstacle_signal) TEST_PROFILE=obstacle_signal ;;
+  4|merge_signal) TEST_PROFILE=merge_signal ;;
+  5|full) TEST_PROFILE=full ;;
+  obstacle|merge) TEST_PROFILE="${2:-$TEST_PROFILE}" ;;
+  *) echo "Unknown test case: ${2:-$TEST_PROFILE}; use 1-5." >&2; exit 2 ;;
+esac
 CONTROL=false
 [[ "$ACTION" != drive ]] || CONTROL=true
 
@@ -61,14 +93,19 @@ case "$TEST_PROFILE" in
       "right_on_green:=$SIGNAL_RIGHT_ON_GREEN"
     )
     ;;
-  full|obstacle|merge)
+  full|obstacle_signal|merge_signal|obstacle|merge)
     LAUNCH=final_ws_highway_bringup.launch
-    YOLO=false; HIGHWAY=true
-    [[ "$TEST_PROFILE" != full ]] || YOLO=true
-    [[ "$TEST_PROFILE" != obstacle ]] || HIGHWAY=false
+    YOLO=true; HIGHWAY=true; AVOIDANCE=true
+    case "$TEST_PROFILE" in
+      obstacle) YOLO=false; HIGHWAY=false ;;
+      merge) YOLO=false ;;
+      obstacle_signal) HIGHWAY=false ;;
+      merge_signal) AVOIDANCE=false ;;
+    esac
     PROFILE_ARGS=(
       "enable_yolo:=$YOLO" "enable_stopline_control:=$YOLO"
       "enable_highway_lane_change:=$HIGHWAY"
+      "enable_obstacle_avoidance:=$AVOIDANCE"
       "enable_lane_info_publisher:=true" "enforce_camera_lane_bounds_on_bypass:=true"
       "lane_info_device:=$LANE_INFO_DEVICE" "lane_info_every:=$LANE_INFO_EVERY"
       "lane_info_port:=$LANE_INFO_PORT" "yolo_port:=$YOLO_PORT"

@@ -161,6 +161,11 @@ class AvoidancePathManager:
             rospy.get_param("~max_commit_heading_error_deg", 35.0)
         )
 
+        # Disable automatic detours independently of requested highway merges.
+        # A blocked route still produces a stop; sensing is never bypassed.
+        self.enable_obstacle_avoidance = bool(
+            rospy.get_param("~enable_obstacle_avoidance", True)
+        )
         # First controlled stage intentionally executes bypass only.
         self.allow_lane_change_control = bool(
             rospy.get_param("~allow_lane_change_control", False)
@@ -924,7 +929,10 @@ class AvoidancePathManager:
                 self.state = self.STOP_PLANNER
                 stop_required = True
             elif self.avoidance_required:
-                if self.safe_path_available and self._kind_is_allowed():
+                if not self.enable_obstacle_avoidance:
+                    self.state = "STOP_AVOIDANCE_DISABLED"
+                    stop_required = True
+                elif self.safe_path_available and self._kind_is_allowed():
                     if self._commit_selected(now, pose):
                         remaining, _nearest, fraction, rem_dist = self._remaining_committed(x, y)
                         remaining_fraction = fraction
@@ -957,6 +965,7 @@ class AvoidancePathManager:
             "stop_required": stop_required,
             "active_source": active_source,
             "planner": {
+                "enable_obstacle_avoidance": self.enable_obstacle_avoidance,
                 "avoidance_required": self.avoidance_required,
                 "safe_path_available": self.safe_path_available,
                 "selected_kind": self.selected_kind,

@@ -18,6 +18,7 @@
   <arg name="enforce_camera_lane_bounds_on_bypass" default="true" />
   <arg name="max_lane_changes" default="1" />
   <arg name="enable_highway_lane_change" default="true" />
+  <arg name="enable_obstacle_avoidance" default="true" />
   <arg name="roi_lidar_port" default="2001" />
   <arg name="roi_lidar_host_port" default="2000" />
   <arg name="enable_stopline_control" default="true" />
@@ -114,6 +115,7 @@
     <param name="enable_intersection_bypass" value="false" />
   </node>
   <node pkg="purepursuit_mgeo" type="avoidance_path_manager_node.py" name="avoidance_path_manager" output="screen">
+    <param name="enable_obstacle_avoidance" value="$(arg enable_obstacle_avoidance)" />
     <param name="path_file" value="$(arg path_file)" />
     <param name="map_frame" value="map" />
     <param name="odom_topic" value="/localization/odometry" />

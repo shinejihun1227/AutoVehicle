@@ -12,3 +12,5 @@ morai_ws/docker/final_ws/highway.env
 morai_ws/docker/final_ws/highway-test.env
 morai_ws/docker/final_ws/highway.env.backup-*
 morai_ws/docker/final_ws/highway-test.env.good-*
+morai_ws/docker/final_ws/highway.env.bak
+morai_ws/docker/final_ws/highway-test.env.bak

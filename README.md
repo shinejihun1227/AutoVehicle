@@ -1,8 +1,7 @@
 # MORAI 자율주행 통합 저장소
 
-현장에서 실행할 시험 순서·명령·통과 기준·결과 기록표는
-[MORAI 현장 테스트 체크리스트 — 2026-09-25 개정](morai_ws/docs/FIELD_TEST_CHECKLIST_20260921_KO.md)에 정리했습니다.
-현재 GitHub 코드의 `curvature` → `curvature_signal` → `obstacle` → `merge` → `full` 순서로 검증합니다.
+현장 실행은 [주행 테스트 5가지 — 간단 실행 안내](morai_ws/docs/FIELD_TEST_CHECKLIST_20260921_KO.md)를 사용합니다.
+곡률 → 신호 정지 → 장애물 회피 → 끼어들기 → 전체 조합을 번호로 선택하고, 최고속도도 한 줄로 변경합니다.
 
 Ubuntu 22.04 + RTX 4090 제어 PC와 Windows MORAI를 사용하는 경우:
 **[Docker 처음 설치 → 재부팅 후 실행 → 기능별 테스트 안내](morai_ws/docs/TWO_PC_DOCKER_HIGHWAY_KO.md)**를 따릅니다.

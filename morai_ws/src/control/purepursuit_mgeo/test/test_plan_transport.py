@@ -85,6 +85,39 @@ class PlanTransportTest(unittest.TestCase):
         self.assertFalse(n._base_bundle_fresh(Stamp()))
         self.assertFalse(n.base_status['planner_ready'])
 
+    def test_merge_only_does_not_commit_any_automatic_detour(self):
+        for kind in ('bypass', 'lane_change'):
+            with self.subTest(kind=kind):
+                n = self.make(MANAGER, MANAGER.AvoidancePathManager)
+                n.enable_obstacle_avoidance = False
+                n.allow_lane_change_control = True
+                n.latest_odom = NS(pose=NS(pose=PoseStamped().pose))
+                n._sensors_fresh = Mock(return_value=(True, {}))
+                n.avoidance_required = n.safe_path_available = True
+                n.selected_kind = kind
+                n._commit_selected = Mock()
+                n.trajectory_pub = Mock()
+                n._timer_cb(None)
+                n._commit_selected.assert_not_called()
+                payload = json.loads(n.trajectory_pub.publish.call_args.args[0].data)
+                self.assertTrue(payload['stop_required'])
+                self.assertEqual(payload['reason'], 'STOP_AVOIDANCE_DISABLED')
+                self.assertTrue(all(p[1] == 0.0 for p in payload['path']['points']))
+
+    def test_merge_only_clear_road_still_requires_fresh_sensors(self):
+        for fresh in (True, False):
+            with self.subTest(fresh=fresh):
+                n = self.make(MANAGER, MANAGER.AvoidancePathManager)
+                n.enable_obstacle_avoidance = False
+                n.latest_odom = NS(pose=NS(pose=PoseStamped().pose))
+                n._sensors_fresh = Mock(return_value=(fresh, {}))
+                n.avoidance_required = False
+                n.trajectory_pub = Mock()
+                n._timer_cb(None)
+                payload = json.loads(n.trajectory_pub.publish.call_args.args[0].data)
+                self.assertEqual(payload['stop_required'], not fresh)
+                self.assertEqual(n.state, n.NORMAL if fresh else n.STOP_PLANNER)
+
     def test_manager_unsafe_decision_does_not_wait_for_path_topic(self):
         n = self.make(MANAGER, MANAGER.AvoidancePathManager)
         n._plan_status_cb(plan(1)[1])
@@ -134,6 +167,9 @@ class PlanTransportTest(unittest.TestCase):
         for name, (key, value) in expected.items():
             node = root.find("node[@name='%s']" % name)
             self.assertEqual(node.find("param[@name='%s']" % key).get('value'), value)
+        self.assertEqual(root.find("arg[@name='enable_obstacle_avoidance']").get('default'), 'true')
+        self.assertEqual(root.find("node[@name='avoidance_path_manager']/param[@name='enable_obstacle_avoidance']").get('value'),
+                         '$(arg enable_obstacle_avoidance)')
 
 
 if __name__ == '__main__': unittest.main()
