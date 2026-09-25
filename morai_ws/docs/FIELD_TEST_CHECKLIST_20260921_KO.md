@@ -222,10 +222,112 @@ rosparam get /adaptive_curvature_purepursuit/trajectory_topic
 
 **장소:** 신호·장애물이 없는 원래 경로의 직선 구간. 경로 끝이나 교차로 안에서 시작하지 않는다. `curvature`는 신호와 장애물 정지를 실행하지 않는다.
 
-1. `curvature`, `MAX_SPEED_KPH=3.0`으로 `show` → `monitor` 확인 후 `drive`한다.
-2. 정지 상태에서 출발하고 다시 같은 시작점에 놓아 3회 반복한다. 이동 후 위치를 강제로 바꿨다면 launch도 다시 시작해 경로 진행 상태를 초기화한다.
-3. 통과 후 `MAX_SPEED_KPH=5.0`, 다음 `10.0`으로 각각 launch를 재시작한다.
-4. 같은 직선에서 가속을 확인한 뒤 커브 진입 전 감속, 커브 안 조향, 탈출 후 재가속을 확인한다.
+**진행 조건:** T01~T02를 완료하고 컨테이너에 최신 코드가 적용된 상태에서 시작한다. 아래 주행 명령은 **일반 Ubuntu 터미널 A**에 입력한다. `run_test.sh`가 Docker 안의 `morai_udp_ekf_purepursuit.launch`를 실행하므로 주행을 위해 별도로 컨테이너에 들어갈 필요는 없다. 관측용 터미널 B만 아래 안내대로 컨테이너에 접속한다.
+
+### T03-1. 3 km/h 설정과 제어 OFF 확인 — Ubuntu 터미널 A
+
+T02의 `monitor`가 아직 실행 중이면 그 터미널에서 `Ctrl+C`로 끝낸다. 다른 주행 launch가 실행 중이었다면 MORAI에서 먼저 차량을 정지시키고 외부 제어를 해제한 뒤 launch를 종료한다.
+
+```bash
+cd "$HOME/AutoVehicle/morai_ws/docker/final_ws"
+cp -p highway-test.env "highway-test.env.backup-$(date +%Y%m%d-%H%M%S)"
+sed -i -e 's/^TEST_PROFILE=.*/TEST_PROFILE=curvature/' \
+       -e 's/^MAX_SPEED_KPH=.*/MAX_SPEED_KPH=3.0/' highway-test.env
+bash run_highway.sh start
+bash run_test.sh show
+```
+
+출력에서 다음 세 항목을 확인한다. 다르면 진행하지 말고 설정 파일을 확인한다.
+
+```text
+Profile=curvature  action=show  max_speed_kph=3.0
+Ubuntu=192.168.0.185  MORAI=192.168.0.147
+Launch=morai_udp_ekf_purepursuit.launch
+```
+
+`Ubuntu=...` 뒤에는 컨테이너 이름, `Launch=...` 뒤에는 안내 문장이 추가된다.
+
+```bash
+bash run_test.sh monitor
+```
+
+이 명령은 계속 실행되는 것이 정상이다. MORAI의 GPS·IMU·차량 상태 송신을 켜고 T02의 위치 갱신을 확인한다. `curvature`의 `monitor`에서는 차량이 출발하지 않으며 `/ctrl_cmd` 메시지가 없을 수 있다.
+
+### T03-2. 실제 출발 — 같은 Ubuntu 터미널 A
+
+확인이 끝나면 `monitor` 터미널에서 **`Ctrl+C`를 눌러 종료하고 `$` 프롬프트가 돌아온 뒤** 다음 블록을 실행한다. MORAI 차량은 원래 경로 위의 지정한 시작점에 정지시켜 두고 외부 제어를 받을 수 있도록 설정한다.
+
+```bash
+cd "$HOME/AutoVehicle/morai_ws/docker/final_ws"
+bash run_test.sh drive
+```
+
+**`drive`는 실제 MORAI 차량 제어 송신을 켠다.** 최고속도 3 km/h에서 속도 명령과 가속 명령이 증가하고 차량이 출발하는지 확인한다. 관측값은 다음 터미널 B에서 확인한다.
+
+### T03-3. 속도·제어 명령 확인 — 별도 터미널 B
+
+새 **일반 Ubuntu 터미널 B**에서 컨테이너에 접속한다.
+
+```bash
+cd "$HOME/AutoVehicle/morai_ws/docker/final_ws"
+bash run_highway.sh shell
+```
+
+이후 아래 명령만 **컨테이너 안**에 입력한다. 터미널 A의 `drive`는 계속 실행 중이어야 한다.
+
+```bash
+rosparam get /morai_udp_drive_bridge/control_output_enabled
+rosparam get /curvature_speed_purepursuit/max_speed_kph
+timeout -k 2s 5s rostopic echo -n 1 /experimental/curvature_speed_limit
+timeout -k 2s 5s rostopic echo -n 1 /experimental/curvature_speed_command
+timeout -k 2s 5s rostopic echo -n 1 /experimental/curvature_goal_reached
+timeout -k 2s 5s rostopic echo -n 1 /ctrl_cmd
+timeout -k 2s 5s rostopic echo -n 1 /localization/odometry
+```
+
+첫 두 값은 `true`, `3.0`이어야 한다. 경로 중간의 정상 출발점에서는 `curvature_goal_reached=false`를 기대한다. 정지해 있으면 속도 명령이 0인지, 최종 명령에 제동이 있는지, MORAI가 명령을 받는지를 나누어 확인한다. 명령은 각 토픽을 한 번씩 읽으므로 시간에 따른 변화는 반복 조회하거나 9절의 rosbag으로 기록한다.
+
+같은 시작점에서 **3회 반복**한다. 매회 MORAI에서 차량 정지·외부 제어 해제 → 터미널 A에서 `Ctrl+C` → 시작 위치 재배치 → 외부 제어 수신 준비 → 터미널 A에서 `bash run_test.sh drive` 순서로 진행한다. 차량 위치를 강제로 바꾼 뒤에는 launch도 다시 시작해 경로 진행 상태를 초기화한다. 터미널 B의 조회 종료는 차량을 정지시키지 않는다.
+
+### T04-1. 5 km/h 직선·커브 시험 — Ubuntu 터미널 A
+
+T03 통과 후 진행한다. **MORAI에서 차량을 정지시키고 외부 제어를 해제한 다음**, 터미널 A의 `drive`를 `Ctrl+C`로 종료한다. 같은 시작점으로 차량을 재배치하고 아래를 실행한다.
+
+```bash
+cd "$HOME/AutoVehicle/morai_ws/docker/final_ws"
+sed -i -e 's/^TEST_PROFILE=.*/TEST_PROFILE=curvature/' \
+       -e 's/^MAX_SPEED_KPH=.*/MAX_SPEED_KPH=5.0/' highway-test.env
+bash run_test.sh show
+```
+
+`Profile=curvature`, `max_speed_kph=5.0`, Ubuntu `.185`와 MORAI `.147`을 확인한다. MORAI에서 외부 제어 수신을 준비한 뒤 **같은 터미널 A**에서 실행한다.
+
+```bash
+bash run_test.sh drive
+```
+
+직선에서 5 km/h 목표로 가속하고, 커브 진입 전 목표속도 감소 → 커브 안 경로 추종 → 탈출 후 재가속을 확인한다. 터미널 B에서는 T03-3의 명령을 다시 사용한다. `max_speed_kph` 파라미터가 `5.0`인지도 확인한다.
+
+### T04-2. 10 km/h 반복 — Ubuntu 터미널 A
+
+5 km/h 시험을 통과한 뒤 같은 정지·launch 종료·시작점 재배치 절차를 거친다.
+
+```bash
+cd "$HOME/AutoVehicle/morai_ws/docker/final_ws"
+sed -i -e 's/^TEST_PROFILE=.*/TEST_PROFILE=curvature/' \
+       -e 's/^MAX_SPEED_KPH=.*/MAX_SPEED_KPH=10.0/' highway-test.env
+bash run_test.sh show
+```
+
+`Profile=curvature`, `max_speed_kph=10.0`, 두 PC 주소를 확인하고 MORAI에서 외부 제어 수신을 준비한 뒤 실행한다.
+
+```bash
+bash run_test.sh drive
+```
+
+5 km/h와 같은 구간에서 직선 가속·커브 감속·조향·탈출 후 재가속을 비교한다. 터미널 B의 `max_speed_kph` 파라미터는 `10.0`이어야 한다. **실행 중 `highway-test.env`만 수정해도 이미 실행된 노드의 값은 바뀌지 않는다.** 속도를 바꿀 때마다 위 순서대로 launch를 종료하고 다시 실행한다.
+
+### T03~T04 관측값과 통과 기준
 
 | 관측값 | 토픽·기록 방법 |
 | --- | --- |
