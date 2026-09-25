@@ -1,0 +1,2 @@
+cd "$HOME/AutoVehicle/morai_ws/docker/final_ws" 
+docker --context default ps -a --format 'table {{.Names}}\t{{.Image}}\t{{.Status}}' grep -E '^(CONTAINER_NAME|IMAGE_NAME)=' highway.env
