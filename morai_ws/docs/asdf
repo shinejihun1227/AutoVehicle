@@ -1,8 +1,1 @@
-① 작업 폴더로 이동:
-cd "$HOME/AutoVehicle/morai_ws/docker/final_ws"
-② 기존 설정을 백업하고 컨테이너 이름 수정:
-cp -p highway.env "highway.env.backup-$(date +%Y%m%d-%H%M%S)" && sed -i 's/^CONTAINER_NAME=.*/CONTAINER_NAME=morai-highway-gpu/' highway.env
-③ 컨테이너 시작:
-bash run_highway.sh start
-④ 컨테이너에 저장된 ROS 주소 확인:
-sudo docker --context default exec morai-highway-gpu printenv ROS_IP ROS_MASTER_URI
+cd "$HOME/AutoVehicle/morai_ws/docker/final_ws" && source highway.env && sudo docker --context default exec "$CONTAINER_NAME" /usr/local/bin/morai-entrypoint timeout 5s rostopic echo -n 1 /control/maneuver_status
