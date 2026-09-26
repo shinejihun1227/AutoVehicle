@@ -7,3 +7,5 @@ bash run_highway.sh start
 
 cd ~/AutoVehicle/morai_ws/docker/final_ws
 bash run_test.sh drive 2
+
+bash run_test.sh diagnose 2
