@@ -136,7 +136,7 @@
     <param name="require_route_signal_context" value="true" />
     <param name="require_reference_path_match" value="true" />
     <param name="require_fresh_camera_stream" value="true" />
-    <param name="unmapped_stopline_horizon_m" value="20.0" />
+    <param name="signal_association_horizon_m" value="20.0" />
     <param name="require_sensor_quality" value="false" />
     <param name="require_fresh_safety" value="false" />
     <!-- Isolate optional input from old safety publishers in the same ROS master. -->
