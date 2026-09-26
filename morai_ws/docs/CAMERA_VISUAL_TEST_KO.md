@@ -94,11 +94,12 @@ cd "$HOME/AutoVehicle/morai_ws/docker/final_ws" && bash run_test.sh diagnose 2
 |---|---|
 | `MONITOR — 차량 제어 송신 꺼짐` | 영상 확인 모드다. 종료 후 `drive 2`로 실행한다. |
 | `reference_path_not_received` | 곡률 제어 노드의 기준 경로 미수신이다. 최신 노드는 위치 입력 전에도 경로를 발행한다. 노드 시작 오류·컨테이너 코드 버전·ROS 연결을 확인한다. |
-| `camera_observation_stream_stale` | CAM1·CAM4 Destination IP가 `192.168.0.185`인지, 포트가 1101·1131인지, 모델이 실행됐는지 확인한다. |
+| `camera_observation_stream_stale` | 이전 일반 신호 융합 모드에서 쓰는 사유다. 현재 경로기반 모드에서는 일반 구간의 카메라 누락만으로 정지하지 않는다. 신호 교차로에서 CAM4가 유효하지 않으면 지도상 정지 위치에서 허가를 기다린다. |
 | `signal_camera_uncalibrated` | Cam4 보정 미확인 상태다. [보정 절차](CURVATURE_SIGNAL_ONLY_KO.md)에 따라 영상·지도 투영을 검증한다. 이 값만 임의로 true로 바꾸지 않는다. |
 | `unassociated_visible_signal` | 신호등 검출은 있지만 진행 경로의 신호등으로 연결하지 못했다. 선택 신호 ID와 보정값·위치를 확인한다. |
 | `unmapped_signal_or_stopline` | 경로의 신호등 교차로 정보를 찾지 못한 채 신호등 검출이 들어왔다. 정지선 영상만으로는 이 정지 사유가 되지 않는다. 경로·MGeo 신호 연결과 CAM4 검출을 확인한다. |
-| 신호등 없는 곳의 정지선에서 정지 | 정지선 영상만으로는 정지 명령을 내리지 않는다. 지도에서 현재 주행 경로와 연결된 신호등 교차로만 이벤트로 선택하고, 해당 신호 상태와 지도상의 정지 위치로 진입을 판단한다. |
+| 신호등 없는 곳의 정지선에서 정지 | 정지선 영상만으로는 정지 명령을 내리지 않는다. 지도에서 현재 주행 경로와 연결된 신호등 교차로만 이벤트로 선택하고, 해당 신호 상태와 지도상의 정지 위치로 진입을 판단한다. 신호 이벤트가 없는 구간에서는 곡률 경로 주행을 유지한다. |
+| `route_context_unavailable`만 나오는데 정지 | 이 상태는 현재 위치에 경로상 신호등 이벤트가 없다는 뜻이다. 곡률 경로·위치가 정상이라면 이것만으로는 정지하지 않는다. `odometry_or_route_unavailable` 또는 `signal_localization_unreliable`가 함께 나오면 차량 위치와 기준 경로를 확인한다. |
 | `signal_localization_unreliable` / `odometry_or_route_unavailable` | GPS·IMU 수신과 차량의 경로상 위치를 확인한다. |
 | `nominal_stale_or_not_type1` | 곡률 제어 노드가 종료됐거나 정상 명령을 내보내지 못했다. 주행 터미널 오류를 확인한다. |
 | 가속 명령이 있는데 계속 정지 | MORAI 외부 제어 모드, 수신 주소 `192.168.0.147:9093`, 기어와 차량 상태를 확인한다. |

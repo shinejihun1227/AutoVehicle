@@ -61,6 +61,8 @@ FOV 항목을 설명하지만 그 축을 명시하지 않는다. 메인 뷰 카�
   변환식은 `HFOV = 2 × atan((width / height) × tan(VFOV / 2))`다.
 - 실제 영상에서 신호등 위치와 투영 위치가 일치하는지 확인한 뒤 `calibrated: true`로 설정한다.
 
+확인할 때는 먼저 제어 송신이 꺼진 `bash run_test.sh monitor 2`로 실행하고 Ubuntu 브라우저의 카메라 화면을 연다. CAM4에 표시되는 **분홍 원은 현재 경로상 신호등의 지도 투영 위치**다. 차량이 접근하는 동안 분홍 원이 해당 신호등 상자 안의 실제 램프 위치와 여러 프레임에서 맞는지 확인한다. 맞지 않으면 수평 FOV 축과 `horizontal_fov_deg`, `pitch_deg`, `yaw_deg`를 조정한다. 다른 신호등에 맞거나 한 거리에서만 맞으면 보정 완료로 처리하지 않는다.
+
 | 설정 | 입력할 값 |
 |---|---|
 | `width`, `height` | YOLO 입력 원본 영상의 가로·세로 픽셀 |
@@ -139,9 +141,9 @@ rostopic info /ctrl_cmd
 | 상태/사유 | 의미 |
 |---|---|
 | `signal_camera_uncalibrated` | 1131 카메라 보정이 미완료 |
-| `route_context_unavailable` | 경로와 MGeo 신호 연결을 만들지 못함 |
+| `route_context_unavailable` | 현재 위치에 적용할 경로 신호 연결이 없음. 신호 이벤트가 없는 구간에서는 이 항목만으로 정지하지 않고 곡률 경로 주행을 계속한다. |
 | `unassociated_visible_signal` | 화면의 신호등을 경로에 해당하는 지도 신호등으로 확정하지 못함 |
-| `camera_observation_stream_stale` | 카메라/신호 관측 메시지가 끊김 |
+| `camera_observation_stream_stale` | 구형 일반 모드 사유. 현재 경로기반 모드에서는 일반 구간의 카메라 누락만으로 정지하지 않으며, 경로 신호 구간에서는 선택 신호가 UNKNOWN이라 정지 위치에서 대기한다. |
 | `odometry_or_route_unavailable` | 위치·속도 또는 경로 투영이 유효하지 않음 |
 | `reference_path_not_received` 또는 `reference_path_match=false` | 곡률 제어기의 전체 경로를 확인하지 못했거나 불일치 |
 | `awaiting_confirmed_green` | 현재 경로 방향에 맞는 허용 신호 확인을 기다림 |

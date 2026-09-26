@@ -8,12 +8,12 @@ from urllib.parse import urlsplit, parse_qs
 
 
 EXPLANATIONS = {
-    'camera_observation_stream_stale': 'CAM1 정지선 또는 CAM4 신호 관측이 오래되거나 들어오지 않습니다.',
+    'camera_observation_stream_stale': '카메라 관측이 오래되거나 들어오지 않습니다. 일반 구간은 곡률 경로를 따르고, 신호 교차로는 확인된 신호 허가 전까지 정지 위치에서 대기합니다.',
     'signal_observation_stale': 'CAM4 신호등 검출 결과가 들어오지 않거나 지연됐습니다.',
     'signal_camera_uncalibrated': 'Cam4 보정 확인이 완료되지 않아 경로별 신호 허가를 낼 수 없습니다.',
     'signal_pose_unsynchronized': 'CAM4 프레임 시각과 차량 위치 시각을 맞추지 못했습니다.',
     'stopline_pose_unsynchronized': '정지선 프레임 시각과 차량 위치 시각을 맞추지 못했습니다.',
-    'route_context_unavailable': '유효한 차량 위치 또는 현재 교차로·신호등 연결 정보를 확보하지 못했습니다.',
+    'route_context_unavailable': '현재 위치에서 경로 신호등 연결을 찾지 못했습니다. 신호등 이벤트가 없는 구간에서는 곡률 경로 주행을 계속합니다.',
     'reference_path_not_received': '곡률 제어 노드가 발행하는 기준 경로를 받지 못했습니다.',
     'signal_localization_unreliable': '차량 위치를 기준 경로에 유효하게 연결하지 못했습니다.',
     'odometry_or_route_unavailable': '유효한 위치·속도 또는 기준 경로가 없습니다.',

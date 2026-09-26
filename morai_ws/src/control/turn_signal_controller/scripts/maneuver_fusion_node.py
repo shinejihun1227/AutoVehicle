@@ -60,11 +60,9 @@ class ManeuverFusionNode:
         self.preview_m = float(rospy.get_param("~route_preview_m", 30.0))
         self.turn_threshold = float(rospy.get_param("~turn_threshold_deg", 25.0))
         self.max_route_error = float(rospy.get_param("~max_route_error_m", 3.0))
-        self.signal_association_horizon_m = float(
-            rospy.get_param("~signal_association_horizon_m", 20.0))
         if not all(math.isfinite(v) and v > 0 for v in
                    (self.timeout, self.signal_timeout, self.preview_m, self.turn_threshold,
-                    self.max_route_error, self.signal_association_horizon_m)):
+                    self.max_route_error)):
             raise ValueError("Fusion distances, thresholds and timeouts must be positive and finite")
         self.require_quality = bool(rospy.get_param("~require_sensor_quality", True))
         self.require_safety = bool(rospy.get_param("~require_fresh_safety", True))
@@ -110,7 +108,6 @@ class ManeuverFusionNode:
         self.signal_queue_limit = 32
         self.signal_queue_fault = None
         self.signal_queue_overflows = 0
-        self.unmapped_signal_seen = False
         self.next_guard_id = None
         self.next_guard_core = None
         # Explicit simulator-only opt-out when the MORAI build has no lamp API.
@@ -342,8 +339,7 @@ class ManeuverFusionNode:
             return False
         self.corridor_reason = "junction_or_observation_guard"
         if (not self.require_context or not self.contexts or self.event is not None
-                or line is None or objects is None or line.value.valid or objects.value.objects
-                or self.unmapped_signal_seen):
+                or line is None or objects is None or line.value.valid or objects.value.objects):
             return False
         horizon = max(40., speed * 6. + speed**2 / (2. * self.core.planning_decel_mps2))
         guards = list(self.contexts) + [dict(id=m.identifier, start=m.start_s_m, end=m.end_s_m) for m in self.manual]
@@ -497,6 +493,35 @@ class ManeuverFusionNode:
             selection = Selection("UNKNOWN", 0.0, False, None, "signal_projection_invalid")
         return selection
 
+    def projected_route_heads(self, objects, event):
+        """Expose map-head pixel projections for visual calibration only."""
+        if objects is None or not event or not event.get("signal_points"):
+            return {}
+        pose_sample = min(self.pose_history, key=lambda p: abs(p.stamp - objects.stamp), default=None)
+        if (pose_sample is None or pose_sample.value.header.frame_id != "map"
+                or abs(pose_sample.stamp - objects.stamp) > 0.05):
+            return {}
+        pose = pose_sample.value.pose.pose
+        try:
+            q = pose.orientation
+            norm = math.sqrt(q.x*q.x + q.y*q.y + q.z*q.z + q.w*q.w)
+            if not math.isfinite(norm) or abs(norm - 1.0) > 0.01:
+                return {}
+            ego = dict(
+                x=pose.position.x, y=pose.position.y, z=pose.position.z,
+                yaw=math.atan2(2*(q.w*q.z + q.x*q.y), 1-2*(q.y*q.y + q.z*q.z)),
+                roll=math.atan2(2*(q.w*q.x + q.y*q.z), 1-2*(q.x*q.x + q.y*q.y)),
+                pitch=math.asin(clamp(2*(q.w*q.y - q.z*q.x), -1.0, 1.0)),
+            )
+            result = {}
+            for head in event["signal_points"]:
+                pixel = project_signal(head, ego, self.camera)
+                if pixel is not None:
+                    result[str(head["id"])] = [round(pixel[0], 1), round(pixel[1], 1)]
+            return result
+        except (ValueError, TypeError, AttributeError, KeyError, OverflowError):
+            return {}
+
     def send_lamp(self, direction, now, ros_now):
         success = False
         if self.socket is not None:
@@ -572,8 +597,6 @@ class ManeuverFusionNode:
                     # Pre-arm only a route-matched signal, route-matched line,
                     # or a junction already inside its stopping horizon.
                     self.event = candidate
-                    if candidate.get("source") == "mgeo":
-                        self.unmapped_signal_seen = False
             return
         for maneuver in self.manual:
             if maneuver.identifier in self.completed:
@@ -687,7 +710,6 @@ class ManeuverFusionNode:
                 self.selection_context, self.selection_stamp = None, 0.0
                 self.signal_observations.clear()
                 self.signal_queue_fault = None
-                self.unmapped_signal_seen = False
                 self.next_guard_id = self.next_guard_core = None
                 self.corridor_anchor = self.corridor_last = None
                 self.corridor_distance = 0.
@@ -766,16 +788,6 @@ class ManeuverFusionNode:
                 chosen = self.selected_signal(objects, event, route_valid and not motion.fault)
                 signal_ok = chosen.valid
                 permitted = chosen.valid and signal_permits(chosen.state, direction, self.right_on_green)
-                horizon_speed = speed if finite(speed) and speed >= 0.0 else 0.0
-                signal_horizon = max(
-                    self.signal_association_horizon_m,
-                    horizon_speed * self.core.reaction_time_sec
-                    + horizon_speed * horizon_speed / (2.0 * self.core.planning_decel_mps2)
-                    + self.core.hold_distance_m + self.core.trigger_margin_m,
-                )
-                if event is None and not self.contexts and objects is not None and objects.value.objects:
-                    # A missing route-signal map is a configuration fault.
-                    self.unmapped_signal_seen = True
             committed = bool(event and event["committed"])
 
             if event and event["kind"] == "lane_change":
@@ -833,7 +845,7 @@ class ManeuverFusionNode:
                 elif self.require_context and event:
                     effective = "GREEN" if permitted and ready and route_valid else "RED"
                     self.core.observe_signal(effective, 1.0, True, ros_now, now, ros_now)
-                elif signal is not None:
+                elif signal is not None and not self.require_context:
                     effective = "GREEN" if permitted and ready and route_valid else "RED"
                     self.core.observe_signal(effective, signal.value.confidence, signal_ok,
                                              signal.stamp, signal.received, ros_now)
@@ -874,24 +886,14 @@ class ManeuverFusionNode:
             reasons = [motion.fault] if motion.fault else []
             # UNKNOWN/no line is a valid new image observation. No new stamped
             # observations is a dead camera/inference stream, including mid-turn.
-            if self.require_camera_stream and (signal is None or line is None):
+            if (self.require_camera_stream and not self.require_context
+                    and (signal is None or line is None)):
                 reasons.append("camera_observation_stream_stale")
             if self.require_reference_path and not self.reference_path_match:
                 reasons.append(self.reference_path_reason)
             if self.require_context:
-                if objects is None:
-                    reasons.append("signal_observation_stale")
-                if not self.contexts:
-                    reasons.append("route_context_unavailable")
-                if self.unmapped_signal_seen:
-                    reasons.append("unmapped_signal_or_stopline")
                 if not route_valid and not corridor_ok:
                     reasons.append("signal_localization_unreliable")
-                if (event and not committed and event["kind"] != "lane_change"
-                        and event["start"] - self.progress <= signal_horizon
-                        and objects is not None and objects.value.objects
-                        and self.selection.selected_id is None):
-                    reasons.append("unassociated_visible_signal")
                 if (event and route_valid and line is not None and line.value.valid
                         and line.value.header.frame_id == "base_link"
                         and finite(line.value.distance_m) and 0 <= line.value.distance_m <= 50
@@ -952,6 +954,7 @@ class ManeuverFusionNode:
             requested_accel = output.accel
             output.accel = self.accel_limiter.limit(output.accel, output.brake, now, ros_now)
             self.output_pub.publish(output)
+            route_signal_pixels = self.projected_route_heads(objects, event)
             permission_state = (self.selection.state if self.require_context
                                 else signal.value.state if signal else "UNKNOWN")
             allowed_directions = sorted(signal_allowed_directions(permission_state, self.right_on_green)) if signal_ok else []
@@ -997,6 +1000,7 @@ class ManeuverFusionNode:
                 "signal_processed_stamp": self.selection_stamp if self.require_context else self.core.last_signal_stamp,
                 "selected_signal_id": self.selection.selected_id if self.require_context else None,
                 "selected_signal_state": self.selection.state if self.require_context else None,
+                "route_signal_projection_px": route_signal_pixels,
                 "accel": output.accel, "brake": output.brake,
             }, allow_nan=False)))
 
