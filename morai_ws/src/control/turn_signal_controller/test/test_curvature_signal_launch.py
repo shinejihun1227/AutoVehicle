@@ -20,6 +20,8 @@ class CurvatureSignalLaunchTest(unittest.TestCase):
         self.assertNotIn("adaptive_curvature_purepursuit_node.py", types)
         pp = self.root.find("node[@type='curvature_speed_purepursuit_node.py']")
         self.assertEqual(self.param(pp, "command_topic"), "/control/ctrl_cmd")
+        self.assertEqual(self.param(pp, "stopline_speed_cap_enabled"), "true")
+        self.assertEqual(self.param(pp, "stopline_approach_speed_kph"), "$(arg stopline_approach_speed_kph)")
         self.assertEqual(self.param(self.fusion, "nominal_command_topic"), "/control/ctrl_cmd")
         self.assertEqual(self.param(self.fusion, "output_command_topic"), "/ctrl_cmd")
         self.assertEqual(self.param(pp, "path_file"), self.param(self.fusion, "path_file"))

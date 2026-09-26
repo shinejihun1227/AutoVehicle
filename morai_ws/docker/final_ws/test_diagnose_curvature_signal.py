@@ -34,12 +34,13 @@ class DiagnosticTest(unittest.TestCase):
                    'morai_msgs.msg': NS(CtrlCmd=object),
                    'morai_perception_msgs.msg': NS(StopLineDetection=object),
                    'common.msg': NS(ObjectInfoArray=object),
-                   'nav_msgs.msg': NS(Odometry=object, Path=object), 'std_msgs.msg': NS(String=object)}
+                   'nav_msgs.msg': NS(Odometry=object, Path=object),
+                   'std_msgs.msg': NS(String=object, Bool=object, Float64=object)}
         output = io.StringIO()
         with patch.dict(sys.modules, modules), patch.object(diagnostic, 'recent_errors', return_value=[]), \
              patch.object(diagnostic, 'time', NS(monotonic=lambda: now[0], sleep=advance)), redirect_stdout(output):
             diagnostic.main()
-        self.assertEqual(output.getvalue().count('count=0 age=NONE pub=NONE'), 11)
+        self.assertEqual(output.getvalue().count('count=0 age=NONE pub=NONE'), 13)
         self.assertIn('CURVATURE_SOURCE_ERROR missing package', output.getvalue())
         self.assertIn('DIAGNOSIS_DONE', output.getvalue())
         for sub in subscribers:
@@ -63,6 +64,12 @@ class DiagnosticTest(unittest.TestCase):
     def test_wrong_command_type_is_visible(self):
         self.assertEqual(diagnostic.summarize('nominal', NS(longlCmdType=2, accel=0., brake=1.), 0),
                          dict(type=2, accel=0., brake=1.))
+
+    def test_stopline_speed_cap_state_is_visible(self):
+        self.assertEqual(diagnostic.summarize('speed_cap_active', NS(data=True), 0),
+                         dict(active=True))
+        self.assertEqual(diagnostic.summarize('speed_cap_target', NS(data=30.0), 0),
+                         dict(target_kph=30.0))
 
     def test_stale_pose_frame_and_age_are_preserved(self):
         msg = NS(header=NS(frame_id='odom', stamp=NS(to_sec=lambda: 95)),

@@ -9,7 +9,7 @@
 <header><div><h1>카메라 인식 · 주행 상태</h1><p class="muted">CAM1 차선·정지선 / CAM4 신호등 · 현재 주행 모델의 처리 결과</p></div><span id="connection" class="muted">연결 대기</span></header>
 <section id="banner" data-state="waiting"><div id="title">주행 상태 수신 대기</div><ul id="notes"></ul></section>
 <main>
-<article class="panel"><div class="panel-head"><h2>CAM1 · 차선 / 정지선</h2><label><input type="checkbox" id="raw-cam1"> 원본 보기</label></div><div id="box-cam1" class="image stale"><img id="image-cam1" alt="CAM1 추론 프레임"><div class="notice" id="notice-cam1">CAM1 영상 대기 · UDP 1101</div></div><div class="detail"><div id="age-cam1" class="muted">프레임 없음</div><div id="lane">차선 상태 대기</div><div id="stopline">정지선 상태 대기</div><div id="model-cam1" class="model"></div><div class="muted">마스크: 흰색 실선 · 청록 점선 · 노랑 황색선 · 빨강 정지선 · 보라 유도선<br>굵은 선: 후처리된 경계·정지선. 신뢰도는 모델 추정값입니다.</div></div></article>
+<article class="panel"><div class="panel-head"><h2>CAM1 · 차선 / 정지선</h2><label><input type="checkbox" id="raw-cam1"> 원본 보기</label></div><div id="box-cam1" class="image stale"><img id="image-cam1" alt="CAM1 추론 프레임"><div class="notice" id="notice-cam1">CAM1 영상 대기 · UDP 1101</div></div><div class="detail"><div id="age-cam1" class="muted">프레임 없음</div><div id="lane">차선 상태 대기</div><div id="stopline">정지선 상태 대기</div><div id="approach-speed">정지선 감속 제한 대기</div><div id="model-cam1" class="model"></div><div class="muted">마스크: 흰색 실선 · 청록 점선 · 노랑 황색선 · 빨강 정지선 · 보라 유도선<br>굵은 선: 후처리된 경계·정지선. 신뢰도는 모델 추정값입니다.</div></div></article>
 <article class="panel"><div class="panel-head"><h2>CAM4 · 신호등</h2><label><input type="checkbox" id="raw-cam4"> 원본 보기</label></div><div id="box-cam4" class="image stale"><img id="image-cam4" alt="CAM4 추론 프레임"><canvas id="cam4-projection" width="640" height="480"></canvas><div class="notice" id="notice-cam4">CAM4 영상 대기 · UDP 1131</div></div><div class="detail"><div id="age-cam4" class="muted">프레임 없음</div><div id="signal">신호 상태 대기</div><div id="selected">경로 연결 대기</div><div id="calibration"></div><div class="muted">센서 기반 모드: 지도 신호등 투영 없이 CAM1 정지선과 CAM4 신호 관측을 함께 사용</div><div id="model-cam4" class="model"></div></div></article>
 </main>
 <section class="stats"><div class="stat">실제 속도<b id="speed">—</b></div><div class="stat">곡률 제어 목표속도<b id="target">—</b></div><div class="stat">최종 가속 / 브레이크<b id="command">—</b></div><div class="stat">주행 경로 / 도착 상태<b id="route">—</b></div></section>
@@ -46,6 +46,8 @@ function paint(data){
  const cam1=value(data,'cam1',3),cam4=value(data,'cam4',3);
  text('model-cam1',cam1?cam1.model+' · '+cam1.device+' · 추론 '+number(cam1.infer_ms,0)+' ms · 입력 '+cam1.source_size.join('×')+' / 보정 '+cam1.camera_size.join('×'):'차선 모델 정보 수신 대기');
  text('model-cam4',cam4?cam4.custom_model+' · '+(cam4.custom_loaded?'로드됨':'모델 누락!')+' · 추론 '+number(cam4.inference_ms,0)+' ms · '+cam4.source_size.join('×'):'신호 모델 정보 수신 대기');
+ const capActive=value(data,'stopline_speed_cap_active',.6),capTarget=value(data,'stopline_speed_cap_target',.6);
+ text('approach-speed',capActive===true?'정지선 접근 속도 제한 중 · 목표 '+number(capTarget,1)+' km/h':capActive===false?'정지선 접근 속도 제한 꺼짐':'정지선 속도 제한 상태 대기');
  const odom=value(data,'odom',.5),cmd=value(data,'final',.6),goal=value(data,'goal',86400);
  text('speed',number(odom?.speed_kph,1)+' km/h');text('target',number(value(data,'speed_target'),1)+' km/h');text('command',number(cmd?.accel)+' / '+number(cmd?.brake));
  text('route',status?(status.reference_path_match?'일치':'불일치')+' / '+(goal===true?'도착':'진행'):'—');text('telemetry',JSON.stringify(data,null,2));

@@ -10,12 +10,15 @@ from __future__ import annotations
 
 import math
 import os
+import threading
 import time
+from collections import deque
 from typing import Optional, Tuple
 
 import rospy
 from geometry_msgs.msg import PointStamped, PoseStamped
 from morai_msgs.msg import CtrlCmd
+from morai_perception_msgs.msg import StopLineDetection
 from nav_msgs.msg import Odometry, Path
 from std_msgs.msg import Bool, Float64
 
@@ -163,6 +166,34 @@ class CurvatureSpeedPurePursuitNode:
         self.progress_backtrack_m = max(
             0.0, float(rospy.get_param("~progress_backtrack_tolerance_m", 2.0))
         )
+        self.stopline_speed_cap_enabled = bool(
+            rospy.get_param("~stopline_speed_cap_enabled", False)
+        )
+        self.stopline_approach_speed_kph = float(
+            rospy.get_param("~stopline_approach_speed_kph", 30.0)
+        )
+        self.stopline_cap_release_after_m = float(
+            rospy.get_param("~stopline_cap_release_after_m", 5.0)
+        )
+        self.stopline_cap_max_detection_range_m = float(
+            rospy.get_param("~stopline_cap_max_detection_range_m", 60.0)
+        )
+        self.stopline_cap_min_confidence = float(
+            rospy.get_param("~stopline_cap_min_confidence", 0.55)
+        )
+        if (not math.isfinite(self.stopline_approach_speed_kph)
+                or self.stopline_approach_speed_kph <= 0
+                or not math.isfinite(self.stopline_cap_release_after_m)
+                or self.stopline_cap_release_after_m < 0
+                or not math.isfinite(self.stopline_cap_max_detection_range_m)
+                or self.stopline_cap_max_detection_range_m <= 0
+                or not 0 <= self.stopline_cap_min_confidence <= 1):
+            raise ValueError("Stopline speed-cap settings must be finite and in range")
+        self.stopline_lock = threading.RLock()
+        self.progress_history = deque(maxlen=200)
+        self.latest_stopline = None
+        self.last_stopline_stamp = 0.0
+        self.active_stopline_s = None
 
         self.pose_topic = rospy.get_param("~pose_topic", "/localization/odometry")
         self.pose_timeout_sec = max(
@@ -225,11 +256,24 @@ class CurvatureSpeedPurePursuitNode:
         self.progress_pub = rospy.Publisher(
             "/experimental/curvature_progress", Float64, queue_size=1
         )
+        self.stopline_cap_active_pub = rospy.Publisher(
+            "/experimental/stopline_speed_cap_active", Bool, queue_size=1
+        )
+        self.stopline_cap_target_pub = rospy.Publisher(
+            "/experimental/stopline_speed_cap_target", Float64, queue_size=1
+        )
         self.goal_pub = rospy.Publisher(
             "/experimental/curvature_goal_reached", Bool, queue_size=1, latch=True
         )
 
         rospy.Subscriber(self.pose_topic, Odometry, self.odom_callback, queue_size=10)
+        if self.stopline_speed_cap_enabled:
+            rospy.Subscriber(
+                rospy.get_param("~stopline_topic", "/perception/camera/stopline"),
+                StopLineDetection,
+                self.stopline_callback,
+                queue_size=10,
+            )
         self.publish_reference_path()
         self.timer = rospy.Timer(
             rospy.Duration(1.0 / self.rate_hz), self.control_callback
@@ -263,6 +307,52 @@ class CurvatureSpeedPurePursuitNode:
     def odom_callback(self, message: Odometry) -> None:
         self.latest_odom = message
         self.latest_odom_wall_time = time.monotonic()
+
+    def stopline_callback(self, message: StopLineDetection) -> None:
+        """Cache only the newest camera observation; the control timer matches its pose."""
+        if not self.stopline_speed_cap_enabled:
+            return
+        stamp = message.header.stamp.to_sec()
+        if not math.isfinite(stamp) or stamp <= 0:
+            return
+        with self.stopline_lock:
+            if self.latest_stopline is None or stamp > self.latest_stopline[0]:
+                self.latest_stopline = (stamp, message)
+
+    def update_stopline_speed_cap(self, progress_s: float, pose_stamp: float, ros_now: float) -> bool:
+        """Cap approach speed on a measured line, then release after the vehicle clears it."""
+        if not self.stopline_speed_cap_enabled:
+            return False
+        with self.stopline_lock:
+            if math.isfinite(pose_stamp) and pose_stamp > 0:
+                self.progress_history.append((pose_stamp, progress_s))
+            observation = self.latest_stopline
+            if observation is not None and observation[0] > self.last_stopline_stamp:
+                stamp, message = observation
+                self.last_stopline_stamp = stamp
+                age = ros_now - stamp
+                line = message
+                if (-0.05 <= age <= 0.8 and line.valid
+                        and line.header.frame_id == "base_link"
+                        and math.isfinite(line.distance_m)
+                        and 0 <= line.distance_m <= self.stopline_cap_max_detection_range_m
+                        and math.isfinite(line.confidence)
+                        and self.stopline_cap_min_confidence <= line.confidence <= 1.0):
+                    pose = min(self.progress_history, key=lambda item: abs(item[0] - stamp), default=None)
+                    if pose is not None and abs(pose[0] - stamp) <= 0.1:
+                        line_s = pose[1] + line.distance_m
+                        if line_s >= progress_s - self.stopline_cap_release_after_m:
+                            if self.active_stopline_s is None:
+                                self.active_stopline_s = line_s
+                            elif line_s > self.active_stopline_s + 6.0:
+                                # Keep the cap across closely spaced lines by moving the target forward.
+                                self.active_stopline_s = line_s
+                            elif line_s >= self.active_stopline_s - 2.0:
+                                self.active_stopline_s = min(self.active_stopline_s, line_s)
+            if (self.active_stopline_s is not None
+                    and progress_s > self.active_stopline_s + self.stopline_cap_release_after_m):
+                self.active_stopline_s = None
+            return self.active_stopline_s is not None
 
     def search_projection(self, x: float, y: float):
         if self.last_segment_index is None:
@@ -503,6 +593,11 @@ class CurvatureSpeedPurePursuitNode:
         remaining_m = max(0.0, self.total_length_m - progress_s)
         stop = remaining_m <= self.goal_tolerance_m
         speed_limit = profile_value_at_s(self.s_values, self.speed_profile, progress_s)
+        stopline_cap_active = self.update_stopline_speed_cap(
+            progress_s, self.latest_odom.header.stamp.to_sec(), now
+        )
+        if stopline_cap_active:
+            speed_limit = min(speed_limit, self.stopline_approach_speed_kph / MPS_TO_KPH)
         command_speed = 0.0 if stop else self.apply_speed_rate_limit(speed_limit, dt)
         curvature = profile_value_at_s(self.s_values, self.curvatures, progress_s)
 
@@ -541,6 +636,10 @@ class CurvatureSpeedPurePursuitNode:
         self.steering_pub.publish(Float64(steering))
         self.progress_pub.publish(Float64(progress_s))
         self.goal_pub.publish(Bool(stop))
+        self.stopline_cap_active_pub.publish(Bool(stopline_cap_active))
+        self.stopline_cap_target_pub.publish(Float64(
+            self.stopline_approach_speed_kph if stopline_cap_active else 0.0
+        ))
 
         if self.publish_command:
             self.command_pub.publish(
@@ -558,7 +657,7 @@ class CurvatureSpeedPurePursuitNode:
             2.0,
             "Curvature PP progress=%.1f/%.1fm kappa=%.4f speed_limit=%.2f "
             "speed_cmd=%.2f measured=%.2f km/h accel=%.2f brake=%.2f "
-            "lookahead=%.2f steering=%.4f stop=%s",
+            "lookahead=%.2f steering=%.4f stop=%s stopline_cap=%s",
             progress_s,
             self.total_length_m,
             curvature,
@@ -570,6 +669,7 @@ class CurvatureSpeedPurePursuitNode:
             actual_lookahead,
             steering,
             stop,
+            stopline_cap_active,
         )
 
 

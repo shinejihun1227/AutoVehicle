@@ -46,6 +46,10 @@
   <arg name="stopline_front_reference_offset_m" default="3.845" />
   <arg name="stopline_hold_distance_m" default="0.5" />
   <arg name="stopline_planning_decel_mps2" default="1.0" />
+  <arg name="stopline_approach_speed_kph" default="30.0" />
+  <arg name="stopline_cap_release_after_m" default="5.0" />
+  <arg name="stopline_cap_max_detection_range_m" default="60.0" />
+  <arg name="stopline_cap_min_confidence" default="0.55" />
   <arg name="right_on_green" default="true" />
 
   <!-- Start only localization and the UDP bridge from the common launch.
@@ -72,6 +76,12 @@
     <param name="pose_topic" value="/localization/odometry" />
     <param name="command_topic" value="/control/ctrl_cmd" />
     <param name="publish_command" value="true" />
+    <param name="stopline_topic" value="/perception/camera/stopline" />
+    <param name="stopline_speed_cap_enabled" value="true" />
+    <param name="stopline_approach_speed_kph" value="$(arg stopline_approach_speed_kph)" />
+    <param name="stopline_cap_release_after_m" value="$(arg stopline_cap_release_after_m)" />
+    <param name="stopline_cap_max_detection_range_m" value="$(arg stopline_cap_max_detection_range_m)" />
+    <param name="stopline_cap_min_confidence" value="$(arg stopline_cap_min_confidence)" />
     <param name="longl_cmd_type" value="1" />
     <param name="pose_timeout_sec" value="0.5" />
     <param name="max_speed_kph" value="$(arg max_speed_kph)" />

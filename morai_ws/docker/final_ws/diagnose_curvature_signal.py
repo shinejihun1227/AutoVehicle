@@ -27,6 +27,10 @@ def summarize(kind, msg, ros_now):
         return result
     if kind in ('nominal', 'final'):
         return dict(type=msg.longlCmdType, accel=round(msg.accel, 3), brake=round(msg.brake, 3))
+    if kind == 'speed_cap_active':
+        return dict(active=bool(msg.data))
+    if kind == 'speed_cap_target':
+        return dict(target_kph=round(float(msg.data), 2))
     if kind == 'reference':
         return dict(frame=msg.header.frame_id, points=len(msg.poses))
     if kind == 'stopline':
@@ -79,7 +83,7 @@ def main():
     from morai_perception_msgs.msg import StopLineDetection
     from common.msg import ObjectInfoArray
     from nav_msgs.msg import Odometry, Path as RosPath
-    from std_msgs.msg import String
+    from std_msgs.msg import String, Bool, Float64
 
     for name in ('ROS_IP', 'ROS_HOSTNAME', 'ROS_MASTER_URI'):
         print(name + '=' + os.environ.get(name, '(unset)'), flush=True)
@@ -104,6 +108,8 @@ def main():
         'reference': ('/experimental/curvature_reference_path', RosPath),
         'nominal': ('/control/ctrl_cmd', CtrlCmd),
         'final': ('/ctrl_cmd', CtrlCmd),
+        'speed_cap_active': ('/experimental/stopline_speed_cap_active', Bool),
+        'speed_cap_target': ('/experimental/stopline_speed_cap_target', Float64),
         'status': ('/control/maneuver_status', String),
         'stopline': ('/perception/camera/stopline', StopLineDetection),
         'lights': ('/detection/traffic_light', ObjectInfoArray),

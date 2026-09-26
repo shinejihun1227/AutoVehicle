@@ -101,6 +101,10 @@ case "$TEST_PROFILE" in
       "lane_info_device:=$LANE_INFO_DEVICE" "lane_info_every:=$LANE_INFO_EVERY"
       "lane_min_confidence:=$LANE_MIN_CONFIDENCE" "lane_info_timeout_s:=$LANE_INFO_TIMEOUT_S"
       "stopline_front_reference_offset_m:=$STOPLINE_FRONT_REFERENCE_OFFSET_M"
+      "stopline_approach_speed_kph:=$STOPLINE_APPROACH_SPEED_KPH"
+      "stopline_cap_release_after_m:=$STOPLINE_CAP_RELEASE_AFTER_M"
+      "stopline_cap_max_detection_range_m:=$STOPLINE_CAP_MAX_DETECTION_RANGE_M"
+      "stopline_cap_min_confidence:=$STOPLINE_CAP_MIN_CONFIDENCE"
       "stopline_hold_distance_m:=$STOPLINE_HOLD_DISTANCE_M"
       "stopline_planning_decel_mps2:=$STOPLINE_PLANNING_DECEL_MPS2"
       "right_on_green:=$SIGNAL_RIGHT_ON_GREEN"
@@ -165,17 +169,22 @@ if ! "${DOCKER[@]}" info >/dev/null 2>&1; then DOCKER=(sudo docker --context def
 if [[ "$TEST_PROFILE" == curvature_signal ]]; then
   INSTALLED_LAUNCH=/opt/AutoVehicle/morai_ws/src/bringup/morai_bringup/launch/final_ws_curvature_signal.launch
   INSTALLED_FUSION=/opt/AutoVehicle/morai_ws/src/control/turn_signal_controller/scripts/maneuver_fusion_node.py
+  INSTALLED_CURVATURE=/opt/AutoVehicle/morai_ws/src/experimental/curvature_speed_purepursuit/scripts/curvature_speed_purepursuit_node.py
   if ! "${DOCKER[@]}" exec "$CONTAINER_NAME" grep -Fq \
       '<param name="require_route_signal_context" value="false" />' "$INSTALLED_LAUNCH" ||
      ! "${DOCKER[@]}" exec "$CONTAINER_NAME" grep -Fq \
       '<param name="stopline_requires_detected_signal" value="true" />' "$INSTALLED_LAUNCH" ||
      ! "${DOCKER[@]}" exec "$CONTAINER_NAME" grep -Fq \
-      'def valid_sensor_stop_pair' "$INSTALLED_FUSION"; then
-    echo 'ERROR: The container has not been updated with the sensor-only signal profile.' >&2
+      '<param name="stopline_speed_cap_enabled" value="true" />' "$INSTALLED_LAUNCH" ||
+     ! "${DOCKER[@]}" exec "$CONTAINER_NAME" grep -Fq \
+      'def valid_sensor_stop_pair' "$INSTALLED_FUSION" ||
+     ! "${DOCKER[@]}" exec "$CONTAINER_NAME" grep -Fq \
+      'def update_stopline_speed_cap' "$INSTALLED_CURVATURE"; then
+    echo 'ERROR: The container has not been updated with the sensor-only / stopline-speed-cap profile.' >&2
     echo 'No driving launch was started. Stop the container, run install_curvature_signal.sh, then start it again.' >&2
     exit 2
   fi
-  echo 'Verified container profile: MGeo context OFF; stopline requires a recognized CAM4 signal.'
+  echo "Verified profile: MGeo OFF; stopline-only approach cap=${STOPLINE_APPROACH_SPEED_KPH} km/h; CAM4 signal gates stopping."
 fi
 exec "${DOCKER[@]}" exec -it "$CONTAINER_NAME" /usr/local/bin/morai-entrypoint \
   "${DISPLAY_ARGS[@]}" roslaunch morai_bringup "$LAUNCH" "enable_control:=$CONTROL" \

@@ -36,6 +36,7 @@ class StartupTest(unittest.TestCase):
         modules = {"rospy": ros,
                    "geometry_msgs.msg": NS(PointStamped=Message, PoseStamped=Message),
                    "morai_msgs.msg": NS(CtrlCmd=Message),
+                   "morai_perception_msgs.msg": NS(StopLineDetection=Message),
                    "nav_msgs.msg": NS(Odometry=Message, Path=Message),
                    "std_msgs.msg": NS(Bool=Message, Float64=Message)}
         spec = importlib.util.spec_from_file_location("startup_node", PACKAGE / "scripts/curvature_speed_purepursuit_node.py")
@@ -48,7 +49,8 @@ class StartupTest(unittest.TestCase):
 
     def tick(self, x=0., y=0., speed=0.):
         self.now += .05
-        message = NS(pose=NS(pose=NS(position=NS(x=x, y=y),
+        message = NS(header=NS(stamp=NS(to_sec=lambda: self.now), frame_id="map"),
+                     pose=NS(pose=NS(position=NS(x=x, y=y),
                                     orientation=NS(x=0., y=0., z=0., w=1.))),
                      twist=NS(twist=NS(linear=NS(x=speed, y=0.))))
         self.node.odom_callback(message)
@@ -106,6 +108,25 @@ class StartupTest(unittest.TestCase):
         self.assertEqual((command.accel, command.brake), (0., 1.))
         self.assertTrue(self.node.goal_pub.publish.call_args.args[0].data)
         self.assertEqual(self.node.speed_profile[-1], 0.)
+
+    def test_detected_stopline_caps_speed_until_vehicle_clears_it(self):
+        self.params.update({"~max_speed_kph": 45., "~stopline_speed_cap_enabled": True,
+                            "~stopline_approach_speed_kph": 30.,
+                            "~stopline_cap_release_after_m": 5.})
+        self.node = self.module.CurvatureSpeedPurePursuitNode()
+        self.tick(x=0.)  # Add a time-matched path projection for the camera sample.
+        line = NS(header=NS(stamp=NS(to_sec=lambda: self.now), frame_id="base_link"),
+                  valid=True, distance_m=20., confidence=.9)
+        self.node.stopline_callback(line)
+
+        self.tick(x=2.)
+        self.assertTrue(self.node.stopline_cap_active_pub.publish.call_args.args[0].data)
+        self.assertAlmostEqual(self.node.speed_limit_pub.publish.call_args.args[0].data, 30.)
+        self.tick(x=24.)
+        self.assertTrue(self.node.stopline_cap_active_pub.publish.call_args.args[0].data)
+        self.tick(x=25.1)
+        self.assertFalse(self.node.stopline_cap_active_pub.publish.call_args.args[0].data)
+        self.assertGreater(self.node.speed_limit_pub.publish.call_args.args[0].data, 30.)
 
     def test_missing_or_stale_odometry_does_not_accelerate(self):
         self.node.control_callback(None)

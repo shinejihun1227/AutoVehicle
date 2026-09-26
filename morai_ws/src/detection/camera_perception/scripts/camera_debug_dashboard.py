@@ -54,6 +54,8 @@ def main():
               dict(valid=msg.valid, state=msg.state, confidence=msg.confidence), msg.header.stamp.to_sec()))
     for key, topic, cls in (('speed_target', '/experimental/curvature_speed_command', Float64),
                             ('speed_limit', '/experimental/curvature_speed_limit', Float64),
+                            ('stopline_speed_cap_active', '/experimental/stopline_speed_cap_active', Bool),
+                            ('stopline_speed_cap_target', '/experimental/stopline_speed_cap_target', Float64),
                             ('goal', '/experimental/curvature_goal_reached', Bool)):
         subscribe(topic, cls, lambda msg, k=key: store.update(k, msg.data))
 

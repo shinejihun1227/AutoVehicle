@@ -23,6 +23,8 @@ CURVE=src/experimental/curvature_speed_purepursuit
 FILES=(
   src/bringup/morai_bringup/launch/final_ws_curvature_signal.launch
   "$CURVE/scripts/curvature_speed_purepursuit_node.py"
+  "$CURVE/CMakeLists.txt"
+  "$CURVE/package.xml"
   "$CURVE/src/curvature_speed_purepursuit/planner.py"
   "$CURVE/test/test_node_startup.py"
   src/control/purepursuit_mgeo/src/purepursuit_mgeo/longitudinal_controller.py
