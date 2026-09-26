@@ -60,7 +60,10 @@ def main():
     def settings(_event=None):
         store.update('config', dict(
             control_output_enabled=rospy.get_param('/morai_udp_drive_bridge/control_output_enabled', None),
-            signal_camera=rospy.get_param('/curvature_signal_controller/signal_camera', {})))
+            require_route_signal_context=rospy.get_param(
+                '/curvature_signal_controller/require_route_signal_context', None),
+            stopline_requires_detected_signal=rospy.get_param(
+                '/curvature_signal_controller/stopline_requires_detected_signal', None)))
     settings()
     timer = rospy.Timer(rospy.Duration(1.), settings)
     package = Path(rospkg.RosPack().get_path('camera_perception'))

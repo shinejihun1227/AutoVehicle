@@ -1,10 +1,10 @@
 <launch>
-  <!-- Fixed competition route + curvature Pure Pursuit + route-associated signals.
-       No LiDAR, avoidance planner, merge controller, or camera steering overlay. -->
+  <!-- Fixed competition route + curvature Pure Pursuit + camera-only signal gate.
+       Turn direction comes from the route geometry at a measured stop line;
+       MGeo signal/intersection associations are not loaded in this profile. -->
   <arg name="workspace_path" default="$(env HOME)/morai_ws" />
   <arg name="path_file" default="$(arg workspace_path)/data/routes/2026_molit_comp_global_path.txt" />
   <arg name="signal_config_file" default="$(arg workspace_path)/config/curvature_signal.yaml" />
-  <arg name="signal_mgeo_path" default="$(find camera_perception)/lane/mgeo/R_KR_PR_K-city_2025" />
   <arg name="enable_control" default="false" />
   <arg name="enable_camera_dashboard" default="true" />
   <arg name="camera_dashboard_port" default="8765" />
@@ -118,14 +118,13 @@
     <arg name="enable_intersection_detection" value="false" />
   </include>
 
-  <!-- One signal/stop-line overlay. Do not also run the straight-only
-       stopline_controller: it would veto an authorized left arrow. -->
+  <!-- One camera-only signal/stop-line overlay. A stop line without a fresh,
+       recognized CAM4 signal is ignored; the curvature route remains active. -->
   <node pkg="turn_signal_controller" type="maneuver_fusion_node.py"
         name="curvature_signal_controller" output="screen">
     <rosparam file="$(arg signal_config_file)" command="load" />
     <rosparam param="maneuvers">[]</rosparam>
     <param name="path_file" value="$(arg path_file)" />
-    <param name="signal_mgeo_path" value="$(arg signal_mgeo_path)" />
     <param name="nominal_command_topic" value="/control/ctrl_cmd" />
     <param name="output_command_topic" value="/ctrl_cmd" />
     <param name="signal_topic" value="/perception/traffic_light/directional_state" />
@@ -133,9 +132,10 @@
     <param name="stopline_topic" value="/perception/camera/stopline" />
     <param name="odometry_topic" value="/localization/odometry" />
     <param name="reference_path_topic" value="/experimental/curvature_reference_path" />
-    <param name="require_route_signal_context" value="true" />
+    <param name="require_route_signal_context" value="false" />
+    <param name="stopline_requires_detected_signal" value="true" />
     <param name="require_reference_path_match" value="true" />
-    <param name="require_fresh_camera_stream" value="true" />
+    <param name="require_fresh_camera_stream" value="false" />
     <param name="require_sensor_quality" value="false" />
     <param name="require_fresh_safety" value="false" />
     <!-- Isolate optional input from old safety publishers in the same ROS master. -->

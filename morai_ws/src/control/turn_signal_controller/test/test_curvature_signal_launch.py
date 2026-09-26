@@ -24,7 +24,9 @@ class CurvatureSignalLaunchTest(unittest.TestCase):
         self.assertEqual(self.param(self.fusion, "output_command_topic"), "/ctrl_cmd")
         self.assertEqual(self.param(pp, "path_file"), self.param(self.fusion, "path_file"))
         self.assertEqual(self.param(self.fusion, "require_reference_path_match"), "true")
-        self.assertEqual(self.param(self.fusion, "require_route_signal_context"), "true")
+        self.assertEqual(self.param(self.fusion, "require_route_signal_context"), "false")
+        self.assertEqual(self.param(self.fusion, "stopline_requires_detected_signal"), "true")
+        self.assertIsNone(self.fusion.find("param[@name='signal_mgeo_path']"))
         self.assertEqual(self.fusion.find("rosparam[@param='maneuvers']").text, "[]")
 
     def test_monitor_computes_commands_but_disables_udp_by_default(self):
@@ -35,10 +37,10 @@ class CurvatureSignalLaunchTest(unittest.TestCase):
         self.assertEqual(base.find("arg[@name='enable_control']").get("value"), "$(arg enable_control)")
         self.assertEqual(base.find("arg[@name='enable_purepursuit']").get("value"), "false")
 
-    def test_external_stops_are_isolated_but_camera_checks_remain(self):
+    def test_external_stops_and_camera_stream_watchdog_are_disabled(self):
         for key in ("require_sensor_quality", "require_fresh_safety", "allow_blackout_lane_corridor", "lamp_output_enabled"):
             self.assertEqual(self.param(self.fusion, key), "false")
-        self.assertEqual(self.param(self.fusion, "require_fresh_camera_stream"), "true")
+        self.assertEqual(self.param(self.fusion, "require_fresh_camera_stream"), "false")
         self.assertEqual(self.param(self.fusion, "test_without_turn_signals"), "true")
         self.assertEqual(self.param(self.fusion, "safety_topic"), "/curvature_signal/unused_external_safety")
         camera = self.root.findall("include")[1]
@@ -85,14 +87,6 @@ class CurvatureSignalBehaviorTest(unittest.TestCase):
         self.assertFalse(status["permission"])
         self.assertEqual(output.brake, 1.)
         self.assertEqual(status["signal_selection_reason"], "signal_camera_uncalibrated")
-
-    def test_lost_inputs_still_stop_without_external_safety_node(self):
-        self.case.frames()
-        self.case.c.now += 1.
-        output, status = self.case.c.tick(refresh=False)
-        self.assertEqual(output.brake, 1.)
-        self.assertIn("camera_observation_stream_stale", status["reason"])
-
 
 if __name__ == "__main__":
     unittest.main()

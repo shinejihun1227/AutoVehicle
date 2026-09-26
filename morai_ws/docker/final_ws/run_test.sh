@@ -148,7 +148,7 @@ if [[ "$TEST_PROFILE" != curvature && "$TEST_PROFILE" != curvature_signal ]]; th
 fi
 DISPLAY_ARGS=()
 if [[ "$TEST_PROFILE" == curvature_signal ]]; then
-  echo 'Original route + curvature + route-associated stopline/signals; no LiDAR/avoidance/merge/lane steering.'
+  echo 'Original curvature route + paired CAM1 stopline/CAM4 signal gate; no MGeo signal map, LiDAR, avoidance, merge, or lane steering.'
   echo 'CAM1 + CAM4 and stop reasons: http://127.0.0.1:8765 (Ubuntu browser)'
   echo 'RViz alternative (new host terminal): bash run_test.sh rviz'
   if [[ "$OPEN_CAMERA_DASHBOARD" == true && -n "${DISPLAY:-}${WAYLAND_DISPLAY:-}" ]]; then

@@ -1,27 +1,23 @@
-# 곡률 경로 추종 + 정지선·신호등 전용 실행
+# 곡률 경로 + 카메라 정지선·신호등 시험
 
-`final_ws_curvature_signal.launch`, Docker 프로필 `curvature_signal`.
-기존 대회 경로 `2026_molit_comp_global_path.txt`를 그대로 따라간다.
-곡률로 조향·목표속도를 계산하고, 정지선·해당 경로의 신호로 가속과 브레이크를 제한한다.
+이 프로필은 기존 대회 경로를 곡률 Pure Pursuit로 추종하면서 CAM1 정지선과 CAM4 신호 인식을 함께 확인한다. MGeo의 교차로·신호등 연결과 지도상의 신호 투영은 사용하지 않는다.
 
 ```text
-GPS 3001 + IMU 4001 → EKF /localization/odometry
-원본 경로 + EKF → curvature_speed_purepursuit → /control/ctrl_cmd
-카메라 1101 → real_lane → /perception/camera/stopline
-카메라 1131 → YOLO → 신호등 위치·방향 상태
-위 입력 + MGeo 경로/신호 연결 → curvature_signal_controller → /ctrl_cmd → UDP 9093
+GPS / IMU → EKF 위치·속도 ─┐
+곡률 기준 경로 ────────────┴→ 곡률 Pure Pursuit → 조향·속도 명령
+CAM1 정지선 + CAM4 신호 인식 ─→ 신호 조건 제어 → 최종 명령
 ```
 
-LiDAR, 장애물 회피, 끼어들기, 차선 조향 보정, blackout fallback, 보행자·교차 차량 정지는 실행하지 않는다.
-카메라 차선 모델은 정지선 거리 측정용으로 실행된다. 방향지시등 UDP와 5초 대기도 사용하지 않는다.
-신호등은 경로 방향을 바꾸지 않는다. 직진 경로는 직진 신호, 좌회전 경로는 좌회전 허용 신호를 확인한다.
-기존 직진용 `stopline_controller`를 중복 실행하지 않으므로 허용된 좌회전 화살표를 다시 정지로 덮어쓰지 않는다.
+판단 규칙은 단순하다.
 
-## 1. 기존 Docker에 추가하기 — Ubuntu 호스트 터미널
+- CAM1 정지선만 보이고 CAM4에서 유효한 신호를 인식하지 못하면 정지선만으로 멈추지 않고 곡률 경로를 계속 주행한다.
+- 정지선과 유효한 신호가 함께 관측되면, 정지선 전후의 실제 기준 경로 곡률로 진행 방향을 추정하고 신호 상태를 적용한다.
+- 경로 방향을 허용하지 않는 빨간불·화살표는 정지하고, 허용 신호는 정지선을 통과한다. CAM4 신호만 있고 정지선이 없으면 신호만으로 정지하지 않는다.
+- 조향은 계속 기존 곡률 기준 경로가 담당한다. 이 시험 모드는 MGeo 기반 신호 연결을 대신할 만큼 신호등과 차로의 연관성을 보장하지 않으므로 MORAI 시뮬레이션에서만 검증한다.
 
-기존 주행 터미널에서 `Ctrl+C`로 ROS 주행 launch를 끝낸 뒤 실행한다.
-기존 final_ws Docker 이미지가 설치된 환경에서는 이번 추가분에 이미지 재빌드나 catkin 재빌드가 필요 없다.
-새 컨테이너를 만드는 경우에는 기존 Docker 안내대로 먼저 이미지를 빌드한다.
+## Ubuntu에서 업데이트
+
+기존 주행 launch를 `Ctrl+C`로 종료한 뒤 실행한다.
 
 ```bash
 cd "$HOME/AutoVehicle"
@@ -32,140 +28,21 @@ bash install_curvature_signal.sh
 bash run_highway.sh start
 ```
 
-설치 스크립트는 launch와 카메라 표시 코드·웹 화면을 기존 컨테이너에 복사한다. 차량은 출발하지 않는다.
-기존 코드는 `~/morai-update-backups/`에 백업한다. CAM1·CAM4 및 정지 사유는 Ubuntu 브라우저의 `http://127.0.0.1:8765`에서 확인한다.
-컨테이너에 이미 `curvature_signal.yaml`이 있으면 보정값을 보존한다.
-`git pull`만으로 기존 컨테이너 안의 파일은 바뀌지 않으므로 설치 명령도 필요하다.
-
-## 2. 신호등 카메라 설정 — 처음 한 번
-
-`morai_ws/config/curvature_signal.yaml`의 `signal_camera`에는 **MORAI Camera 1131의 실제 값**이 필요하다.
-2026-09-14 사용자가 알려준 카메라 4 설정을 다음과 같이 저장했다.
-같은 값은 일반 융합 제어의 `turn_signal_controller/config/turn_signal_maneuvers.yaml`에도 반영했다.
-
-| MORAI 카메라 4 설정 | 사용자 제공값 |
-|---|---|
-| 위치 X / Y / Z (m) | `3.43 / 0.01 / 0.61` |
-| Roll / Pitch / Yaw (도) | `0.0 / 0.0 / 0.0` |
-| 해상도 | `640 × 480` |
-| MORAI 화면의 FOV (도) | `90.0` — 수평/수직 축은 아직 미확인 |
-
-**장착값 입력과 영상 투영 검증은 별도다.** 현재 `horizontal_fov_deg: 90.0`은
-보고된 FOV를 수평으로 해석한 후보값이며, `calibrated: false`를 유지한다.
-이 상태에서는 교차로 신호 통행을 허용하지 않는다. 실제 MORAI 화면과 투영 정렬은 아직 검증하지 않았다.
-MORAI [센서 설정 파라미터 문서](https://help-morai-sim.scrollhelp.site/ko/morai-sim-drive/26.R1/-34)는
-FOV 항목을 설명하지만 그 축을 명시하지 않는다. 메인 뷰 카메라의 FOV 표기를 센서 카메라에 그대로 적용하지 않는다.
-
-- 카메라 센서의 FOV가 **수평 90도**이면 `horizontal_fov_deg: 90.0`을 사용한다.
-- **수직 90도**이면 640×480에서 `horizontal_fov_deg: 106.2602047083`으로 변환한다.
-  변환식은 `HFOV = 2 × atan((width / height) × tan(VFOV / 2))`다.
-- 실제 영상에서 신호등 위치와 투영 위치가 일치하는지 확인한 뒤 `calibrated: true`로 설정한다.
-
-확인할 때는 먼저 제어 송신이 꺼진 `bash run_test.sh monitor 2`로 실행하고 Ubuntu 브라우저의 카메라 화면을 연다. CAM4에 표시되는 **분홍 원은 현재 경로상 신호등의 지도 투영 위치**다. 차량이 접근하는 동안 분홍 원이 해당 신호등 상자 안의 실제 램프 위치와 여러 프레임에서 맞는지 확인한다. 맞지 않으면 수평 FOV 축과 `horizontal_fov_deg`, `pitch_deg`, `yaw_deg`를 조정한다. 다른 신호등에 맞거나 한 거리에서만 맞으면 보정 완료로 처리하지 않는다.
-
-| 설정 | 입력할 값 |
-|---|---|
-| `width`, `height` | YOLO 입력 원본 영상의 가로·세로 픽셀 |
-| `horizontal_fov_deg` | 수평 시야각(도). MORAI 항목이 수평/수직 중 무엇인지 확인 |
-| `x`, `y`, `z` | 차량 기준점에서 카메라 광학 중심까지 거리(m), x 전방/y 좌측/z 위 |
-| `pitch_deg`, `yaw_deg` | 이 투영 코드의 pitch는 위를 향하면 양수, yaw는 좌향 양수. MORAI 표기 축을 확인 |
-| `calibrated` | 위 값과 영상의 지도 신호등 투영이 맞는 것을 확인한 뒤 `true` |
-
-카메라 roll은 0인 모델이며 사용자 제공 roll과 일치한다.
-차선 카메라 1101의 값을 대신 사용하거나 `calibrated`만 바꾸지 않는다.
-설정에 기록한 Z는 차량 기준 카메라 위치이며 지면으로부터의 높이로 다시 해석하지 않는다.
-
-**호스트에서 설정을 편집하고 컨테이너에 적용:**
+설치 후 모니터 모드로 인식과 명령을 먼저 확인한다.
 
 ```bash
-nano "$HOME/AutoVehicle/morai_ws/config/curvature_signal.yaml"
-cd "$HOME/AutoVehicle/morai_ws/docker/final_ws"
-bash run_highway.sh stop && bash install_curvature_signal.sh --config && bash run_highway.sh start
+bash run_test.sh monitor 2
 ```
 
-`--config`는 호스트의 설정 파일로 컨테이너 설정을 덮어쓴다. 적용은 다음 launch 실행부터다.
-별도 파일을 쓰려면 `highway-test.env`의 `SIGNAL_CONFIG_FILE`에 **컨테이너 내부 경로**를 지정한다.
-별도 경로를 지정했다면 설치 스크립트가 복사하는 기본 파일과 실제 읽는 파일이 다를 수 있다.
-기존 `$HOME/morai-native-config/turn_signal_maneuvers.yaml` 같은 사용자 파일도 `git pull`로 바뀌지 않는다.
+CAM1에서 정지선이 보이지만 CAM4 신호가 `UNKNOWN` 또는 무효인 구간에서는 최종 명령이 제동으로 바뀌지 않아야 한다. 정지선과 CAM4 유효 신호가 동시에 들어오는 경우에만 신호 상태에 따른 제어가 작동하는지 확인한다. 실제 차량 제어는 확인이 끝난 뒤 `monitor`를 종료하고 `drive`로 실행한다.
 
-`monitor`로 실행한 뒤 컨테이너의 새 터미널에서 실제 로드된 값을 확인한다.
+Ubuntu 브라우저는 `http://127.0.0.1:8765`에서 확인한다. 상세 상태에서 `route_direction`, `signal`, `signal_selection_reason`, `reason`, `accel`, `brake`를 본다. 지도 투영 분홍 표시는 이 모드에서 사용하지 않는다.
 
-```bash
-rosparam get /curvature_signal_controller/signal_camera
-```
+## 주요 설정
 
-이 값 조회는 설정 로드 확인이며, 영상 투영 검증을 대신하지 않는다.
+- 최고속도와 곡률 감속: `highway-test.env`의 `MAX_SPEED_KPH`, `LATERAL_ACCEL_LIMIT_MPS2`
+- 정지선 기준점 보정: `STOPLINE_FRONT_REFERENCE_OFFSET_M` — 앞 범퍼 위치 실측값을 사용한다.
+- 정지선 여유 거리: `STOPLINE_HOLD_DISTANCE_M`
+- 정지선과 신호 관측 동시성: CAM1·CAM4 입력 프레임의 시각 차이가 `signal_timeout_sec` 이내여야 한다.
 
-## 3. 프로필 선택과 실행 — Ubuntu 호스트 터미널
-
-`highway.env`의 `MORAI_IP=192.168.0.147`, `UBUNTU_IP=192.168.0.185`를 실제 주소와 맞춘다.
-다음 명령은 이전에 사용한 최고속도 45km/h를 선택한다. 커브·정지선에서는 이보다 낮은 목표속도를 사용한다.
-
-```bash
-cd "$HOME/AutoVehicle/morai_ws/docker/final_ws"
-sed -i 's/^TEST_PROFILE=.*/TEST_PROFILE=curvature_signal/' highway-test.env
-sed -i 's/^MAX_SPEED_KPH=.*/MAX_SPEED_KPH=45.0/' highway-test.env
-bash run_test.sh show
-bash run_test.sh drive
-```
-
-차량 명령을 MORAI에 보내지 않고 계산·인식만 확인하려면 `drive` 대신 `monitor`를 실행한다.
-`monitor`에서도 ROS 제어 토픽은 생성되며, 이 launch가 시작한 UDP bridge의 제어 송신만 비활성화된다.
-동시에 다른 주행 launch/UDP 송신기를 실행하지 않는다.
-
-## 4. 실행 상태 확인 — 새 터미널
-
-**호스트에서 컨테이너 접속:**
-
-```bash
-cd "$HOME/AutoVehicle/morai_ws/docker/final_ws"
-bash run_highway.sh shell
-```
-
-**컨테이너 안에서:**
-
-```bash
-timeout -k 2s 5s rostopic echo -n 1 /control/maneuver_status
-timeout -k 2s 5s rostopic echo -n 1 /perception/camera/stopline
-timeout -k 2s 5s rostopic echo -n 1 /perception/traffic_light/directional_state
-timeout -k 2s 5s rostopic echo -n 1 /control/ctrl_cmd
-timeout -k 2s 5s rostopic echo -n 1 /ctrl_cmd
-rostopic info /ctrl_cmd
-```
-
-최종 `/ctrl_cmd`의 Publisher는 `/curvature_signal_controller` 하나다.
-이 launch에는 `/control/mux_status`, 회피 경로 관리 상태 토픽이 없다.
-핵심 상태는 `/control/maneuver_status`의 `reason`, `signal_selection_reason`, `route_direction`,
-`signal_allowed_directions`, `permission`, `reference_path_match`다.
-
-| 상태/사유 | 의미 |
-|---|---|
-| `signal_camera_uncalibrated` | 1131 카메라 보정이 미완료 |
-| `route_context_unavailable` | 현재 위치에 적용할 경로 신호 연결이 없음. 신호 이벤트가 없는 구간에서는 이 항목만으로 정지하지 않고 곡률 경로 주행을 계속한다. |
-| `unassociated_visible_signal` | 화면의 신호등을 경로에 해당하는 지도 신호등으로 확정하지 못함 |
-| `camera_observation_stream_stale` | 구형 일반 모드 사유. 현재 경로기반 모드에서는 일반 구간의 카메라 누락만으로 정지하지 않으며, 경로 신호 구간에서는 선택 신호가 UNKNOWN이라 정지 위치에서 대기한다. |
-| `odometry_or_route_unavailable` | 위치·속도 또는 경로 투영이 유효하지 않음 |
-| `reference_path_not_received` 또는 `reference_path_match=false` | 곡률 제어기의 전체 경로를 확인하지 못했거나 불일치 |
-| `awaiting_confirmed_green` | 현재 경로 방향에 맞는 허용 신호 확인을 기다림 |
-
-`UNKNOWN`인 새 영상과 영상 수신 끊김은 구분한다. 실제 입력 손실·빨간불·미확인 신호는 정지를 유지한다.
-초록불 단일 프레임이나 다른 차로 신호만으로 정지를 해제하지 않는다.
-
-## 5. 다시 켰을 때
-
-보정과 프로필은 저장되어 있다. 매번 설치·복사·sed를 반복할 필요 없다.
-
-```bash
-cd "$HOME/AutoVehicle/morai_ws/docker/final_ws"
-bash run_highway.sh start
-bash run_test.sh show
-bash run_test.sh drive
-```
-
-속도는 `highway-test.env`의 `MAX_SPEED_KPH`, 커브 감속은 `LATERAL_ACCEL_LIMIT_MPS2`,
-경로 조향은 `LOOKAHEAD_*`, `STEERING_FEEDFORWARD_WEIGHT`, `MAX_STEERING_RATE_RAD_S`로 조정한다.
-정지선 여유는 `STOPLINE_HOLD_DISTANCE_M`, 감속 계획은 `STOPLINE_PLANNING_DECEL_MPS2`로 조정한다.
-`STOPLINE_FRONT_REFERENCE_OFFSET_M`는 위치 기준점에서 앞 범퍼까지의 거리이며 시험으로 임의 조정하는 값이 아니다.
-값을 바꾸면 실행 중인 launch를 `Ctrl+C`로 끝내고 다시 `drive`한다.
-
-오프라인 검증은 ROS/UDP 및 영상 추론 경계를 모의한 테스트다. 실제 카메라 보정과 MORAI 정지 위치 검증은 별도다.
+이 코드는 카메라·지도 정합을 검증한 완성된 도로 주행 시스템이 아니다. 카메라 인식이 끊기면 이 모드에서 정지선 제어를 하지 않으므로, 우선 `monitor`로 충분히 확인하고 시뮬레이터에서만 시험한다.

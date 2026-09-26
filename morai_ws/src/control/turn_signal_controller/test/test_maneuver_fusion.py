@@ -243,6 +243,38 @@ class FusionNodeTest(unittest.TestCase):
         self.assertEqual(output.brake, 1.0)
         self.assertIn("camera_observation_stream_stale", status["reason"])
 
+    def test_sensor_only_profile_ignores_stopline_without_recognized_signal(self):
+        self.params["~stopline_requires_detected_signal"] = True
+        self.node = self.module.ManeuverFusionNode()
+        self.node.stopline_requires_detected_signal = True
+        self.node.require_camera_stream = False
+        self.run_ticks(3, signal="UNKNOWN", line=4.345)
+        output, status = self.tick(signal="UNKNOWN", line=4.345)
+        self.assertIsNone(status["event"])
+        self.assertEqual(output.brake, 0.0)
+        self.assertEqual(status["mode"], "NOMINAL")
+
+    def test_sensor_only_profile_stops_for_recognized_red_at_measured_line(self):
+        self.params["~stopline_requires_detected_signal"] = True
+        self.node = self.module.ManeuverFusionNode()
+        self.node.stopline_requires_detected_signal = True
+        self.node.require_camera_stream = False
+        self.node.test_without_turn_signals = True
+        output, status = self.tick(signal="RED", line=4.345)
+        self.assertEqual(status["direction"], "LEFT")
+        self.assertEqual(output.brake, 1.0)
+
+    def test_sensor_only_profile_releases_measured_line_on_matching_green_arrow(self):
+        self.params["~stopline_requires_detected_signal"] = True
+        self.node = self.module.ManeuverFusionNode()
+        self.node.stopline_requires_detected_signal = True
+        self.node.require_camera_stream = False
+        self.node.test_without_turn_signals = True
+        output, status = self.run_ticks(12, signal="GREEN_LEFT", line=4.345)
+        self.assertEqual(status["direction"], "LEFT")
+        self.assertEqual(status["mode"], "NOMINAL")
+        self.assertEqual(output.brake, 0.0)
+
     def test_unknown_images_are_fresh_but_cannot_release_red_stop(self):
         self.node.require_camera_stream = True
         for _ in range(3):
@@ -426,12 +458,12 @@ class StrictFusionTest(unittest.TestCase):
             output, status = self.frame(line=True)
         self.assertTrue(status["permission"])
 
-    def test_unmapped_green_cannot_be_assumed_straight(self):
+    def test_missing_route_event_does_not_create_a_stop_request(self):
         self.node.contexts = []
         output, status = self.frame("GREEN")
         self.assertEqual(status["direction"], "UNKNOWN")
-        self.assertIn("unmapped_signal_or_stopline", status["reason"])
-        self.assertEqual(output.brake, 1.)
+        self.assertNotIn("unmapped_signal_or_stopline", status["reason"])
+        self.assertEqual(output.brake, 0.)
 
     def test_duplicate_image_does_not_count_as_stable_green(self):
         for _ in range(12):
@@ -497,25 +529,26 @@ class StrictFusionTest(unittest.TestCase):
         self.assertFalse(status["permission"])
         self.assertEqual(output.brake, 1.)
 
-    def test_unsynchronized_stopline_pose_forces_safe_stop(self):
+    def test_verified_map_stop_target_does_not_depend_on_camera_line_pose(self):
         self.frame("GREEN", line=True)
         self.node.pose_history.clear()
         output, status = self.fixture.tick(refresh=False)
-        self.assertIn("stopline_pose_unsynchronized", status["reason"])
+        self.assertNotIn("stopline_pose_unsynchronized", status["reason"])
         self.assertEqual(output.brake, 1.)
 
     def test_distant_context_cannot_hide_nearer_stopline(self):
         self.context.update(start=200., end=240., stop_s=200.)
         output, status = self.frame("RED", line=True)
-        self.assertIn("unmapped_stopline_before_context", status["reason"])
-        self.assertEqual(output.brake, 1.)
+        self.assertEqual(status["event"]["id"], "junction")
+        self.assertEqual(status["reason"], "stopline_far")
+        self.assertEqual(output.brake, 0.)
 
     def test_unmatched_visible_light_cannot_be_overridden_by_distant_map(self):
         self.context.update(start=200., end=240., stop_s=200.,
                             signal_points=[dict(self.head, y=20.)])
         output, status = self.frame("RED")
-        self.assertIn("unassociated_visible_signal", status["reason"])
-        self.assertEqual(output.brake, 1.)
+        self.assertIsNone(status["event"])
+        self.assertEqual(output.brake, 0.)
 
     def test_next_guard_exists_before_commit_and_includes_manual_change(self):
         self.node.manual = self.fixture.module.parse_maneuvers([

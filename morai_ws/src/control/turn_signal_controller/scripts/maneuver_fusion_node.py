@@ -70,6 +70,11 @@ class ManeuverFusionNode:
         self.right_on_green = bool(rospy.get_param("~right_on_green", True))
         # Strict mode never uses screen-centre/route-curvature as a signal ID.
         self.require_context = bool(rospy.get_param("~require_route_signal_context", True))
+        # Sensor-only mode requires a current, explicit signal observation and
+        # a stop-line observation together. A painted line by itself is not a
+        # stop command at an unsignalized junction.
+        self.stopline_requires_detected_signal = bool(
+            rospy.get_param("~stopline_requires_detected_signal", False))
         self.require_reference_path = bool(rospy.get_param("~require_reference_path_match", self.require_context))
         self.reference_path_match = False
         self.reference_path_reason = "reference_path_not_received"
@@ -397,6 +402,49 @@ class ManeuverFusionNode:
             self.core.observe_signal("GREEN" if allowed else "RED", message.confidence,
                                      valid, sample.stamp, sample.received, ros_now)
 
+    @staticmethod
+    def valid_sensor_signal(sample):
+        if sample is None:
+            return False
+        message = sample.value
+        state = str(getattr(message, "state", "UNKNOWN")).upper()
+        return bool(getattr(message, "valid", False)
+                    and finite(getattr(message, "confidence", None))
+                    and 0.5 <= message.confidence <= 1.0
+                    and state in ("RED", "YELLOW", "GREEN", "LEFT", "RIGHT",
+                                  "GREEN_LEFT", "GREEN_RIGHT", "RED_LEFT",
+                                  "RED_RIGHT", "YELLOW_LEFT", "YELLOW_RIGHT"))
+
+    @staticmethod
+    def valid_sensor_stopline(sample):
+        if sample is None:
+            return False
+        line = sample.value
+        return bool(line.valid and line.header.frame_id == "base_link"
+                    and finite(line.distance_m) and 0 <= line.distance_m <= 50.0
+                    and finite(line.confidence) and 0.5 <= line.confidence <= 1.0)
+
+    def valid_sensor_stop_pair(self, line, signal):
+        return bool(self.valid_sensor_stopline(line) and self.valid_sensor_signal(signal)
+                    and abs(line.stamp - signal.stamp) <= self.signal_timeout)
+
+    def consume_sensor_stop_pair(self, line, signal, direction, now, ros_now):
+        """In map-free mode, use only a temporally paired line + known light.
+
+        No stop-line-only event is passed to the braking core. Signals without
+        a nearby measured stop line also cannot create a stop target.
+        """
+        self.signal_observations.clear()
+        self.signal_queue_fault = None
+        if not self.valid_sensor_stop_pair(line, signal):
+            return
+        state = str(signal.value.state).upper()
+        permitted = signal_permits(state, direction, self.right_on_green)
+        self.core.observe_line(line.value.distance_m, line.value.confidence, True,
+                               line.stamp, line.received, ros_now)
+        self.core.observe_signal("GREEN" if permitted else "RED", signal.value.confidence,
+                                 True, signal.stamp, signal.received, ros_now)
+
     def synchronize_route_intent(self, event):
         """Reset signal evidence and indicator lead before evaluating new intent."""
         context_id = route_event_key(event)
@@ -625,6 +673,10 @@ class ManeuverFusionNode:
         line_s = self.line_route_s(line_sample)
         if line_s is None:
             return
+        if self.stopline_requires_detected_signal:
+            signal_sample = self.fresh("signal", now, ros_now)
+            if not self.valid_sensor_stop_pair(line_sample, signal_sample):
+                return
         intent = route_intent(self.points, self.s_values, line_s, self.preview_m, self.turn_threshold)
         self.event = dict(id="junction_%.1f" % line_s, start=line_s, end=intent.end_s_m,
                           direction=intent.direction, kind="turn", committed=False)
@@ -783,7 +835,10 @@ class ManeuverFusionNode:
             permitted = bool(signal_ok and signal_permits(signal.value.state, direction, self.right_on_green))
             event = self.event
             if not self.require_context:
-                self.consume_legacy_signals(direction, ready, route_valid and not motion.fault, now, ros_now)
+                if self.stopline_requires_detected_signal:
+                    self.consume_sensor_stop_pair(line, signal, direction, now, ros_now)
+                else:
+                    self.consume_legacy_signals(direction, ready, route_valid and not motion.fault, now, ros_now)
             if self.require_context:
                 chosen = self.selected_signal(objects, event, route_valid and not motion.fault)
                 signal_ok = chosen.valid
@@ -830,6 +885,8 @@ class ManeuverFusionNode:
                     permitted = permitted and (event.get("stop_s") is not None
                                                or event.get("camera_line_confirmed", False))
                 elif (not self.require_context
+                        and (not self.stopline_requires_detected_signal
+                             or self.valid_sensor_stop_pair(line, signal))
                         and line is not None and line.stamp > self.last_observed_line_stamp
                         and line.value.header.frame_id == "base_link" and not committed
                         and (self.progress is None or self.progress >= self.ignore_line_until_s)):
@@ -845,7 +902,9 @@ class ManeuverFusionNode:
                 elif self.require_context and event:
                     effective = "GREEN" if permitted and ready and route_valid else "RED"
                     self.core.observe_signal(effective, 1.0, True, ros_now, now, ros_now)
-                elif signal is not None and not self.require_context:
+                elif (signal is not None and not self.require_context
+                      and (not self.stopline_requires_detected_signal
+                           or self.valid_sensor_stop_pair(line, signal))):
                     effective = "GREEN" if permitted and ready and route_valid else "RED"
                     self.core.observe_signal(effective, signal.value.confidence, signal_ok,
                                              signal.stamp, signal.received, ros_now)
@@ -887,6 +946,7 @@ class ManeuverFusionNode:
             # UNKNOWN/no line is a valid new image observation. No new stamped
             # observations is a dead camera/inference stream, including mid-turn.
             if (self.require_camera_stream and not self.require_context
+                    and not self.stopline_requires_detected_signal
                     and (signal is None or line is None)):
                 reasons.append("camera_observation_stream_stale")
             if self.require_reference_path and not self.reference_path_match:
