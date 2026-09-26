@@ -26,6 +26,7 @@ FILES=(
   "$CURVE/src/curvature_speed_purepursuit/planner.py"
   "$CURVE/test/test_node_startup.py"
   src/control/purepursuit_mgeo/src/purepursuit_mgeo/longitudinal_controller.py
+  src/control/turn_signal_controller/scripts/maneuver_fusion_node.py
   "$CAM/launch/camera_perception.launch"
   "$CAM/post_processing/real_lane_node.py"
   "$CAM/scripts/camera_object_detection_node.py"
@@ -48,7 +49,8 @@ for file in "${FILES[@]}" "$CAM/web/camera_dashboard.html" config/curvature_sign
   "${DOCKER[@]}" cp "$CONTAINER_NAME:$DEST/$file" "$BACKUP/$file" 2>/dev/null || true
 done
 # The new executable can run directly from scripts/ in the existing catkin source workspace.
-chmod +x "$WS/$CAM/scripts/camera_debug_dashboard.py" "$WS/$CURVE/scripts/curvature_speed_purepursuit_node.py"
+chmod +x "$WS/$CAM/scripts/camera_debug_dashboard.py" "$WS/$CURVE/scripts/curvature_speed_purepursuit_node.py" \
+  "$WS/src/control/turn_signal_controller/scripts/maneuver_fusion_node.py"
 for file in "${FILES[@]}"; do
   "${DOCKER[@]}" cp "$WS/$file" "$CONTAINER_NAME:$DEST/$file"
 done
@@ -63,7 +65,7 @@ elif "${DOCKER[@]}" cp "$CONTAINER_NAME:$CONFIG" - >/dev/null 2>&1; then
 else
   "${DOCKER[@]}" cp "$WS/config/curvature_signal.yaml" "$CONTAINER_NAME:$CONFIG"
 fi
-echo "Installed fixed curvature controller and curvature_signal launch in $CONTAINER_NAME. No driving process was started."
+echo "Installed fixed curvature controller, signal fusion node and curvature_signal launch in $CONTAINER_NAME. No driving process was started."
 echo "Camera dashboard installed. Backup: $BACKUP"
 echo 'bash run_highway.sh start, then bash run_test.sh monitor 2 or drive 2.'
 echo 'Ubuntu browser: http://127.0.0.1:8765'

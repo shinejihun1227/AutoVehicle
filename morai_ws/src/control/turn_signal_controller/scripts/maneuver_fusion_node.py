@@ -60,8 +60,11 @@ class ManeuverFusionNode:
         self.preview_m = float(rospy.get_param("~route_preview_m", 30.0))
         self.turn_threshold = float(rospy.get_param("~turn_threshold_deg", 25.0))
         self.max_route_error = float(rospy.get_param("~max_route_error_m", 3.0))
+        self.unmapped_stopline_horizon_m = float(
+            rospy.get_param("~unmapped_stopline_horizon_m", 20.0))
         if not all(math.isfinite(v) and v > 0 for v in
-                   (self.timeout, self.signal_timeout, self.preview_m, self.turn_threshold, self.max_route_error)):
+                   (self.timeout, self.signal_timeout, self.preview_m, self.turn_threshold,
+                    self.max_route_error, self.unmapped_stopline_horizon_m)):
             raise ValueError("Fusion distances, thresholds and timeouts must be positive and finite")
         self.require_quality = bool(rospy.get_param("~require_sensor_quality", True))
         self.require_safety = bool(rospy.get_param("~require_fresh_safety", True))
@@ -546,12 +549,28 @@ class ManeuverFusionNode:
             if candidates:
                 candidate = min(candidates, key=lambda c: (c["start"], c.get("source") != "mgeo"))
                 objects = self.fresh("objects", now, ros_now)
-                visible = objects is not None and bool(objects.value.objects)
+                matched_head_visible = False
+                if (objects is not None and candidate.get("source") == "mgeo"
+                        and candidate.get("signal_points")):
+                    selection = self.associate_signal_frame(objects, candidate)
+                    route_signal_ids = candidate.get("signal_ids") or [
+                        point.get("id") for point in candidate["signal_points"]]
+                    matched_head_visible = bool(selection is not None and selection.valid
+                                                and selection.selected_id in route_signal_ids)
+                line_matches_candidate = False
+                if (line_sample is not None and line_sample.value.valid
+                        and line_sample.value.header.frame_id == "base_link"
+                        and finite(line_sample.value.distance_m)
+                        and 0 <= line_sample.value.distance_m <= 50.0
+                        and finite(line_sample.value.confidence)
+                        and 0.5 <= line_sample.value.confidence <= 1.0):
+                    line_s = self.line_route_s(line_sample)
+                    target_s = candidate.get("stop_s", candidate["start"])
+                    line_matches_candidate = line_s is not None and abs(line_s - target_s) <= 2.0
                 if (candidate["start"] - self.progress <= horizon
-                        or (visible and candidate.get("source") == "mgeo")):
-                    # A known head may be visible before the braking horizon.
-                    # Pre-arm its map context; do not latch a false "unmapped"
-                    # stop merely because the line is still >40m away.
+                        or matched_head_visible or line_matches_candidate):
+                    # Pre-arm only a route-matched signal, route-matched line,
+                    # or a junction already inside its stopping horizon.
                     self.event = candidate
                     if candidate.get("source") == "mgeo":
                         self.unmapped_signal_seen = False
@@ -747,10 +766,27 @@ class ManeuverFusionNode:
                 chosen = self.selected_signal(objects, event, route_valid and not motion.fault)
                 signal_ok = chosen.valid
                 permitted = chosen.valid and signal_permits(chosen.state, direction, self.right_on_green)
-                if event is None and ((objects is not None and objects.value.objects)
-                                      or (line is not None and line.value.valid)):
-                    # Latch until a mapped context is acquired/restart: one missed
-                    # subsequent image must not release an unresolved junction.
+                horizon_speed = speed if finite(speed) and speed >= 0.0 else 0.0
+                stopline_horizon = max(
+                    self.unmapped_stopline_horizon_m,
+                    horizon_speed * self.core.reaction_time_sec
+                    + horizon_speed * horizon_speed / (2.0 * self.core.planning_decel_mps2)
+                    + self.core.hold_distance_m + self.core.trigger_margin_m,
+                )
+                valid_unmapped_line_near = bool(
+                    line is not None and line.value.valid
+                    and line.value.header.frame_id == "base_link"
+                    and finite(line.value.distance_m)
+                    and 0.0 <= line.value.distance_m <= stopline_horizon
+                    and finite(line.value.confidence)
+                    and 0.5 <= line.value.confidence <= 1.0
+                )
+                if event is None and not self.contexts and objects is not None and objects.value.objects:
+                    # A missing route-signal map is a configuration fault.
+                    self.unmapped_signal_seen = True
+                if event is None and valid_unmapped_line_near:
+                    # Do not emergency-stop on a camera marking at the far edge
+                    # of view; retain the conservative stop inside braking range.
                     self.unmapped_signal_seen = True
             committed = bool(event and event["committed"])
 
@@ -863,6 +899,7 @@ class ManeuverFusionNode:
                 if not route_valid and not corridor_ok:
                     reasons.append("signal_localization_unreliable")
                 if (event and not committed and event["kind"] != "lane_change"
+                        and event["start"] - self.progress <= stopline_horizon
                         and objects is not None and objects.value.objects
                         and self.selection.selected_id is None):
                     reasons.append("unassociated_visible_signal")
@@ -873,7 +910,8 @@ class ManeuverFusionNode:
                     observed_s = self.line_route_s(line)
                     if observed_s is None:
                         reasons.append("stopline_pose_unsynchronized")
-                    elif not committed and observed_s < event["start"] - 2.:
+                    elif (not committed and observed_s < event.get("stop_s", event["start"]) - 2.
+                          and line.value.distance_m <= stopline_horizon):
                         reasons.append("unmapped_stopline_before_context")
                     elif (committed and line.value.distance_m > self.core.front_reference_offset_m
                           and not any(abs(observed_s-c["start"]) <= 2. for c in self.contexts

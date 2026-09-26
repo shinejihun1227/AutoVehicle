@@ -98,6 +98,7 @@ cd "$HOME/AutoVehicle/morai_ws/docker/final_ws" && bash run_test.sh diagnose 2
 | `signal_camera_uncalibrated` | Cam4 보정 미확인 상태다. [보정 절차](CURVATURE_SIGNAL_ONLY_KO.md)에 따라 영상·지도 투영을 검증한다. 이 값만 임의로 true로 바꾸지 않는다. |
 | `unassociated_visible_signal` | 신호등 검출은 있지만 진행 경로의 신호등으로 연결하지 못했다. 선택 신호 ID와 보정값·위치를 확인한다. |
 | `unmapped_signal_or_stopline` | 연결된 교차로가 없는 상태에서 신호등 또는 유효한 정지선이 관측됐다. 연결을 확보하거나 재시작하기 전까지 유지될 수 있다. CAM1 마스크와 CAM4 상자를 실제 도로와 대조한다. |
+| 미연결 검출이 멀리 있는데 정지 | 새 버전은 지도 신호와 실제로 연결된 검출만 교차로로 미리 연결한다. 미연결 정지선은 기본 20m 또는 현재 속도의 계산된 제동거리 안에서 정지한다. 연결된 교차로에서는 경로에 해당하는 신호와 정지선 승인을 함께 기다린다. |
 | `signal_localization_unreliable` / `odometry_or_route_unavailable` | GPS·IMU 수신과 차량의 경로상 위치를 확인한다. |
 | `nominal_stale_or_not_type1` | 곡률 제어 노드가 종료됐거나 정상 명령을 내보내지 못했다. 주행 터미널 오류를 확인한다. |
 | 가속 명령이 있는데 계속 정지 | MORAI 외부 제어 모드, 수신 주소 `192.168.0.147:9093`, 기어와 차량 상태를 확인한다. |
