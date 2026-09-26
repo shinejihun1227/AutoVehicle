@@ -10,3 +10,5 @@ bash run_highway.sh stop
 bash install_curvature_signal.sh --config
 bash run_highway.sh start
 bash run_test.sh drive 2
+
+nano "$HOME/AutoVehicle/morai_ws/config/curvature_signal.yaml"
