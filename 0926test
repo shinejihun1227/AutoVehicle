@@ -1,0 +1,7 @@
+cd ~/AutoVehicle
+git pull --ff-only origin final_ws
+cd morai_ws/docker/final_ws
+bash run_highway.sh stop
+bash install_curvature_signal.sh
+bash run_highway.sh start
+bash run_test.sh drive 2
