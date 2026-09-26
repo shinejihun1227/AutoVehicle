@@ -24,3 +24,13 @@ bash run_highway.sh start
 bash run_test.sh drive 2
 
 nano "$HOME/AutoVehicle/morai_ws/config/curvature_signal.yaml"
+
+ㅡ nwe
+
+cd ~/AutoVehicle
+git pull --ff-only origin final_ws
+cd ~/AutoVehicle/morai_ws/docker/final_ws
+bash run_highway.sh stop
+bash install_curvature_signal.sh
+bash run_highway.sh start
+bash run_test.sh monitor 2
