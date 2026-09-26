@@ -38,7 +38,8 @@ function paint(data){
  text('stopline',line?(line.valid?'정지선: '+number(line.distance_m)+' m · 신뢰도 '+number(line.confidence):'유효한 정지선 없음'):'정지선 관측 미수신 / 지연');
  text('signal',signal?'관측 신호: '+signal.state+' · 신뢰도 '+number(signal.confidence)+(signal.valid?'':' · 무효'):'신호 관측 미수신 / 지연');
  const sensorOnly=config?.require_route_signal_context===false&&config?.stopline_requires_detected_signal===true;
- text('selected',status?'주행 방향: '+status.route_direction+' / 신호 판단: '+(sensorOnly?'정지선과 유효 신호 동시 관측':'경로 연결 상태'):'주행 상태 대기');
+ const profile=status?.controller_profile||(sensorOnly?'sensor_only':'mgeo_or_legacy');
+ text('selected',status?'제어 모드: '+profile+' / 주행 방향: '+status.route_direction+' / 신호 판단: '+(sensorOnly?'정지선과 유효 신호 동시 관측':'경로 연결 상태'):'주행 상태 대기');
  text('calibration',sensorOnly?'MGeo 경로·신호 연결 미사용 · CAM4 지도 투영 보정 불필요':config?'경로 신호 모드 · CAM4 지도 투영 설정 확인':'제어 설정 대기');
  const projection=el('cam4-projection'),ctx=projection.getContext('2d');ctx.clearRect(0,0,640,480);
  for(const [id,p] of Object.entries(status?.route_signal_projection_px||{})){if(!Array.isArray(p)||p.length!==2)continue;const [x,y]=p;if(!Number.isFinite(x)||!Number.isFinite(y))continue;ctx.beginPath();ctx.arc(x,y,10,0,2*Math.PI);ctx.strokeStyle='#ff36c8';ctx.lineWidth=3;ctx.stroke();ctx.fillStyle='#ff36c8';ctx.font='bold 15px sans-serif';ctx.fillText(String(id),x+12,y-8);}

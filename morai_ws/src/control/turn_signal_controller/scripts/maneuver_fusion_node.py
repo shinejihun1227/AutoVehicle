@@ -1053,8 +1053,18 @@ class ManeuverFusionNode:
                 "accel_rise_limited": output.accel < requested_accel,
                 "route_context_count": len(self.contexts),
                 "route_context_error": self.context_load_error,
+                # Expose the live gate profile so a stale map-based launch is
+                # immediately distinguishable from the camera-only profile.
+                "controller_profile": (
+                    "mgeo" if self.require_context else
+                    "sensor_only" if self.stopline_requires_detected_signal else "legacy_sensor"),
+                "require_route_signal_context": self.require_context,
+                "stopline_requires_detected_signal": self.stopline_requires_detected_signal,
                 "next_junction_guard_id": self.next_guard_id,
-                "signal_selection_reason": self.selection.reason if self.require_context else "legacy_unassociated",
+                "signal_selection_reason": (
+                    self.selection.reason if self.require_context else
+                    "awaiting_paired_signal_stopline" if self.stopline_requires_detected_signal
+                    else "legacy_unassociated"),
                 "signal_pending_frames": len(self.signal_observations),
                 "signal_queue_overflows": self.signal_queue_overflows,
                 "signal_processed_stamp": self.selection_stamp if self.require_context else self.core.last_signal_stamp,

@@ -33,6 +33,26 @@ class DashboardTest(unittest.TestCase):
         self.assertEqual({n['code'] for n in result['notes']},
                          {'unassociated_visible_signal', 'signal_camera_uncalibrated'})
 
+    def test_sensor_only_launch_reports_old_or_unmarked_controller(self):
+        self.store.update('config', dict(control_output_enabled=True,
+                          require_route_signal_context=False,
+                          stopline_requires_detected_signal=True))
+        self.store.update('maneuver', dict(mode='SAFE_STOP', reason='unmapped_signal_or_stopline',
+                          controller_profile='mgeo'))
+        result = self.store.snapshot(self.now)['diagnosis']
+        self.assertIn('controller_profile_mismatch', {n['code'] for n in result['notes']})
+
+    def test_sensor_only_controller_with_line_without_light_does_not_report_map_failure(self):
+        self.store.update('config', dict(control_output_enabled=True,
+                          require_route_signal_context=False,
+                          stopline_requires_detected_signal=True))
+        self.store.update('maneuver', dict(mode='NOMINAL', reason='nominal',
+                          controller_profile='sensor_only',
+                          signal_selection_reason='awaiting_paired_signal_stopline'))
+        result = self.store.snapshot(self.now)['diagnosis']
+        self.assertNotIn('controller_profile_mismatch', {n['code'] for n in result['notes']})
+        self.assertNotIn('unmapped_signal_or_stopline', {n['code'] for n in result['notes']})
+
     def test_stopped_publisher_cannot_leave_a_live_acceleration_banner(self):
         self.assertEqual(self.store.snapshot(self.now)['diagnosis']['state'], 'command')
         self.now += 1.1

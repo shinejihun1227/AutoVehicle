@@ -82,6 +82,12 @@ def diagnose(values):
         if selection and selection not in codes:
             codes.append(selection)
     notes = [dict(code=c, text=EXPLANATIONS.get(c, c)) for c in codes]
+    sensor_only = (config is not None
+                   and config.get('require_route_signal_context') is False
+                   and config.get('stopline_requires_detected_signal') is True)
+    if sensor_only and status and status.get('controller_profile') != 'sensor_only':
+        notes.append(dict(code='controller_profile_mismatch',
+                          text='실행 중인 신호 제어기가 센서 전용 설정과 다릅니다. 이전 launch를 종료하고 센서 전용 파일을 설치한 뒤 다시 실행하세요.'))
     camera = fresh('cam4', 3.)
     if camera and camera.get('custom_loaded') is False:
         notes.append(dict(code='signal_model_missing', text='CAM4 신호등 모델 파일이 없어 기본 사물 모델만 실행 중입니다. 모델 경로를 확인하세요.'))

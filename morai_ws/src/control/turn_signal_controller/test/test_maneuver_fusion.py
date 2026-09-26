@@ -253,6 +253,10 @@ class FusionNodeTest(unittest.TestCase):
         self.assertIsNone(status["event"])
         self.assertEqual(output.brake, 0.0)
         self.assertEqual(status["mode"], "NOMINAL")
+        self.assertEqual(status["controller_profile"], "sensor_only")
+        self.assertFalse(status["require_route_signal_context"])
+        self.assertTrue(status["stopline_requires_detected_signal"])
+        self.assertEqual(status["signal_selection_reason"], "awaiting_paired_signal_stopline")
 
     def test_sensor_only_profile_stops_for_recognized_red_at_measured_line(self):
         self.params["~stopline_requires_detected_signal"] = True

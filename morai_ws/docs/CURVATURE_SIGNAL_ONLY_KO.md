@@ -28,6 +28,8 @@ bash install_curvature_signal.sh
 bash run_highway.sh start
 ```
 
+`bash run_test.sh monitor 2` 또는 `drive 2` 실행 시 먼저 컨테이너 안의 launch와 제어 노드가 센서 전용 버전인지 검사한다. 구버전이면 주행 launch를 시작하지 않고 업데이트 안내를 출력한다. 정상 실행 중 대시보드 상세 상태의 제어 모드는 `sensor_only`여야 한다.
+
 설치 후 모니터 모드로 인식과 명령을 먼저 확인한다.
 
 ```bash

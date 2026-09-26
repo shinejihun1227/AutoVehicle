@@ -162,6 +162,21 @@ else
 fi
 DOCKER=(docker --context default)
 if ! "${DOCKER[@]}" info >/dev/null 2>&1; then DOCKER=(sudo docker --context default); fi
+if [[ "$TEST_PROFILE" == curvature_signal ]]; then
+  INSTALLED_LAUNCH=/opt/AutoVehicle/morai_ws/src/bringup/morai_bringup/launch/final_ws_curvature_signal.launch
+  INSTALLED_FUSION=/opt/AutoVehicle/morai_ws/src/control/turn_signal_controller/scripts/maneuver_fusion_node.py
+  if ! "${DOCKER[@]}" exec "$CONTAINER_NAME" grep -Fq \
+      '<param name="require_route_signal_context" value="false" />' "$INSTALLED_LAUNCH" ||
+     ! "${DOCKER[@]}" exec "$CONTAINER_NAME" grep -Fq \
+      '<param name="stopline_requires_detected_signal" value="true" />' "$INSTALLED_LAUNCH" ||
+     ! "${DOCKER[@]}" exec "$CONTAINER_NAME" grep -Fq \
+      'def valid_sensor_stop_pair' "$INSTALLED_FUSION"; then
+    echo 'ERROR: The container has not been updated with the sensor-only signal profile.' >&2
+    echo 'No driving launch was started. Stop the container, run install_curvature_signal.sh, then start it again.' >&2
+    exit 2
+  fi
+  echo 'Verified container profile: MGeo context OFF; stopline requires a recognized CAM4 signal.'
+fi
 exec "${DOCKER[@]}" exec -it "$CONTAINER_NAME" /usr/local/bin/morai-entrypoint \
   "${DISPLAY_ARGS[@]}" roslaunch morai_bringup "$LAUNCH" "enable_control:=$CONTROL" \
   "${COMMON_ARGS[@]}" "${PROFILE_ARGS[@]}"

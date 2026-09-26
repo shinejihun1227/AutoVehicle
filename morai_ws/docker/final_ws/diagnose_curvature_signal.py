@@ -17,7 +17,9 @@ def summarize(kind, msg, ros_now):
         data = json.loads(msg.data)
         keys = ('mode', 'reason', 'reference_path_match', 'progress_s_m',
                 'event', 'route_context_count', 'route_context_error',
-                'signal_selection_reason', 'accel', 'brake')
+                'controller_profile', 'require_route_signal_context',
+                'stopline_requires_detected_signal', 'signal_selection_reason',
+                'accel', 'brake')
         result = {key: data[key] for key in keys if key in data}
         if isinstance(result.get('event'), dict):
             event = result['event']

@@ -48,11 +48,16 @@ class DiagnosticTest(unittest.TestCase):
 
     def test_all_stop_reasons_survive_the_summary(self):
         msg = NS(data='{"mode":"SAFE_STOP","reason":"reference_path_not_received,nominal_stale_or_not_type1",'
-                 '"reference_path_match":false,"progress_s_m":null,"accel":0,"brake":1,"private_extra":42}')
+                 '"reference_path_match":false,"progress_s_m":null,"accel":0,"brake":1,'
+                 '"controller_profile":"sensor_only","require_route_signal_context":false,'
+                 '"stopline_requires_detected_signal":true,"private_extra":42}')
         result = diagnostic.summarize('status', msg, 0)
         self.assertIn('reference_path_not_received', result['reason'])
         self.assertIn('nominal_stale_or_not_type1', result['reason'])
         self.assertIsNone(result['progress_s_m'])
+        self.assertEqual(result['controller_profile'], 'sensor_only')
+        self.assertFalse(result['require_route_signal_context'])
+        self.assertTrue(result['stopline_requires_detected_signal'])
         self.assertNotIn('private_extra', result)
 
     def test_wrong_command_type_is_visible(self):
