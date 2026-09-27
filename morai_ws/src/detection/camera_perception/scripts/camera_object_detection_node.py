@@ -21,7 +21,11 @@ import time
 import cv2
 import numpy as np
 from camera_perception.camera_udp import LatestCameraReceiver
-from camera_perception.traffic_signal import traffic_bbox_plausible
+from camera_perception.traffic_signal import (
+    TrackedSignalVotes,
+    register_cbam_model_layers,
+    traffic_bbox_plausible,
+)
 from camera_perception.highway_vehicle import (
     HIGHWAY_VEHICLE_CLASSES,
     highway_vehicle_detected,
@@ -36,10 +40,10 @@ PORT = int(os.environ.get("MORAI_YOLO_CAM_PORT", "1131"))
 
 # 💡 1. 투트랙 모델 로드
 # (1) 기본 사물 탐지 모델 (사람, 차량, 버스, 정지표지판, 동물 등)
-BASE_MODEL_PATH = os.environ.get("MORAI_YOLO_BASE_MODEL", "yolov8n.pt")
+BASE_MODEL_PATH = os.environ.get("MORAI_YOLO_BASE_MODEL", "yolov8s.pt")
 
 # (2) 커스텀 모델 (신호등 R/G/Y, 모라이 장애물 등)
-CUSTOM_MODEL_PATH = os.environ.get("MORAI_YOLO_CUSTOM_MODEL", "best0902.pt")
+CUSTOM_MODEL_PATH = os.environ.get("MORAI_YOLO_CUSTOM_MODEL", "best0917.pt")
 CAR_DETECTED_TOPIC = os.environ.get(
     "MORAI_YOLO_CAR_TOPIC", "/perception/camera/car_detected"
 )
@@ -52,10 +56,9 @@ INFERENCE_SIZE = int(os.environ.get("MORAI_YOLO_INFERENCE_SIZE", "416"))
 DISPLAY_FPS = float(os.environ.get("MORAI_YOLO_DISPLAY_FPS", "0.0"))
 CPU_THREADS = int(os.environ.get("MORAI_YOLO_CPU_THREADS", "0"))
 
-# person, unified car, stop sign.  The competition dataset labels every
-# relevant vehicle (including bus/train) as ``car``, so raw COCO bus/truck
-# classes must not independently activate the situation gates.
-BASE_TARGET_CLASSES = [0, 2, 11]
+# COCO person, car, bus, truck and stop sign. Bus/truck detections reach the
+# obstacle topic, while only the unified "car" class activates situation gates.
+BASE_TARGET_CLASSES = [0, 2, 5, 7, 11]
 TRAFFIC_KEYWORDS = (
     "red", "green", "yellow", "left", "right", "arrow", "amber", "traffic"
 )
@@ -132,6 +135,7 @@ def main(ip=IP, port=PORT, base_model_path=BASE_MODEL_PATH,
     # PyTorch otherwise tends to occupy every vCPU in a small VirtualBox VM,
     # starving the UDP/decode/GUI thread as soon as the first inference starts.
     import torch
+    register_cbam_model_layers(torch)
     selected_cpu_threads = None
     if not torch.cuda.is_available():
         available = max(1, os.cpu_count() or 1)
@@ -239,6 +243,7 @@ def main(ip=IP, port=PORT, base_model_path=BASE_MODEL_PATH,
         "fps": 0.0,
     }
     stop_worker = threading.Event()
+    signal_votes = TrackedSignalVotes(window=5, green_votes=3)
 
     def collect_detections(result, model, color, image_height, is_custom=False):
         detections = []
@@ -267,6 +272,7 @@ def main(ip=IP, port=PORT, base_model_path=BASE_MODEL_PATH,
         detections = []
         traffic_objects = []
         obstacle_objects = []
+        visible_signal_ids = set()
         boxes = result.boxes if result.boxes is not None else ()
         for box in boxes:
             cls_id = int(box.cls[0])
@@ -281,7 +287,12 @@ def main(ip=IP, port=PORT, base_model_path=BASE_MODEL_PATH,
             if any(keyword in normalized for keyword in TRAFFIC_KEYWORDS):
                 if not traffic_bbox_plausible(xc, yc, width, height, image_height):
                     continue
-                class_name, display_text, color = _parse_traffic_signal(label)
+                track_id_tensor = getattr(box, "id", None)
+                track_id = int(track_id_tensor[0]) if track_id_tensor is not None else None
+                if track_id is not None:
+                    visible_signal_ids.add(track_id)
+                stable_label = signal_votes.observe(track_id, label)
+                class_name, display_text, color = _parse_traffic_signal(stable_label)
                 if class_name is None:
                     continue
                 traffic_objects.append(object_message(box, model, class_name))
@@ -302,6 +313,7 @@ def main(ip=IP, port=PORT, base_model_path=BASE_MODEL_PATH,
             detections.append(
                 (x1, y1, x2, y2, label, score, (255, 0, 255))
             )
+        signal_votes.retain(visible_signal_ids)
         return detections, traffic_objects, obstacle_objects
 
     def inference_worker():
@@ -415,12 +427,26 @@ def main(ip=IP, port=PORT, base_model_path=BASE_MODEL_PATH,
                     )
 
                 if custom_model is not None:
-                    custom_results = custom_model.predict(
-                        source=image,
-                        imgsz=inference_size,
-                        conf=confidence,
-                        verbose=False,
-                    )
+                    try:
+                        custom_results = custom_model.track(
+                            source=image,
+                            imgsz=inference_size,
+                            conf=confidence,
+                            persist=True,
+                            tracker="bytetrack.yaml",
+                            verbose=False,
+                        )
+                    except Exception as tracker_error:
+                        rospy.logwarn_throttle(
+                            5.0, "CAM4 tracker unavailable; using frame detections: %s",
+                            tracker_error,
+                        )
+                        custom_results = custom_model.predict(
+                            source=image,
+                            imgsz=inference_size,
+                            conf=confidence,
+                            verbose=False,
+                        )
                     (
                         custom_detections,
                         traffic_objects,

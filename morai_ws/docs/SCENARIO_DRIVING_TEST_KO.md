@@ -185,7 +185,7 @@ python3 -c 'import cv2, numpy, scipy, rospkg, torch, torchvision, ultralytics'
 
 ROS의 rospy/tf/nav_msgs/sensor_msgs/geometry_msgs/std_msgs, 메시지 생성 도구와 Python NumPy/OpenCV/SciPy/rospkg가 필요하다. 카메라 코드가 사용하는 PyTorch/torchvision/ultralytics는 `rosdep`만으로 모두 준비된다고 가정하지 않는다. Noetic Python 및 GPU/CUDA 또는 CPU 환경에 맞는 호환 버전을 별도 준비하고 import·모델 로딩을 확인한다. GPS 좌표 변환은 순수 Python 구현이므로 pyproj를 필수 의존성으로 추가할 필요는 없다.
 
-로컬에 실제 존재하는 모델은 `camera_perception/lane/lane_seg_best.pt`(97,898,559 bytes), `models/yolov8n.pt`(6,549,796 bytes), `models/best0902.pt`(22,608,810 bytes)다. Ubuntu 복사본에도 존재하는지 확인한다. 파일 존재 확인은 추론 실행 검증이 아니다.
+현재 실행 모델은 `camera_perception/lane/lane_seg_best.pt`(97,898,559 bytes), `models/yolov8s.pt`(22,588,772 bytes), `models/best0917.pt`(22,219,676 bytes)다. Ubuntu 복사본에도 존재하는지 확인한다. 파일 존재 확인은 추론 실행 검증이 아니다.
 
 ## 6. 최종 launch의 실제 인자
 

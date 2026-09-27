@@ -3,10 +3,10 @@
 set -euo pipefail
 SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 ACTION="${1:-show}"
-if [[ $# -gt 2 || ! "$ACTION" =~ ^(show|monitor|drive|diagnose|speed|request-merge|view|rviz)$ ]] ||
-   [[ "$ACTION" =~ ^(request-merge|view|rviz)$ && $# -gt 1 ]] ||
+if [[ $# -gt 2 || ! "$ACTION" =~ ^(show|monitor|drive|diagnose|speed|models|request-merge|view|rviz)$ ]] ||
+   [[ "$ACTION" =~ ^(models|request-merge|view|rviz)$ && $# -gt 1 ]] ||
    [[ "$ACTION" == diagnose && $# -gt 1 && "$2" != 2 ]]; then
-  echo 'Usage: bash run_test.sh {show|monitor|drive} [1-5]; or {speed KMH|request-merge|diagnose [2]|view|rviz}' >&2
+  echo 'Usage: bash run_test.sh {show|monitor|drive} [1-5]; or {speed KMH|models|request-merge|diagnose [2]|view|rviz}' >&2
   exit 2
 fi
 if [[ ! -f "$SCRIPT_DIR/highway.env" || ! -f "$SCRIPT_DIR/highway-test.env" ]]; then
@@ -22,6 +22,12 @@ if [[ "$ACTION" == view ]]; then
 fi
 if [[ "$ACTION" == rviz ]]; then
   exec bash "$SCRIPT_DIR/open_camera_rviz.sh"
+fi
+if [[ "$ACTION" == models ]]; then
+  DOCKER=(docker --context default)
+  if ! "${DOCKER[@]}" info >/dev/null 2>&1; then DOCKER=(sudo docker --context default); fi
+  exec "${DOCKER[@]}" exec "$CONTAINER_NAME" /usr/local/bin/morai-entrypoint \
+    python /opt/AutoVehicle/morai_ws/docker/final_ws/smoke_models.py
 fi
 if [[ "$ACTION" == speed ]]; then
   VALUE="${2:-}"
@@ -170,6 +176,9 @@ if [[ "$TEST_PROFILE" == curvature_signal ]]; then
   INSTALLED_LAUNCH=/opt/AutoVehicle/morai_ws/src/bringup/morai_bringup/launch/final_ws_curvature_signal.launch
   INSTALLED_FUSION=/opt/AutoVehicle/morai_ws/src/control/turn_signal_controller/scripts/maneuver_fusion_node.py
   INSTALLED_CURVATURE=/opt/AutoVehicle/morai_ws/src/experimental/curvature_speed_purepursuit/scripts/curvature_speed_purepursuit_node.py
+  INSTALLED_CAMERA_LAUNCH=/opt/AutoVehicle/morai_ws/src/detection/camera_perception/launch/camera_perception.launch
+  INSTALLED_CAMERA_NODE=/opt/AutoVehicle/morai_ws/src/detection/camera_perception/scripts/camera_object_detection_node.py
+  INSTALLED_CAMERA_MODELS=/opt/AutoVehicle/morai_ws/src/detection/camera_perception/models
   if ! "${DOCKER[@]}" exec "$CONTAINER_NAME" grep -Fq \
       '<param name="require_route_signal_context" value="false" />' "$INSTALLED_LAUNCH" ||
      ! "${DOCKER[@]}" exec "$CONTAINER_NAME" grep -Fq \
@@ -179,8 +188,16 @@ if [[ "$TEST_PROFILE" == curvature_signal ]]; then
      ! "${DOCKER[@]}" exec "$CONTAINER_NAME" grep -Fq \
       'def valid_sensor_stop_pair' "$INSTALLED_FUSION" ||
      ! "${DOCKER[@]}" exec "$CONTAINER_NAME" grep -Fq \
-      'def update_stopline_speed_cap' "$INSTALLED_CURVATURE"; then
-    echo 'ERROR: The container has not been updated with the sensor-only / stopline-speed-cap profile.' >&2
+      'def update_stopline_speed_cap' "$INSTALLED_CURVATURE" ||
+     ! "${DOCKER[@]}" exec "$CONTAINER_NAME" grep -Fq \
+      'models/best0917.pt' "$INSTALLED_CAMERA_LAUNCH" ||
+     ! "${DOCKER[@]}" exec "$CONTAINER_NAME" grep -Fq \
+      'models/yolov8s.pt' "$INSTALLED_CAMERA_LAUNCH" ||
+     ! "${DOCKER[@]}" exec "$CONTAINER_NAME" grep -Fq \
+      'TrackedSignalVotes' "$INSTALLED_CAMERA_NODE" ||
+     ! "${DOCKER[@]}" exec "$CONTAINER_NAME" test -s "$INSTALLED_CAMERA_MODELS/best0917.pt" ||
+     ! "${DOCKER[@]}" exec "$CONTAINER_NAME" test -s "$INSTALLED_CAMERA_MODELS/yolov8s.pt"; then
+    echo 'ERROR: The container has not been updated with the current signal and CAM4 models.' >&2
     echo 'No driving launch was started. Stop the container, run install_curvature_signal.sh, then start it again.' >&2
     exit 2
   fi

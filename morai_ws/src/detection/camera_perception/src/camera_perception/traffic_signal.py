@@ -1,6 +1,7 @@
 """YOLO 신호등 클래스명을 주행/정지 조건으로 변환한다."""
 
 import math
+from collections import Counter, deque
 from types import SimpleNamespace
 
 
@@ -14,6 +15,90 @@ def traffic_bbox_plausible(x, y, width, height, image_height):
                 for v in (x, y, width, height, image_height))
             and image_height > 0 and width >= 2 and height >= 2
             and x >= 0 and 0 <= y <= image_height)
+
+
+class TrackedSignalVotes:
+    """Smooth one tracked lamp without delaying a newly observed stop colour.
+
+    Track IDs belong to the custom detector, not to the road or route. A green
+    indication needs three matching samples from the last five frames; red and
+    yellow take effect on the current frame. Missing IDs use the raw class so
+    a tracker that has not assigned IDs does not hide an otherwise valid lamp.
+    """
+
+    def __init__(self, window=5, green_votes=3):
+        self.window = int(window)
+        self.green_votes = int(green_votes)
+        self.history = {}
+
+    def observe(self, track_id, class_name):
+        if track_id is None:
+            return class_name
+        key = int(track_id)
+        samples = self.history.setdefault(key, deque(maxlen=self.window))
+        samples.append(class_name)
+        name = str(class_name).lower()
+        if "red" in name or "yellow" in name or "amber" in name:
+            return class_name
+        if any(word in name for word in ("green", "left", "right", "arrow")):
+            return class_name if Counter(samples)[class_name] >= self.green_votes else "Unknown"
+        return class_name
+
+    def retain(self, visible_ids):
+        visible = set(visible_ids)
+        for key in tuple(self.history):
+            if key not in visible:
+                del self.history[key]
+
+
+def register_cbam_model_layers(torch_module=None):
+    """Register the attention layers used by the newer team checkpoint."""
+    if torch_module is None:
+        import torch as torch_module
+    # The camera loop's dependency-free tests replace torch with a small stub.
+    if not hasattr(torch_module, "nn"):
+        return
+    import ultralytics.nn.tasks as tasks
+
+    nn = torch_module.nn
+
+    class ChannelAttention(nn.Module):
+        def __init__(self, channels, reduction=16):
+            super().__init__()
+            hidden = max(1, channels // reduction)
+            self.fc = nn.Sequential(
+                nn.Linear(channels, hidden, bias=False), nn.ReLU(inplace=True),
+                nn.Linear(hidden, channels, bias=False),
+            )
+            self.sigmoid = nn.Sigmoid()
+
+        def forward(self, x):
+            batch, channels, _, _ = x.size()
+            average = self.fc(x.mean((2, 3)).view(batch, channels)).view(batch, channels, 1, 1)
+            maximum = self.fc(x.amax((2, 3)).view(batch, channels)).view(batch, channels, 1, 1)
+            return x * self.sigmoid(average + maximum)
+
+    class SpatialAttention(nn.Module):
+        def __init__(self, kernel_size=7):
+            super().__init__()
+            self.conv = nn.Conv2d(2, 1, kernel_size, padding=kernel_size // 2, bias=False)
+            self.sigmoid = nn.Sigmoid()
+
+        def forward(self, x):
+            average = torch_module.mean(x, dim=1, keepdim=True)
+            maximum, _ = torch_module.max(x, dim=1, keepdim=True)
+            return x * self.sigmoid(self.conv(torch_module.cat([average, maximum], dim=1)))
+
+    class CBAM(nn.Module):
+        def __init__(self, c1, kernel_size=7):
+            super().__init__()
+            self.ca = ChannelAttention(c1)
+            self.sa = SpatialAttention(kernel_size)
+
+        def forward(self, x):
+            return self.sa(self.ca(x))
+
+    tasks.CBAM = CBAM
 
 
 def directional_observation(objects, min_confidence=0.5):

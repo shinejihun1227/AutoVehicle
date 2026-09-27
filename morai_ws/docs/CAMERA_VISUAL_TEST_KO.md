@@ -68,7 +68,7 @@ cd "$HOME/AutoVehicle/morai_ws/docker/final_ws" && bash run_test.sh view
 | 화면 | 표시 내용 |
 |---|---|
 | CAM1 · UDP 1101 | 현재 `highway_best.pt`의 차선·정지선 마스크, 후처리 경계, 정지선 거리, 신뢰도 |
-| CAM4 · UDP 1131 | 현재 신호등 `best0902.pt`와 사물 `yolov8n.pt`의 검출 상자·분류·신뢰도, 제어기가 선택한 신호 |
+| CAM4 · UDP 1131 | 현재 신호등 `best0917.pt`와 사물 `yolov8s.pt`의 검출 상자·분류·신뢰도, 제어기가 선택한 신호 |
 | 상단 상태 | MONITOR 여부, 정지·제동 사유, 신호 연결 실패 사유 |
 | 하단 값 | 실제 속도, 곡률 목표속도, 최종 가속·브레이크, 경로 일치·도착 상태 |
 

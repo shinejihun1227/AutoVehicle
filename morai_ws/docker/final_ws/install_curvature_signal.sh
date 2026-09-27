@@ -32,7 +32,11 @@ FILES=(
   "$CAM/launch/camera_perception.launch"
   "$CAM/post_processing/real_lane_node.py"
   "$CAM/scripts/camera_object_detection_node.py"
+  "$CAM/scripts/camera_feature_runner.py"
   "$CAM/scripts/camera_debug_dashboard.py"
+  "$CAM/src/camera_perception/traffic_signal.py"
+  "$CAM/models/yolov8s.pt"
+  "$CAM/models/best0917.pt"
   "$CAM/src/camera_perception/debug_images.py"
   "$CAM/src/camera_perception/debug_dashboard.py"
   "$CAM/CMakeLists.txt"
@@ -40,10 +44,15 @@ FILES=(
   "$CAM/test/test_debug_dashboard.py"
   "$CAM/test/test_camera_timestamps.py"
   docker/final_ws/check_highway_launch.py
+  docker/final_ws/smoke_models.py
 )
 for file in "${FILES[@]}" "$CAM/web/camera_dashboard.html" config/curvature_signal.yaml; do
   [[ -f "$WS/$file" ]] || { echo "Missing host file: $WS/$file" >&2; exit 2; }
 done
+printf '%s\n' \
+  '1f47a78bf100391c2a140b7ac73a1caae18c32779be7d310658112f7ac9aa78a  '"$WS/$CAM/models/yolov8s.pt" \
+  '6812d43beda5ab6ff18881198f34a49f79d641efbf2768220b34c74dd11aa9f5  '"$WS/$CAM/models/best0917.pt" \
+  | sha256sum --check --status || { echo 'CAM4 checkpoint checksum mismatch.' >&2; exit 2; }
 BACKUP="$HOME/morai-update-backups/$CONTAINER_NAME-camera-$(date +%Y%m%d-%H%M%S)"
 mkdir -p "$BACKUP"
 for file in "${FILES[@]}" "$CAM/web/camera_dashboard.html" config/curvature_signal.yaml; do

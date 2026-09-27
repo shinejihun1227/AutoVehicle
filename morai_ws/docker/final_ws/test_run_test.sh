@@ -102,6 +102,10 @@ bash "$FIXTURE/run_test.sh" diagnose > /dev/null
 has '/opt/AutoVehicle/morai_ws/docker/final_ws/diagnose_highway.py' "$DOCKER_LOG"
 if bash "$FIXTURE/run_test.sh" diagnose 3 > /dev/null 2>&1; then fail 'Accepted unsupported diagnosis'; fi
 : > "$DOCKER_LOG"
+bash "$FIXTURE/run_test.sh" models > /dev/null
+has '/opt/AutoVehicle/morai_ws/docker/final_ws/smoke_models.py' "$DOCKER_LOG"
+if bash "$FIXTURE/run_test.sh" models 2 > /dev/null 2>&1; then fail 'Accepted extra models argument'; fi
+: > "$DOCKER_LOG"
 [[ "$(bash "$FIXTURE/run_test.sh" rviz)" == RVIZ_ACTION_CALLED ]] || fail 'RViz action not dispatched'
 [[ ! -s "$DOCKER_LOG" ]] || fail 'RViz action started driving through run_test'
 if bash "$FIXTURE/run_test.sh" rviz 2 > /dev/null 2>&1; then fail 'Accepted extra RViz argument'; fi

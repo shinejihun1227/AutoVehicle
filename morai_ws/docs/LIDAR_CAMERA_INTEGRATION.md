@@ -54,7 +54,7 @@ roslaunch morai_bringup morai_udp_ekf_purepursuit_lidar_camera.launch enable_con
 | `lane_port` | `1101` | 차선 카메라 UDP 포트 |
 | `enable_yolo` | `true` | YOLO 프로세스 실행 |
 | `yolo_port` | `1131` | YOLO 카메라 UDP 포트 |
-| `base_model_path` | `yolov8n.pt` | 기본 YOLO 모델 |
+| `base_model_path` | `yolov8s.pt` | 기본 YOLO 모델 |
 | `custom_model_path` | `null.pt` | 커스텀 신호등/장애물 모델 |
 | `yolo_confidence` | `0.4` | YOLO confidence 임계값 |
 | `yolo_inference_size` | `320` | YOLO 추론 입력 크기(작을수록 빠르지만 소형 객체 정확도 감소) |
@@ -71,7 +71,7 @@ roslaunch morai_bringup morai_udp_ekf_purepursuit_lidar_camera.launch enable_con
 | `enable_control` | `true` | 차량 제어 UDP 송신 |
 
 YOLO 검출 화면의 `BASE` 단계는 기본 모델의 car/person 결과를 우선 표시한다.
-`best0902.pt`로 같은 프레임의 커스텀 검출을 마친 뒤 `BASE+CUSTOM`으로
+`best0917.pt`로 같은 프레임의 커스텀 검출을 마친 뒤 `BASE+CUSTOM`으로
 후속 갱신한다. 따라서 커스텀 모델 기능과 프레임-박스 매칭을 유지하면서 기본
 객체 검출이 두 번째 추론을 기다리는 지연을 줄인다. 화면의 `latency`는 카메라
 프레임 수신부터 해당 결과 준비까지의 시간이다.

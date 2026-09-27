@@ -151,7 +151,7 @@ python docker/final_ws/smoke_highway_model.py
 - 다운로드 기준: ROI `13b740689c280d04fd456b00b854efbd793c38c2`의 `models/best.pt`.
 - SHA-256: `0784b486d445480640df15893bf499a0e99aa05a58e859f03fa80393435a5b3b`.
 - `fetch_highway_model.py`는 이 해시를 검증하고, `smoke_highway_model.py`는 6개 클래스 모델을 **CPU에서 실제 추론**한다.
-- YOLO는 `best0902.pt`와 `yolov8n.pt`를 사용한다. 커스텀 모델 누락으로 기본 모델로 대체된 로그가 있으면 신호 시험을 시작하지 않는다.
+- CAM4 YOLO는 `best0917.pt`와 `yolov8s.pt`를 사용한다. 커스텀 모델 누락으로 기본 모델로 대체된 로그가 있으면 신호 시험을 시작하지 않는다.
 
 GPU를 사용하는 경우 같은 컨테이너에서 추가 확인한다.
 

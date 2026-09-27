@@ -37,11 +37,14 @@ def main():
     print("MESSAGES", *(cls.__name__ for cls in
           (CtrlCmd, EgoVehicleStatus, GPSMessage, StopLineDetection, ObjectInfoArray)))
     camera = args.workspace / "src/detection/camera_perception"
-    checkpoints = [camera / "models/yolov8n.pt", camera / "models/best0902.pt",
+    sys.path.insert(0, str(camera / "src"))
+    checkpoints = [camera / "models/yolov8s.pt", camera / "models/best0917.pt",
                    camera / "lane/lane_seg_best.pt"]
     for checkpoint in checkpoints:
         if not checkpoint.is_file() or checkpoint.stat().st_size < 1000000:
             raise RuntimeError("Missing or placeholder checkpoint: " + str(checkpoint))
+    from camera_perception.traffic_signal import register_cbam_model_layers
+    register_cbam_model_layers(torch)
     for checkpoint in checkpoints[:2]:
         model = YOLO(str(checkpoint))
         result = model.predict(np.zeros((416, 416, 3), dtype=np.uint8),

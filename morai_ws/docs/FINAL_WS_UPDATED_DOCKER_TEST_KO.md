@@ -203,12 +203,12 @@ git status --short
 test -f morai_ws/docker/final_ws/Dockerfile
 test -f morai_ws/src/common/morai_perception_msgs/msg/StopLineDetection.msg
 wc -c morai_ws/src/detection/camera_perception/lane/lane_seg_best.pt \
-  morai_ws/src/detection/camera_perception/models/best0902.pt \
-  morai_ws/src/detection/camera_perception/models/yolov8n.pt
+  morai_ws/src/detection/camera_perception/models/best0917.pt \
+  morai_ws/src/detection/camera_perception/models/yolov8s.pt
 ```
 
 `test`는 성공하면 출력이 없다. 모델 파일의 현재 크기는 순서대로 약 97.9MB,
-22.6MB, 6.55MB다. 파일이 없거나 작은 텍스트 포인터뿐이면 모델 본체를 먼저 확보한다.
+22.2MB, 22.6MB다. 파일이 없거나 작은 텍스트 포인터뿐이면 모델 본체를 먼저 확보한다.
 
 아래 빌드는 AutoVehicle 저장소 루트에서 실행한다. 이미지에 코드가 복사되므로
 호스트에서 `git pull`만 하고 이전 컨테이너를 재시작하면 새 코드가 반영되지 않는다.
