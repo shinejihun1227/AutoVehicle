@@ -245,6 +245,92 @@ def profile_value_at_s(
     return float(values[index] + ratio * (values[index + 1] - values[index]))
 
 
+def max_abs_curvature_ahead(
+    s_values: Sequence[float],
+    curvatures: Sequence[float],
+    query_s: float,
+    preview_distance_m: float,
+    sample_step_m: float = 0.5,
+) -> float:
+    """Return the largest absolute curvature in a forward path preview.
+
+    Curvature is calculated at discrete path points, while the controller runs
+    at an arbitrary arc-length position.  Sampling the interpolated profile
+    avoids missing a short, sharp bend between two control cycles.  The
+    returned value is always finite and nonnegative for a valid profile.
+    """
+
+    if len(s_values) != len(curvatures) or len(s_values) < 2:
+        raise ValueError("곡률 미리보기 입력 길이가 올바르지 않다.")
+    if not all(math.isfinite(float(value)) for value in s_values):
+        raise ValueError("곡률 미리보기 누적거리가 유한하지 않다.")
+    if not all(math.isfinite(float(value)) for value in curvatures):
+        raise ValueError("곡률 미리보기 값이 유한하지 않다.")
+
+    start = max(0.0, min(float(query_s), float(s_values[-1])))
+    distance = max(0.0, float(preview_distance_m))
+    end = min(float(s_values[-1]), start + distance)
+    step = max(1e-3, float(sample_step_m))
+
+    sample_count = max(1, int(math.ceil((end - start) / step)))
+    sample_positions = [
+        start + (end - start) * index / sample_count
+        for index in range(sample_count + 1)
+    ]
+    # Always include discrete path points as well.  A sharp bend can sit
+    # between two timer ticks and would otherwise be underestimated by the
+    # regular preview grid.
+    first_point = bisect_right(s_values, start)
+    for point_s in s_values[first_point:]:
+        if point_s > end:
+            break
+        sample_positions.append(float(point_s))
+
+    maximum = 0.0
+    for sample_s in sample_positions:
+        maximum = max(maximum, abs(profile_value_at_s(s_values, curvatures, sample_s)))
+    return maximum
+
+
+def adaptive_lookahead_m(
+    speed_mps: float,
+    base_lookahead_m: float,
+    speed_gain_s: float,
+    preview_curvature_abs_m_inv: float,
+    curvature_gain_m: float = 6.0,
+    tight_min_lookahead_m: float = 2.2,
+    max_lookahead_m: float = 12.0,
+) -> float:
+    """Choose a speed- and curvature-aware Pure Pursuit lookahead distance.
+
+    A long preview is stable on a straight road, but it cuts across an urban
+    corner when the same distance is used in a tight bend.  The nominal
+    distance is attenuated by ``1 + curvature_gain * |kappa|`` and clamped to
+    safe bounds so that the controller keeps enough preview to avoid noisy
+    steering while still fitting a sharp turn.
+    """
+
+    values = (
+        speed_mps,
+        base_lookahead_m,
+        speed_gain_s,
+        preview_curvature_abs_m_inv,
+        curvature_gain_m,
+        tight_min_lookahead_m,
+        max_lookahead_m,
+    )
+    if not all(math.isfinite(float(value)) for value in values):
+        raise ValueError("lookahead 파라미터는 유한해야 한다.")
+    if base_lookahead_m < 0.0 or speed_gain_s < 0.0 or curvature_gain_m < 0.0:
+        raise ValueError("lookahead 파라미터는 음수가 될 수 없다.")
+
+    lower = max(1e-3, float(tight_min_lookahead_m))
+    upper = max(lower, float(max_lookahead_m))
+    nominal = max(lower, float(base_lookahead_m) + float(speed_gain_s) * max(0.0, float(speed_mps)))
+    attenuation = 1.0 + float(curvature_gain_m) * abs(float(preview_curvature_abs_m_inv))
+    return max(lower, min(upper, nominal / attenuation))
+
+
 def curvature_speed_mps(
     curvature: float, lateral_accel_limit_mps2: float, curvature_epsilon: float = 1e-6,
 ) -> Optional[float]:

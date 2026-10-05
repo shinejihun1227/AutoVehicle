@@ -142,7 +142,7 @@ rosrun turn_signal_controller inspect_route_signals.py \
 
 ### 네트워크와 의존성
 
-`morai_host_ip`는 **시뮬레이터 PC** 주소다. 센서의 Destination IP는 **Ubuntu 알고리즘 PC** 주소다. `0.0.0.0`은 Ubuntu 수신 bind 값이고 원격 목적지 IP가 아니다. 저장소 예시 `192.168.0.151`/`192.168.0.200`과 과거 문서의 `.148`/`.185`를 실제 주소라고 가정하지 않는다.
+`morai_host_ip`는 **시뮬레이터 PC** 주소다. 센서의 Destination IP는 **Ubuntu 알고리즘 PC** 주소다. `0.0.0.0`은 Ubuntu 수신 bind 값이고 원격 목적지 IP가 아니다. 현재 시험 기준은 MORAI `192.168.0.147`, Ubuntu `192.168.0.185`이지만, 실제 네트워크 설정과 연결 상태를 먼저 확인한다.
 
 | 데이터 | 방향 / 포트 | 최종 ROS 입력·출력 |
 |---|---|---|
@@ -185,7 +185,7 @@ python3 -c 'import cv2, numpy, scipy, rospkg, torch, torchvision, ultralytics'
 
 ROS의 rospy/tf/nav_msgs/sensor_msgs/geometry_msgs/std_msgs, 메시지 생성 도구와 Python NumPy/OpenCV/SciPy/rospkg가 필요하다. 카메라 코드가 사용하는 PyTorch/torchvision/ultralytics는 `rosdep`만으로 모두 준비된다고 가정하지 않는다. Noetic Python 및 GPU/CUDA 또는 CPU 환경에 맞는 호환 버전을 별도 준비하고 import·모델 로딩을 확인한다. GPS 좌표 변환은 순수 Python 구현이므로 pyproj를 필수 의존성으로 추가할 필요는 없다.
 
-로컬에 실제 존재하는 모델은 `camera_perception/lane/lane_seg_best.pt`(97,898,559 bytes), `models/yolov8n.pt`(6,549,796 bytes), `models/best0902.pt`(22,608,810 bytes)다. Ubuntu 복사본에도 존재하는지 확인한다. 파일 존재 확인은 추론 실행 검증이 아니다.
+현재 실행 모델은 `camera_perception/lane/lane_seg_best.pt`(97,898,559 bytes), `models/yolov8s.pt`(22,588,772 bytes), `models/best0917.pt`(22,219,676 bytes)다. Ubuntu 복사본에도 존재하는지 확인한다. 파일 존재 확인은 추론 실행 검증이 아니다.
 
 ## 6. 최종 launch의 실제 인자
 
@@ -194,7 +194,7 @@ ROS의 rospy/tf/nav_msgs/sensor_msgs/geometry_msgs/std_msgs, 메시지 생성 �
 | 최상위에서 실제 선언된 인자 | 기본값 |
 |---|---|
 | `workspace_path`, `path_file` | `$HOME/morai_ws`, 해당 workspace의 `data/routes/2026_molit_comp_global_path.txt` |
-| `morai_host_ip`, `enable_control` | `192.168.0.151`, `false` |
+| `morai_host_ip`, `enable_control` | `192.168.0.147`, `false` |
 | `max_speed_kph` | `7.2`; 하위 PP의 max/target 속도 인자 모두에 전달 |
 | `enable_roi_camera`, `enable_roi_lidar`, `roi_enable_lane`, `roi_enable_yolo` | 모두 `true` |
 | `roi_lidar_rviz` | `false` |
@@ -218,7 +218,7 @@ ROS의 rospy/tf/nav_msgs/sensor_msgs/geometry_msgs/std_msgs, 메시지 생성 �
 MORAI에서 센서 송신을 준비하고, 위 빌드 환경을 source한 Ubuntu 터미널에서 실행한다. 다음 IP는 실제 시뮬레이터 주소로 바꾼다.
 
 ```bash
-export MORAI_IP=192.168.0.151
+export MORAI_IP=192.168.0.147
 roslaunch morai_bringup final_ws_bringup.launch \
   workspace_path:="$MORAI_WS" \
   path_file:="$MORAI_WS/data/routes/2026_molit_comp_global_path.txt" \

@@ -74,13 +74,13 @@ class NoTurnSignalsTest(unittest.TestCase):
         self.assertFalse(status["permission"])
         self.assertEqual(output.brake, 1.)
 
-    def test_unknown_route_cannot_become_ready_or_authorized(self):
+    def test_missing_map_event_keeps_curvature_route_active(self):
         self.node.contexts = []
         output, status = self.frames(state="GREEN")
         self.assertEqual(status["route_direction"], "UNKNOWN")
         self.assertFalse(status["indicator_ready"])
         self.assertFalse(status["permission"])
-        self.assertEqual(output.brake, 1.)
+        self.assertEqual(output.brake, 0.)
 
     def test_reference_mismatch_still_stops(self):
         self.frames()

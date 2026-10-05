@@ -2,6 +2,7 @@ import unittest
 
 from camera_perception.traffic_signal import (
     TrafficSignalStopLatch,
+    TrackedSignalVotes,
     traffic_signal_has_green,
     traffic_signal_requires_stop,
     traffic_bbox_plausible,
@@ -9,6 +10,16 @@ from camera_perception.traffic_signal import (
 
 
 class TrafficSignalTest(unittest.TestCase):
+    def test_tracked_green_needs_repeat_evidence_but_red_is_immediate(self):
+        votes = TrackedSignalVotes(window=5, green_votes=3)
+        self.assertEqual(votes.observe(7, "Green"), "Unknown")
+        self.assertEqual(votes.observe(7, "Green"), "Unknown")
+        self.assertEqual(votes.observe(7, "Green"), "Green")
+        self.assertEqual(votes.observe(7, "Red"), "Red")
+        votes.retain(set())
+        self.assertEqual(votes.observe(7, "Green"), "Unknown")
+        self.assertEqual(votes.observe(None, "Green"), "Green")
+
     def test_oblique_and_lower_signal_boxes_survive_to_route_association(self):
         self.assertTrue(traffic_bbox_plausible(600., 400., 8., 30., 480))
         self.assertTrue(traffic_bbox_plausible(50., 90., 30., 8., 480))

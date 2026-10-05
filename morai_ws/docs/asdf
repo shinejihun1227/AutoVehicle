@@ -1,0 +1,6 @@
+cd "$HOME/AutoVehicle" && git pull --ff-only origin final_ws
+cd "$HOME/AutoVehicle/morai_ws/docker/final_ws" && bash run_highway.sh stop && bash install_curvature_signal.sh && bash run_highway.sh start
+먼저 차량 제어 없이 영상만 확인합니다.
+bash run_test.sh monitor 2
+위 터미널을 켜 둔 채 새 Ubuntu 터미널에서:
+cd "$HOME/AutoVehicle/morai_ws/docker/final_ws" && bash run_test.sh rviz

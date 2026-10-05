@@ -1,8 +1,12 @@
 # final_ws: Docker 첫 설치부터 메시지·환경 설정·MORAI 시험까지
 
+> **Ubuntu 22.04.4 + RTX 4090 / Ubuntu IP 192.168.0.185의 현재 구성은
+> [복사해서 따라 하는 두 PC Docker 안내](TWO_PC_DOCKER_HIGHWAY_KO.md)를 사용하세요.**
+> 아래는 기존 전체 스택 안내입니다. 두 문서의 실행 명령을 동시에 사용하지 않습니다.
+
 Docker 없이 Ubuntu 20.04/Noetic의 홈 폴더에 설치하고, 방향지시등 인터페이스 없이
 시험하려면 [Ubuntu 네이티브·방향지시등 제외 실행 안내](FINAL_WS_NATIVE_NO_LAMPS_TEST_KO.md)를 따른다.
-해당 안내는 Ubuntu `192.168.0.200`, MORAI `192.168.0.161`, Ego 수신 `1911` 기준이다.
+해당 안내는 Ubuntu `192.168.0.185`, MORAI `192.168.0.147`, Ego 수신 `1911` 기준이다.
 
 2026-09-09. 정지선·방향별 신호·좌우회전 속도/출구 정렬·GPS 음영 차선 유지를
 반영한 코드의 실행 안내다. 처음 사용하는 사람은 **0 → 1 → 2 → 3 → 4 → 5 → 6절**
@@ -199,12 +203,12 @@ git status --short
 test -f morai_ws/docker/final_ws/Dockerfile
 test -f morai_ws/src/common/morai_perception_msgs/msg/StopLineDetection.msg
 wc -c morai_ws/src/detection/camera_perception/lane/lane_seg_best.pt \
-  morai_ws/src/detection/camera_perception/models/best0902.pt \
-  morai_ws/src/detection/camera_perception/models/yolov8n.pt
+  morai_ws/src/detection/camera_perception/models/best0917.pt \
+  morai_ws/src/detection/camera_perception/models/yolov8s.pt
 ```
 
 `test`는 성공하면 출력이 없다. 모델 파일의 현재 크기는 순서대로 약 97.9MB,
-22.6MB, 6.55MB다. 파일이 없거나 작은 텍스트 포인터뿐이면 모델 본체를 먼저 확보한다.
+22.2MB, 22.6MB다. 파일이 없거나 작은 텍스트 포인터뿐이면 모델 본체를 먼저 확보한다.
 
 아래 빌드는 AutoVehicle 저장소 루트에서 실행한다. 이미지에 코드가 복사되므로
 호스트에서 `git pull`만 하고 이전 컨테이너를 재시작하면 새 코드가 반영되지 않는다.
@@ -345,13 +349,13 @@ docker run --rm --network none --gpus all "$IMAGE" \
 
 ### 4-1. 센서 네트워크 확인
 
-예시 MORAI PC 주소 `192.168.0.151`을 실제 값으로 바꾼다. MORAI 센서의 목적지 IP는
+예시 MORAI PC 주소 `192.168.0.147`을 실제 값으로 바꾼다. MORAI 센서의 목적지 IP는
 **Docker를 실행하는 Ubuntu 호스트의 LAN IP**다. Linux의 `--network host`는
 호스트 네트워크를 공유한다. 같은 센서 포트를 점유하는 launch를 중복 실행하지 않는다.
 [Docker host 네트워크 설명](https://docs.docker.com/engine/network/drivers/host/)
 
-예를 들어 MORAI PC가 `192.168.0.151`, Ubuntu PC가 `192.168.0.200`이면 센서 목적지는
-`192.168.0.200`, 차량·방향지시등 명령의 목적지는 `192.168.0.151`이다.
+예를 들어 MORAI PC가 `192.168.0.147`, Ubuntu PC가 `192.168.0.185`이면 센서 목적지는
+`192.168.0.185`, 차량·방향지시등 명령의 목적지는 `192.168.0.147`이다.
 Linux 호스트 IP는 `ip -br -4 address`, Windows의 LAN IP는 PowerShell의 `ipconfig`로
 확인한다. Desktop 사용 시 센서 목적지는 Windows 호스트의 도달 가능한 주소를 기준으로
 검사하며, WSL 내부의 임시 IP를 그대로 대입하지 않는다.
@@ -588,7 +592,7 @@ rosrun turn_signal_controller inspect_route_signals.py \
 **컨테이너 내부**에서 실행한다. `MORAI_HOST_IP`는 매 새 터미널에서 설정한다.
 
 ```bash
-export MORAI_HOST_IP=192.168.0.151
+export MORAI_HOST_IP=192.168.0.147
 xvfb-run -a -s '-screen 0 1920x1080x24' \
   roslaunch morai_bringup final_ws_bringup.launch \
   workspace_path:="$MORAI_WS" morai_host_ip:="$MORAI_HOST_IP" \
@@ -646,7 +650,7 @@ MORAI 시험 명령이며 대회 주행 승인 절차를 대신하지 않는다.
 컨테이너에서 실행한다.
 
 ```bash
-export MORAI_HOST_IP=192.168.0.151
+export MORAI_HOST_IP=192.168.0.147
 xvfb-run -a -s '-screen 0 1920x1080x24' \
   roslaunch morai_bringup final_ws_bringup.launch \
   workspace_path:="$MORAI_WS" morai_host_ip:="$MORAI_HOST_IP" \

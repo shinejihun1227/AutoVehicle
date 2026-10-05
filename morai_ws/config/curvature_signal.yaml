@@ -1,0 +1,14 @@
+# Sensor-only profile. MGeo geometry and map-to-camera projection are not used.
+# A measured stop line is acted on only together with a fresh, recognized CAM4
+# signal state. Route steering remains the curvature Pure Pursuit reference.
+
+input_timeout_sec: 0.5
+signal_timeout_sec: 0.8
+max_route_error_m: 3.0
+stop_tolerance_m: 0.03
+accel_rise_rate_per_sec: 0.5
+turn_max_heading_error_deg: 60.0
+turn_max_lateral_error_m: 1.5
+turn_exit_heading_error_deg: 15.0
+turn_exit_lateral_error_m: 0.75
+turn_exit_overrun_m: 3.0

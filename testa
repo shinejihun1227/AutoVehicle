@@ -1,0 +1,142 @@
+1. Ubuntu 홈 폴더에 Git clone
+sudo apt update
+sudo apt install -y git
+
+cd "$HOME"
+git clone --branch final_ws --single-branch \
+  https://github.com/shinejihun1227/AutoVehicle.git AutoVehicle
+
+cd "$HOME/AutoVehicle"
+git log -1 --oneline
+export MORAI_WS="$HOME/AutoVehicle/morai_ws"
+설치 위치는 /home/사용자명/AutoVehicle/morai_ws입니다. 이미 AutoVehicle 폴더가 있으면 삭제하지 말고 기존 변경 사항부터 확인하세요.
+2. 필요한 패키지와 Python 환경 설치
+Ubuntu 20.04와 ROS Noetic이 설치된 상태 기준입니다.
+sudo apt install -y \
+  build-essential cmake ca-certificates nano \
+  python3-dev python3-pip python3-venv \
+  python3-catkin-pkg python3-rospkg python3-empy python3-yaml \
+  python3-rosdep python3-nose python3-numpy python3-scipy python3-opencv \
+  ros-noetic-catkin ros-noetic-rospy \
+  ros-noetic-message-generation ros-noetic-message-runtime \
+  ros-noetic-tf ros-noetic-tf2-ros \
+  ros-noetic-nav-msgs ros-noetic-sensor-msgs ros-noetic-geometry-msgs \
+  ros-noetic-diagnostic-msgs ros-noetic-visualization-msgs \
+  ros-noetic-cv-bridge ros-noetic-image-transport ros-noetic-rviz \
+  iproute2 iputils-ping tcpdump xvfb xauth \
+  libgl1 libglib2.0-0 libsm6 libxext6 libxrender1 \
+  libxkbcommon-x11-0 libxcb-xinerama0
+
+source /opt/ros/noetic/setup.bash
+
+/usr/bin/python3 -m venv --system-site-packages "$HOME/morai-final-venv"
+source "$HOME/morai-final-venv/bin/activate"
+
+python -m pip install pip==24.3.1 setuptools==69.5.1 wheel==0.45.1
+
+python -m pip install torch==2.4.1 torchvision==0.19.1 \
+  --index-url https://download.pytorch.org/whl/cpu
+
+python -m pip install \
+  -r "$MORAI_WS/docker/final_ws/requirements.txt"
+
+python -m pip check
+docker/final_ws/requirements.txt는 Python 패키지 목록입니다. Docker를 실행하는 명령이 아닙니다. 위 설치는 CPU 기준이며, GPU 설정은 전체 안내에 넣었습니다.
+3. MORAI 메시지 설치 후 빌드
+기존 대회 SDK에 맞는 morai_msgs가 있다면 그것을 사용하세요. 없다면 공식 ROS1 메시지를 가져옵니다.
+git clone https://github.com/MORAI-Autonomous/MORAI-ROS_morai_msgs.git \
+  "$MORAI_WS/src/common/morai_msgs"
+
+cd "$MORAI_WS"
+
+catkin_make -j2 -l2 \
+  -DPYTHON_EXECUTABLE="$VIRTUAL_ENV/bin/python3"
+
+source "$MORAI_WS/devel/setup.bash"
+
+rospack find morai_bringup
+rosmsg show morai_msgs/EgoVehicleStatus
+rosmsg show morai_perception_msgs/StopLineDetection
+morai_msgs 폴더가 이미 있으면 clone을 반복하지 않습니다. 메시지 형식은 사용 중인 MORAI SDK와 맞아야 합니다.
+4. 새 터미널에서 사용할 환경 설정
+다음 파일을 한 번 만듭니다.
+cat > "$HOME/morai_native_env.sh" <<'EOF'
+source /opt/ros/noetic/setup.bash
+source "$HOME/morai-final-venv/bin/activate"
+export MORAI_WS="$HOME/AutoVehicle/morai_ws"
+source "$MORAI_WS/devel/setup.bash"
+export ROS_MASTER_URI=http://192.168.0.200:11311
+export ROS_IP=192.168.0.200
+unset ROS_HOSTNAME
+export YOLO_AUTOINSTALL=false
+export QT_X11_NO_MITSHM=1
+EOF
+
+source "$HOME/morai_native_env.sh"
+앞으로 새 Ubuntu 터미널마다 다음을 먼저 실행하면 됩니다.
+source "$HOME/morai_native_env.sh"
+5. MORAI 네트워크 확인
+항목	설정
+Ubuntu IP	192.168.0.200
+MORAI IP	192.168.0.161
+Ego Vehicle Status	Host 1910, Destination 1911
+차선·정지선 Cam1	Destination 1101
+신호등 인식 Cam4	Destination 1131
+LiDAR / GPS / IMU	Destination 2001 / 3001 / 4001
+차량 제어	코드 기본 MORAI 수신 9093, Ubuntu 송신 9094
+Sensor Sync	9097 / 9098 유지, 이번 실행에서는 사용하지 않음
+차량 방향지시등	별도 포트 설정 불필요
+
+
+Ego와 Sensor Sync 이외의 포트는 코드 기본값이므로 MORAI 화면과 맞춰주세요. 특히 차량 제어 수신 포트가 9093인지 확인해야 합니다.
+6. 오프라인 검사와 센서 관찰
+먼저 차량을 움직이지 않는 검사를 실행합니다.
+source "$HOME/morai_native_env.sh"
+
+python "$MORAI_WS/docker/final_ws/run_regression.py" \
+  --workspace "$MORAI_WS"
+
+python "$MORAI_WS/docker/final_ws/smoke_models.py" \
+  --workspace "$MORAI_WS" --device cpu
+그다음 MORAI에서 센서 출력을 켜고, 터미널 1에서 실행합니다.
+roslaunch morai_bringup final_ws_native_no_lamps.launch \
+  enable_control:=false
+SSH 접속으로 화면이 없는 경우에는 대신 다음을 실행합니다.
+xvfb-run -a -s '-screen 0 1920x1080x24' \
+  roslaunch morai_bringup final_ws_native_no_lamps.launch \
+  enable_control:=false
+터미널 2에서 수신을 확인합니다.
+source "$HOME/morai_native_env.sh"
+
+rostopic echo -n 1 /Ego_topic
+rostopic echo -n 1 /localization/sensor_quality
+rostopic echo -n 1 /detection/lane
+rostopic echo -n 1 /perception/camera/stopline
+rostopic echo -n 1 /perception/traffic_light/directional_state
+rostopic echo -n 1 /control/maneuver_status
+방향지시등 제외 설정도 확인할 수 있습니다.
+rosparam get /final_ws_maneuver_fusion/test_without_turn_signals
+rosparam get /final_ws_maneuver_fusion/lamp_output_enabled
+각각 **true, false**가 나오면 됩니다.
+7. 카메라 보정 후 주행 시험
+현재 기본 설정은 **signal_camera.calibrated: false**라 교차로 통과가 차단됩니다. 먼저 개인 설정 파일을 만드세요.
+mkdir -p "$HOME/morai-native-config"
+
+cp -n "$MORAI_WS/src/control/turn_signal_controller/config/turn_signal_maneuvers.yaml" \
+  "$HOME/morai-native-config/turn_signal_maneuvers.yaml"
+
+nano "$HOME/morai-native-config/turn_signal_maneuvers.yaml"
+Cam4의 실제 해상도·FOV·장착 위치·각도를 반영하고 영상 투영을 검증한 뒤 calibrated: true로 설정해야 합니다. 값만 true로 바꾸는 것은 보정이 아닙니다.
+관찰 launch를 종료하고 MORAI에서 시작 위치와 외부 UDP 제어 모드를 맞춘 다음 실행합니다.
+source "$HOME/morai_native_env.sh"
+
+roslaunch morai_bringup final_ws_native_no_lamps.launch \
+  enable_control:=true \
+  turn_signal_maneuvers_file:="$HOME/morai-native-config/turn_signal_maneuvers.yaml"
+이 명령 하나가 관련 노드를 함께 실행합니다. 초기 최고속도는 3km/h, 속도 계산은 곡률 기반입니다.
+시험은 다음 순서로 진행하세요.
+1. 정상 GPS에서 직진·곡선 경로 추종 확인.
+2. 적색 신호에서 정지선 접근 감속·대기 확인.
+3. 대회 경로가 좌·우회전일 때 해당 방향 허가 신호로 진행하는지 확인.
+4. 정상 위치를 확보한 뒤 교차로에서 떨어진 구간에서 GPS만 차단해 차선 유지·복구 확인.
+실제 Ubuntu 빌드와 MORAI 주행은 아직 실행하지 않았습니다. 이번 수정에 포함되지 않은 보행자 입력 소실·LiDAR 차선 변경 정보 지연 문제는 미해결 사항에 남아 있습니다.

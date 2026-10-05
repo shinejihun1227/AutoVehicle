@@ -10,6 +10,7 @@ uses the result for steering and accel/brake control.
 from __future__ import annotations
 
 import math
+import json
 import os
 import threading
 import time
@@ -26,9 +27,12 @@ from purepursuit_mgeo.longitudinal_controller import (
     MPS_TO_KPH,
     SpeedPIController,
 )
+from purepursuit_mgeo.plan_transport import read_trajectory, plan_locked
 from curvature_speed_purepursuit.planner import (
     PathPoint,
     build_speed_profile,
+    adaptive_lookahead_m,
+    max_abs_curvature_ahead,
     clean_consecutive_duplicates,
     cumulative_arc_lengths,
     curvature_profile,
@@ -90,6 +94,13 @@ class AdaptiveCurvaturePurePursuit:
             0.01, float(rospy.get_param("~max_steering_rad", math.radians(40.0)))
         )
         self.steering_sign = 1.0 if float(rospy.get_param("~steering_sign", 1.0)) >= 0.0 else -1.0
+        self.lookahead_curvature_gain = float(rospy.get_param("~lookahead_curvature_gain", 6.0))
+        self.lookahead_tight_min_m = float(rospy.get_param("~lookahead_tight_min_m", 2.2))
+        self.lookahead_max_m = float(rospy.get_param("~lookahead_max_m", 12.0))
+        self.steering_feedforward_weight = _clamp(float(rospy.get_param("~steering_feedforward_weight", 0.35)), 0.0, 1.0)
+        self.max_steering_rate_rad_s = max(0.0, float(rospy.get_param("~max_steering_rate_rad_s", 0.5)))
+        self.last_steering_rad = 0.0
+        self.status_pub = rospy.Publisher("/control/curvature_status", String, queue_size=1)
         self.goal_tolerance_m = max(0.0, float(rospy.get_param("~goal_tolerance_m", 1.5)))
 
         self.rate_hz = max(1.0, float(rospy.get_param("~control_rate_hz", 20.0)))
@@ -129,6 +140,9 @@ class AdaptiveCurvaturePurePursuit:
         self.require_route_mission_ready = bool(rospy.get_param("~require_route_mission_ready", False))
         self.route_mission_ready_topic = rospy.get_param("~route_mission_ready_topic", "/route_mission_gate/ready")
         self.route_mission_timeout_sec = max(0.1, float(rospy.get_param("~route_mission_timeout_sec", 0.8)))
+        self.enable_merge_gate = bool(rospy.get_param("~enable_merge_gate", False))
+        self.merge_stop_topic = rospy.get_param("~merge_stop_topic", "/roundabout_merge_gate/stop_required")
+        self.merge_gate_timeout_sec = max(0.1, float(rospy.get_param("~merge_gate_timeout_sec", 0.8)))
 
         self.speed_controller = SpeedPIController(
             kp=max(0.0, float(rospy.get_param("~speed_kp", 0.8))),
@@ -144,6 +158,9 @@ class AdaptiveCurvaturePurePursuit:
         )
 
         self._lock = threading.RLock()
+        self._plan_lock = self._lock
+        self.trajectory_topic = rospy.get_param("~trajectory_topic", "")
+        self.trajectory_reason = ""
         self.latest_odom: Optional[Odometry] = None
         self.latest_odom_wall_time: Optional[float] = None
         self.active_points: List[PathPoint] = list(self.base_points)
@@ -162,14 +179,12 @@ class AdaptiveCurvaturePurePursuit:
         self.stop_status_wall_time: Optional[float] = None
         self.target_speed_override_mps = self.max_speed_kph / MPS_TO_KPH
         self.target_speed_override_wall_time: Optional[float] = None
-        self.route_mission_ready = False
-        self.route_mission_wall_time: Optional[float] = None
         self.last_control_wall_time: Optional[float] = None
         self.command_speed_mps = 0.0
-        self.enable_merge_gate = bool(rospy.get_param("~enable_merge_gate", False))
+        self.route_mission_ready = False
+        self.route_mission_wall_time: Optional[float] = None
         self.merge_stop_required = True
         self.merge_status_wall_time: Optional[float] = None
-        self.merge_gate_timeout_sec = max(0.1, float(rospy.get_param("~merge_gate_timeout_sec", 0.8)))
 
         self.command_pub = rospy.Publisher(self.command_topic, CtrlCmd, queue_size=1)
         self.lookahead_pub = rospy.Publisher(
@@ -208,18 +223,17 @@ class AdaptiveCurvaturePurePursuit:
         )
 
         rospy.Subscriber(self.pose_topic, Odometry, self._odom_cb, queue_size=10)
-        if self.enable_merge_gate:
-            rospy.Subscriber(
-                rospy.get_param("~merge_stop_topic", "/roundabout_merge_gate/stop_required"),
-                Bool, self._merge_stop_cb, queue_size=1,
-            )
         if self.require_route_mission_ready:
             rospy.Subscriber(self.route_mission_ready_topic, Bool, self._route_mission_cb, queue_size=1)
-        if self.use_active_path:
+        if self.enable_merge_gate:
+            rospy.Subscriber(self.merge_stop_topic, Bool, self._merge_stop_cb, queue_size=1)
+        if self.trajectory_topic:
+            rospy.Subscriber(self.trajectory_topic, String, self._trajectory_cb, queue_size=1)
+        elif self.use_active_path:
             rospy.Subscriber(self.active_path_topic, Path, self._active_path_cb, queue_size=1)
-        if self.require_fresh_stop_status:
+        if self.require_fresh_stop_status and not self.trajectory_topic:
             rospy.Subscriber(self.stop_required_topic, Bool, self._stop_cb, queue_size=1)
-        if self.use_target_speed_override:
+        if self.use_target_speed_override and not self.trajectory_topic:
             rospy.Subscriber(
                 self.target_speed_override_topic,
                 Float64,
@@ -260,35 +274,77 @@ class AdaptiveCurvaturePurePursuit:
         )
 
     def _odom_cb(self, msg: Odometry) -> None:
+        values = (msg.pose.pose.position.x, msg.pose.pose.position.y, msg.pose.pose.orientation.x,
+                  msg.pose.pose.orientation.y, msg.pose.pose.orientation.z, msg.pose.pose.orientation.w,
+                  msg.twist.twist.linear.x, msg.twist.twist.linear.y)
+        if (msg.header.frame_id != self.map_frame or not all(math.isfinite(float(v)) for v in values)
+                or not -0.05 <= rospy.get_time()-msg.header.stamp.to_sec() <= 0.5):
+            self.latest_odom_wall_time = None
+            return
         self.latest_odom = msg
         self.latest_odom_wall_time = time.monotonic()
 
     def _stop_cb(self, msg: Bool) -> None:
+        if self.trajectory_topic:
+            return
         self.stop_required = bool(msg.data)
         self.stop_status_wall_time = time.monotonic()
-
-    def _merge_stop_cb(self, msg: Bool) -> None:
-        self.merge_stop_required = bool(msg.data)
-        self.merge_status_wall_time = time.monotonic()
 
     def _route_mission_cb(self, msg: Bool) -> None:
         self.route_mission_ready = bool(msg.data)
         self.route_mission_wall_time = time.monotonic()
 
+    def _merge_stop_cb(self, msg: Bool) -> None:
+        self.merge_stop_required = bool(msg.data)
+        self.merge_status_wall_time = time.monotonic()
+
     def _target_speed_cb(self, msg: Float64) -> None:
+        if self.trajectory_topic:
+            return
         value = float(msg.data)
         if math.isfinite(value):
             self.target_speed_override_mps = max(0.0, value)
             self.target_speed_override_wall_time = time.monotonic()
 
     def _active_path_cb(self, msg: Path) -> None:
-        if msg.header.frame_id and msg.header.frame_id != self.map_frame:
+        if self.trajectory_topic:
+            return
+        self._accept_active_path(msg)
+
+    @plan_locked
+    def _trajectory_cb(self, msg: String) -> None:
+        try:
+            path, stop, speed, reason = read_trajectory(
+                msg.data, self.map_frame, rospy.get_time(),
+                min(self.active_path_timeout_sec, self.stop_status_timeout_sec,
+                    self.target_speed_override_timeout_sec),
+                path_type=Path, pose_type=PoseStamped, stamp_type=rospy.Time)
+            # A rejected new plan must not inherit the previous plan's permit.
+            self.active_path_received = False
+            self._accept_active_path(path)
+        except (KeyError, TypeError, ValueError) as exc:
+            self.active_path_received = False
+            self.stop_required = True
+            self.trajectory_reason = 'invalid_trajectory:' + str(exc)
+            return
+        source_age = max(0.0, rospy.get_time() - path.header.stamp.to_sec())
+        received_at = time.monotonic() - source_age
+        self.active_path_wall_time = received_at
+        self.stop_required, self.target_speed_override_mps = stop, speed
+        self.stop_status_wall_time = self.target_speed_override_wall_time = received_at
+        self.trajectory_reason = reason
+
+    def _accept_active_path(self, msg: Path) -> None:
+        if (msg.header.frame_id != self.map_frame or not -0.05 <= rospy.get_time()-msg.header.stamp.to_sec() <= self.active_path_timeout_sec):
             rospy.logwarn_throttle(
                 2.0,
                 "active path frame=%s ignored; expected %s",
                 msg.header.frame_id,
                 self.map_frame,
             )
+            return
+        if any(not all(math.isfinite(float(v)) for v in (p.pose.position.x,p.pose.position.y,p.pose.position.z)) for p in msg.poses):
+            self.active_path_received = False
             return
         points = [
             PathPoint(
@@ -309,6 +365,7 @@ class AdaptiveCurvaturePurePursuit:
         if len(points) < 2:
             # Empty output is a deliberate stop/no-safe-path signal.  Keep the
             # previous geometry for diagnostics, but let freshness expire.
+            self.active_path_received = False
             rospy.logwarn_throttle(1.0, "active path is empty")
             return
         try:
@@ -359,14 +416,16 @@ class AdaptiveCurvaturePurePursuit:
         self.seq_pub.publish(String(data="" if seq is None else str(seq)))
 
     def _publish_global_path(self) -> None:
-        """Route authority stays immutable when the local maneuver path changes."""
+        """Keep the immutable competition route available for route context and RViz."""
         msg = Path()
         msg.header.stamp = rospy.Time.now()
         msg.header.frame_id = self.map_frame
         for point in self.base_points:
             pose = PoseStamped()
             pose.header = msg.header
-            pose.pose.position.x, pose.pose.position.y, pose.pose.position.z = point.x, point.y, point.z
+            pose.pose.position.x = point.x
+            pose.pose.position.y = point.y
+            pose.pose.position.z = point.z
             pose.pose.orientation.w = 1.0
             msg.poses.append(pose)
         self.global_reference_pub.publish(msg)
@@ -410,11 +469,12 @@ class AdaptiveCurvaturePurePursuit:
         yaw: float,
         speed_mps: float,
         progress_s: float,
+        curvatures: List[float],
     ) -> Tuple[float, PathPoint, float]:
-        lookahead = max(
-            self.lookahead_min_m,
-            self.lookahead_min_m + self.lookahead_gain * max(0.0, speed_mps),
-        )
+        preview = max_abs_curvature_ahead(s_values, curvatures, progress_s,
+            max(8.0, self.lookahead_min_m+self.lookahead_gain*speed_mps), 0.5)
+        lookahead = adaptive_lookahead_m(speed_mps, self.lookahead_min_m, self.lookahead_gain,
+            preview, self.lookahead_curvature_gain, self.lookahead_tight_min_m, self.lookahead_max_m)
         target, _ = interpolate_by_s(
             points, s_values, min(s_values[-1], progress_s + lookahead)
         )
@@ -425,7 +485,9 @@ class AdaptiveCurvaturePurePursuit:
         actual_lookahead = max(math.hypot(target_x_body, target_y_body), 1.0e-3)
         alpha = math.atan2(target_y_body, target_x_body)
         curvature = 2.0 * math.sin(alpha) / actual_lookahead
-        steering = math.atan(self.wheelbase_m * curvature) * self.steering_sign
+        ff = profile_value_at_s(s_values, curvatures, min(s_values[-1],progress_s+0.75*lookahead))
+        w = self.steering_feedforward_weight
+        steering = ((1-w)*math.atan(self.wheelbase_m*curvature)+w*math.atan(self.wheelbase_m*ff))*self.steering_sign
         return _clamp(steering, -self.max_steering_rad, self.max_steering_rad), target, actual_lookahead
 
     def _rate_limited_speed(self, target: float, dt: float) -> float:
@@ -457,8 +519,13 @@ class AdaptiveCurvaturePurePursuit:
             msg.velocity = 0.0
         return msg
 
+    @plan_locked
     def _control_cb(self, _event) -> None:
         if self.latest_odom is None or self.latest_odom_wall_time is None:
+            self.command_speed_mps = 0.0
+            self.speed_controller.reset()
+            if self.publish_command: self.command_pub.publish(self._make_command(0.0, None, True))
+            self.status_pub.publish(String(data=json.dumps({"stop":True,"reason":"odometry_missing_or_invalid"})))
             return
         now_wall = time.monotonic()
         if now_wall - self.latest_odom_wall_time > 0.5:
@@ -485,8 +552,7 @@ class AdaptiveCurvaturePurePursuit:
             curvatures = list(self.active_curvature)
             speed_profile = list(self.active_speed_profile)
 
-        stop = (fault is not None or self.stop_required
-                or (self.enable_merge_gate and self.merge_stop_required))
+        stop = fault is not None or self.stop_required or (self.enable_merge_gate and self.merge_stop_required)
         steering = 0.0
         target = points[0]
         lookahead = 0.0
@@ -498,11 +564,11 @@ class AdaptiveCurvaturePurePursuit:
         global_remaining = max(0.0, self.base_s[-1] - global_projection.progress_s)
         self.progress_pub.publish(Float64(global_projection.progress_s))
 
-        if fault is None and len(points) >= 2:
+        if not stop and len(points) >= 2:
             projection = nearest_projection(points, s_values, x, y)
             progress_s = projection.progress_s
             steering, target, lookahead = self._compute_steering(
-                points, s_values, x, y, yaw, speed_mps, progress_s
+                points, s_values, x, y, yaw, speed_mps, progress_s, curvatures
             )
             curvature = profile_value_at_s(s_values, curvatures, progress_s)
             path_limit = profile_value_at_s(s_values, speed_profile, progress_s)
@@ -521,9 +587,20 @@ class AdaptiveCurvaturePurePursuit:
             self.speed_controller.reset()
 
         if stop:
-            # Waiting for a path/gap must not wind up the departure speed ramp.
-            self.command_speed_mps = 0.0
-            target_speed_kph = 0.0
+            self.command_speed_mps, target_speed_kph = 0.0, 0.0
+            self.speed_controller.reset()
+            self.last_steering_rad = 0.0
+        else:
+            delta = self.max_steering_rate_rad_s * dt
+            if delta > 0:
+                steering = _clamp(steering,self.last_steering_rad-delta,self.last_steering_rad+delta)
+            self.last_steering_rad = steering
+        self.status_pub.publish(String(data=json.dumps({"stop":bool(stop),
+            "reason":fault or ("merge_gate_stop" if self.enable_merge_gate and self.merge_stop_required else
+                               "managed_stop" if self.stop_required else "goal" if stop else "tracking"),
+            "trajectory_reason":self.trajectory_reason,"trajectory_seq":self.active_path_seq,
+            "target_speed_kph":target_speed_kph,"measured_speed_kph":speed_mps*MPS_TO_KPH,
+            "path_speed_limit_kph":path_speed_limit_kph,"curvature":curvature})))
         pedal = self.speed_controller.update(
             target_speed_kph,
             speed_mps * MPS_TO_KPH,
@@ -565,8 +642,7 @@ class AdaptiveCurvaturePurePursuit:
             1.0 if stop else pedal.brake,
             0.0 if stop else steering,
             stop,
-            fault or ("path_manager_stop" if self.stop_required else
-                      "merge_gate_stop" if self.enable_merge_gate and self.merge_stop_required else ""),
+            fault or ("path_manager_stop" if self.stop_required else ""),
         )
 
 

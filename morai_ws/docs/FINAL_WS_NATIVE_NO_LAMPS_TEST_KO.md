@@ -201,8 +201,8 @@ if [ -f "$HOME/morai-final-venv/bin/activate" ]; then
 fi
 export MORAI_WS="$HOME/AutoVehicle/morai_ws"
 source "$MORAI_WS/devel/setup.bash" || return 1
-export ROS_MASTER_URI=http://192.168.0.200:11311
-export ROS_IP=192.168.0.200
+export ROS_MASTER_URI=http://192.168.0.185:11311
+export ROS_IP=192.168.0.185
 unset ROS_HOSTNAME
 export YOLO_AUTOINSTALL=false
 export QT_X11_NO_MITSHM=1
@@ -211,17 +211,17 @@ source "$HOME/morai_native_env.sh"
 ```
 
 앞으로 **새 Ubuntu 터미널마다** `source "$HOME/morai_native_env.sh"`를 먼저 실행한다.
-ROS master는 Ubuntu에 둔다. MORAI Windows PC의 `.161`을 `ROS_IP`에 넣지 않는다.
+ROS master는 Ubuntu에 둔다. MORAI Windows PC의 `.148`을 `ROS_IP`에 넣지 않는다.
 
 ## 5. MORAI 네트워크
 
-Ubuntu PC에 `192.168.0.200`이 실제로 할당되어 있어야 한다.
-MORAI PC는 `192.168.0.161`, 센서 전송 대상 PC는 `192.168.0.200`으로 맞춘다.
+Ubuntu PC에 `192.168.0.185`이 실제로 할당되어 있어야 한다.
+MORAI PC는 `192.168.0.147`, 센서 전송 대상 PC는 `192.168.0.185`으로 맞춘다.
 네트워크 확인:
 
 ```bash
 ip -br addr
-ping -c 4 192.168.0.161
+ping -c 4 192.168.0.147
 ```
 
 ping 응답만으로 UDP 수신까지 검증되는 것은 아니다. Windows에서 ICMP가 차단될 수도 있다.
@@ -234,7 +234,7 @@ ping 응답만으로 UDP 수신까지 검증되는 것은 아니다. Windows에�
 | VLP16 LiDAR | Destination 2001 | Ubuntu UDP 2001 수신 |
 | GPS | Destination 3001 | Ubuntu UDP 3001 수신 → `/gps` |
 | IMU | Destination 4001 | Ubuntu UDP 4001 수신 → `/Imu` |
-| 차량 제어 Cmd Control | 코드 기본값 MORAI 수신 9093, Ubuntu 송신 소켓 9094 | `/ctrl_cmd` → MORAI `.161:9093` |
+| 차량 제어 Cmd Control | 코드 기본값 MORAI 수신 9093, Ubuntu 송신 소켓 9094 | `/ctrl_cmd` → MORAI `.148:9093` |
 | Sensor Sync | 사용자 설정 Host 9097 / Destination 9098 유지 | 이번 launch에서 사용하지 않음 |
 | 차량 방향지시등 | 별도 포트/토픽 설정 불필요 | 송신 소켓을 생성하지 않음 |
 
@@ -253,11 +253,11 @@ MORAI 문서에서 Sensor Sync Data는 `SaveSensorData` 센서 저장 명령으�
 ```bash
 ss -lunp
 sudo tcpdump -ni any -c 30 \
-  'src host 192.168.0.161 and udp and (dst port 1911 or dst port 1101 or dst port 1131 or dst port 2001 or dst port 3001 or dst port 4001)'
+  'src host 192.168.0.147 and udp and (dst port 1911 or dst port 1101 or dst port 1131 or dst port 2001 or dst port 3001 or dst port 4001)'
 ```
 
 동일 UDP 포트에 기존 ROS 노드나 별도 파서를 중복 실행하지 않는다.
-방화벽이 켜져 있다면 실제 센서 포트에 대한 `.161`에서의 수신을 허용한다.
+방화벽이 켜져 있다면 실제 센서 포트에 대한 `.148`에서의 수신을 허용한다.
 
 ## 6. 차량을 움직이지 않는 오프라인 검사
 
@@ -347,11 +347,7 @@ cp -n "$MORAI_WS/src/control/turn_signal_controller/config/turn_signal_maneuvers
 nano "$HOME/morai-native-config/turn_signal_maneuvers.yaml"
 ```
 
-저장소 기본 YAML에는 2026-09-19 사용자 제공 Cam4 설정을 입력했다:
-위치(m)=(3.43, 0.01, 0.61), roll/pitch/yaw=0도, 원본 640×480,
-수평 FOV 90도(제공된 POV를 수평으로 해석). 기존 개인 YAML은 위 `cp -n`으로
-갱신되지 않으므로 해당 값도 직접 확인한다.
-Cam4의 실제 원본 해상도, 수평 FOV, 차량 기준 위치 x/y/z, yaw/pitch와 일치하는지 확인하고
+Cam4의 실제 원본 해상도, 수평 FOV, 차량 기준 위치 x/y/z, yaw/pitch를 입력하고
 지도상의 자기 차로 신호등이 영상의 해당 신호등에 투영되는지 확인한 뒤
 `calibrated: true`로 바꾼다. **false를 true로 바꾸는 것만으로 보정이 되지 않는다.**
 이 모듈은 차량 좌표 x 전방/y 좌측/z 위, yaw 좌향 양수, pitch 광축 상향 양수다.
@@ -387,7 +383,7 @@ roslaunch morai_bringup final_ws_native_no_lamps.launch \
 
 SSH라면 7절처럼 `roslaunch` 앞에 `xvfb-run -a -s '-screen 0 1920x1080x24'`를 붙인다.
 이 launch가 필요한 인식·측위·제어 노드를 함께 시작하므로 개별 실행파일을 중복 실행하지 않는다.
-자동 적용값은 MORAI `.161`, Ego 수신 `1911`, 램프 제외, 정상 주행 최고속도 `30km/h`,
+자동 적용값은 MORAI `.148`, Ego 수신 `1911`, 램프 제외, 정상 주행 최고속도 `30km/h`,
 GPS 음영 차선 주행 상한 `3km/h`, 공통 횡가속도 한계 `1m/s²`다.
 
 **터미널 2에서 진단을 보며 한 항목씩 시험한다:**

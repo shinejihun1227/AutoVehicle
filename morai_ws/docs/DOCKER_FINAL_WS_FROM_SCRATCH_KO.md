@@ -45,8 +45,8 @@ sudo docker ps -a
 네트워크 예시를 실제 PC 주소로 바꾼다.
 
 ```text
-MORAI Windows PC : 192.168.0.151   (명령의 목적지)
-Ubuntu host PC   : 192.168.0.200   (센서의 목적지)
+MORAI Windows PC : 192.168.0.147   (명령의 목적지)
+Ubuntu host PC   : 192.168.0.185   (센서의 목적지)
 ```
 
 Linux Engine의 `--network host`를 사용한다. `-p` 포트 매핑은 추가하지 않는다. 이 방식은 호스트와 네트워크를 공유하므로 같은 UDP 수신 포트를 쓰는 다른 주행 프로그램을 동시에 실행할 수 없다. [Docker host 네트워크 설명](https://docs.docker.com/engine/network/drivers/host/)
@@ -77,13 +77,13 @@ export CODE_REF="$(git rev-parse HEAD)"
 | 파일 (`morai_ws/src/detection/camera_perception/` 기준) | 바이트 |
 |---|---:|
 | `lane/lane_seg_best.pt` | 97,898,559 |
-| `models/best0902.pt` | 22,608,810 |
-| `models/yolov8n.pt` | 6,549,796 |
+| `models/best0917.pt` | 22,219,676 |
+| `models/yolov8s.pt` | 22,588,772 |
 
 ```bash
 wc -c morai_ws/src/detection/camera_perception/lane/lane_seg_best.pt \
-  morai_ws/src/detection/camera_perception/models/best0902.pt \
-  morai_ws/src/detection/camera_perception/models/yolov8n.pt
+  morai_ws/src/detection/camera_perception/models/best0917.pt \
+  morai_ws/src/detection/camera_perception/models/yolov8s.pt
 ```
 
 ## 4. MORAI 메시지 버전 선택과 이미지 빌드
@@ -110,7 +110,7 @@ sudo docker build --progress=plain \
 
 Docker build context는 마지막 인자의 **`morai_ws`**다. 저장소 루트 전체를 보내지 않는다. 이미지에 프로젝트·지도·모델이 포함되며 루트의 보고서/발표자료는 포함하지 않는다. Dockerfile은 정리된 새 빌드 디렉터리에서 `catkin_make -j2 -l2`를 수행한다. 소스는 `/opt/AutoVehicle/morai_ws`에 복사된다.
 
-Python 환경은 `/opt/morai-venv --system-site-packages`다. ROS apt 모듈을 유지하면서 NumPy 1.24.4, SciPy 1.10.1, GUI OpenCV 4.10.0.84, Torch 2.4.1/Torchvision 0.19.1을 설치한다. `best0902.pt`의 저장 메타데이터가 **Ultralytics 8.4.138**이므로 같은 버전으로 고정했다. 공식 메타데이터도 Python >=3.8을 지원한다. [Ultralytics 해당 버전 의존성](https://github.com/ultralytics/ultralytics/blob/v8.4.138/pyproject.toml), [PyTorch 이전 버전 설치](https://pytorch.org/get-started/previous-versions/#v241)
+Python 환경은 `/opt/morai-venv --system-site-packages`다. ROS apt 모듈을 유지하면서 NumPy 1.24.4, SciPy 1.10.1, GUI OpenCV 4.10.0.84, Torch 2.4.1/Torchvision 0.19.1을 설치한다. 기존 `best0902.pt` 기준으로 고정한 Ultralytics 8.4.138을 유지한다. 새 `best0917.pt`와 `yolov8s.pt`는 이미지 빌드 후 `smoke_models.py`에서 실제 로딩·추론 호환성을 확인한다. [Ultralytics 해당 버전 의존성](https://github.com/ultralytics/ultralytics/blob/v8.4.138/pyproject.toml), [PyTorch 이전 버전 설치](https://pytorch.org/get-started/previous-versions/#v241)
 
 이 파일은 주요 버전 제약이지 모든 전이 의존성/apt 패키지까지 고정한 완전한 lockfile이 아니다. 성공한 이미지 안에는 다음 기록이 생성된다.
 
@@ -253,7 +253,7 @@ xvfb-run -a -s '-screen 0 1920x1080x24' \
   roslaunch morai_bringup final_ws_bringup.launch \
   workspace_path:="$MORAI_WS" \
   path_file:="$MORAI_WS/data/routes/2026_molit_comp_global_path.txt" \
-  morai_host_ip:=192.168.0.151 \
+  morai_host_ip:=192.168.0.147 \
   turn_signal_maneuvers_file:=/opt/morai-config/turn_signal_maneuvers.yaml \
   enable_control:=false enable_turn_signal:=false \
   roi_lidar_rviz:=false max_speed_kph:=3.0 fallback_speed_cap_kph:=3.0
@@ -285,7 +285,7 @@ rostopic info /ctrl_cmd
 
 ```bash
 sudo timeout 20 tcpdump -ni any \
-  'udp and dst host 192.168.0.151 and (dst port 9093 or dst port 9097)'
+  'udp and dst host 192.168.0.147 and (dst port 9093 or dst port 9097)'
 ```
 
 ## 9. 보정과 주행 전 통과 조건
@@ -312,7 +312,7 @@ xvfb-run -a -s '-screen 0 1920x1080x24' \
   roslaunch morai_bringup final_ws_bringup.launch \
   workspace_path:="$MORAI_WS" \
   path_file:="$MORAI_WS/data/routes/2026_molit_comp_global_path.txt" \
-  morai_host_ip:=192.168.0.151 \
+  morai_host_ip:=192.168.0.147 \
   turn_signal_maneuvers_file:=/opt/morai-config/turn_signal_maneuvers.yaml \
   enable_control:=true enable_turn_signal:=true \
   turn_signal_lead_time_sec:=5.0 \

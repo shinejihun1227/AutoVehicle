@@ -19,7 +19,7 @@
 아래 값은 예시다. MORAI PC와 Ubuntu PC에서 `0902최신` 센서·네트워크 설정 파일을 확인한 뒤 실제 값으로 바꾼다.
 
 ```text
-MORAI simulator PC      : 192.168.0.148   → morai_host_ip
+MORAI simulator PC      : 192.168.0.147   → morai_host_ip
 Ubuntu/Docker host PC   : 192.168.0.185   → MORAI destination IP
 GPS UDP port            : 3001
 IMU UDP port            : 4001
@@ -308,12 +308,12 @@ rostopic echo -n 1 /Imu
 roslaunch stability_stack morai_udp_ekf_curvature_only.launch \
   workspace_path:=/root/AutoVehicle/morai_ws \
   path_file:=/root/AutoVehicle/morai_ws/data/routes/2026_molit_comp_global_path.txt \
-  morai_host_ip:=192.168.0.148 \
+  morai_host_ip:=192.168.0.147 \
   enable_control:=false \
   stop_on_gps_blackout:=false
 ```
 
-실제 IP가 다르면 `192.168.0.148`을 MORAI PC 주소로 바꾼다.
+실제 IP가 다르면 `192.168.0.147`을 MORAI PC 주소로 바꾼다.
 
 ### 10-1. Localization과 곡률 토픽 확인
 
@@ -412,7 +412,7 @@ Preview에서 센서·EKF·곡률·blackout 상태가 모두 정상인 것을 �
 roslaunch stability_stack morai_udp_ekf_curvature_only.launch \
   workspace_path:=/root/AutoVehicle/morai_ws \
   path_file:=/root/AutoVehicle/morai_ws/data/routes/2026_molit_comp_global_path.txt \
-  morai_host_ip:=192.168.0.148 \
+  morai_host_ip:=192.168.0.147 \
   enable_control:=true \
   stop_on_gps_blackout:=false
 ```

@@ -1,8 +1,13 @@
 # MORAI 통합 작업공간
 
-현장에서 실행할 시험 순서·명령·통과 기준·결과 기록표는
-[MORAI 현장 테스트 절차 — 2026-09-21](docs/FIELD_TEST_CHECKLIST_20260921_KO.md)를 사용합니다.
-T01~T06의 빌드·센서·Cam4·출발·속도·신호 정지 시험부터 진행합니다.
+현장 실행은 [주행 테스트 5가지 — 간단 실행 안내](docs/FIELD_TEST_CHECKLIST_20260921_KO.md)를 사용합니다.
+곡률 → 신호 정지 → 장애물 회피 → 끼어들기 → 전체 조합을 번호로 선택하고, 최고속도도 한 줄로 변경합니다.
+
+**Ubuntu 22.04 + RTX 4090 두 PC 구성:**
+[복사해서 따라 하는 Docker 설치·재시작·파라미터 테스트 안내](docs/TWO_PC_DOCKER_HIGHWAY_KO.md).
+처음에는 1~8번, 다음 부팅에는 9번, 기능별 시험은 10번을 사용합니다.
+
+고속도로 차선 변경과 MGeo 위치 설정은 [고속도로 기능 통합 안내](docs/HIGHWAY_LANE_CHANGE_INTEGRATION_20261005_KO.md)를 참고합니다.
 
 > 현재 `final_ws`는 구현 백업본이며 주행 승인본이 아닙니다.
 > [미해결 안전 문제와 검증 조건](docs/KNOWN_ISSUES_FINAL_WS.md)을 먼저 확인하세요.
@@ -125,14 +130,6 @@ control_mux와 ROI `dev/merged_code`의 카메라·LiDAR 인식 패키지를 함
 변환합니다. 자세한 연결은 [final_ws 통합 안내](docs/FINAL_WS_INTEGRATION.md)를
 참고합니다.
 
-2026-09-21: ROI `cb41b5f`의 최신 우회·차선 전략을 반영했습니다. 모델 4개는 최신 원본과
-동일합니다. 기존 곡률/신호·정지선 실행 구성과 별도 고속도로 시험 구성의 차이는
-[ROI 업데이트 및 실행 안내](docs/ROI_UPDATE_20260921_KO.md)를 참고하세요.
-
-2026-10-05: ROI `test/rrt`의 최신 차선 기준 5차 경로와 1차로씩 변경·충돌 제동을
-고속도로 전용 launch에 통합했습니다. 기능별 적용 상황과 제어 우선순위는
-[고속도로 차선 변경 통합 안내](docs/HIGHWAY_LANE_CHANGE_INTEGRATION_20261005_KO.md)에 정리했습니다.
-
 검증 단계에서는 다음처럼 제어를 끈 상태로 시작합니다.
 
 ```bash
@@ -140,3 +137,10 @@ roslaunch morai_bringup final_ws_bringup.launch enable_control:=false
 ```
 
 센서 토픽과 안전정지 상태를 확인한 뒤에만 `enable_control:=true`로 전환합니다.
+# 새 차선 모델·회피 통합과 두 PC Docker 실행
+
+- [Windows MORAI + Ubuntu 192.168.0.185 Docker 처음 설정](docs/TWO_PC_DOCKER_HIGHWAY_KO.md)
+- [dev/test_highway 연계 파일, 끼어들기 및 장애물 회피 흐름](docs/HIGHWAY_TEAM_INTEGRATION_KO.md)
+- 통합 launch: `roslaunch morai_bringup final_ws_highway_bringup.launch`
+- Docker 도우미: `bash docker/final_ws/run_highway.sh build`, `start`, `monitor`, `drive`, `shell`.
+- 기본 최고속도는 30 km/h이며 실제 송신은 `drive` 또는 `enable_control:=true`로 켠다.

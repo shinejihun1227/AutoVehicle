@@ -4,7 +4,7 @@
   <arg name="path_file" default="$(arg workspace_path)/data/routes/2026_molit_comp_global_path.txt" />
   <arg name="link_set_file" default="$(arg workspace_path)/data/mgeo/R_KR_PR_K-city_2025/link_set.json" />
   <arg name="mission_regions_file" default="$(find purepursuit_mgeo)/config/route_mission_regions.json" />
-  <arg name="morai_host_ip" default="192.168.0.161" />
+  <arg name="morai_host_ip" default="192.168.0.147" />
   <arg name="ego_status_port" default="1911" />
   <arg name="control_remote_port" default="9093" />
   <arg name="control_source_port" default="9094" />
@@ -91,6 +91,7 @@
     <param name="map_frame" value="map" />
     <param name="base_selected_path_topic" value="/avoidance_frenet_debug/selected_path" />
     <param name="base_plan_status_topic" value="/avoidance_frenet_debug/plan_status" />
+    <param name="require_atomic_plan_path" value="true" />
     <param name="lane_info_topic" value="$(arg lane_info_topic)" />
     <param name="odom_topic" value="/localization/odometry" />
     <param name="obstacle_topic" value="/perception/lidar/tracked_obstacles_map" />
@@ -124,6 +125,7 @@
     <param name="selected_side_topic" value="/bypass_lane_guard/selected_side" />
     <param name="plan_status_topic" value="/bypass_lane_guard/plan_status" />
     <param name="use_atomic_plan_status" value="true" />
+    <param name="require_atomic_plan_path" value="true" />
     <param name="allow_lane_change_control" value="false" />
     <param name="rate_hz" value="10.0" />
     <param name="normal_back_m" value="3.0" />
@@ -156,6 +158,7 @@
     <param name="map_frame" value="map" />
     <param name="base_path_topic" value="/avoidance_path_manager/active_path" />
     <param name="base_stop_topic" value="/avoidance_path_manager/stop_required" />
+    <param name="base_trajectory_topic" value="/avoidance_path_manager/trajectory" />
     <param name="odom_topic" value="/localization/odometry" />
     <param name="obstacle_topic" value="/perception/lidar/tracked_obstacles_map" />
     <param name="lane_info_topic" value="$(arg lane_info_topic)" />
@@ -257,6 +260,7 @@
     <param name="use_active_path" value="true" />
     <param name="require_active_path" value="true" />
     <param name="active_path_topic" value="/highway_lane_strategy/active_path" />
+    <param name="trajectory_topic" value="/highway_lane_strategy/trajectory" />
     <param name="active_path_timeout_sec" value="$(arg managed_timeout_s)" />
     <param name="stop_required_topic" value="/highway_lane_strategy/stop_required" />
     <param name="require_fresh_stop_status" value="true" />

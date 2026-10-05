@@ -1,0 +1,47 @@
+처음 연결하는 순서는 다음과 같습니다.
+1. Ubuntu PC에 SSH 접속 환경을 준비합니다.
+   이미 SSH로 접속할 수 있다면 이 과정은 생략합니다. 처음이라면 Ubuntu 터미널에서:
+   sudo apt update
+   sudo apt install -y openssh-server git
+   sudo systemctl enable --now ssh
+   hostname -I
+   마지막 명령으로 Ubuntu의 IP를 확인합니다. Docker는 앞서 작성한 설치 문서대로 Ubuntu에 준비하고, SSH로 로그인할 사용자가 docker ps를 실행할 수 있어야 합니다. Ubuntu SSH 설치 안내
+2. Windows VS Code에 확장을 설치합니다.
+   확장 메뉴에서 Microsoft가 제공하는 다음 두 개를 설치합니다.
+   - Remote - SSH: Ubuntu 접속과 원격 폴더 편집
+   - Dev Containers: Ubuntu의 Docker 컨테이너 안에서 개발
+3. VS Code에서 Ubuntu에 연결합니다.
+   Ctrl+Shift+P → Remote-SSH: Connect to Host...에서 아래 형식으로 접속합니다.
+   Ubuntu사용자이름@Ubuntu_IP
+   연결 후 왼쪽 아래에 SSH: ...가 표시됩니다. 이 창에서 여는 폴더와 터미널은 Ubuntu에 있는 것입니다.
+4. GitHub 저장소를 GUI로 clone합니다.
+   SSH로 연결된 창에서:
+   - Ctrl+Shift+P → Git: Clone
+   - 저장소 주소 입력: https://github.com/shinejihun1227/AutoVehicle.git
+   - Ubuntu 안의 저장 위치 선택
+   - 복제된 폴더 열기
+   - 왼쪽 아래 브랜치 메뉴에서 final_ws 선택
+   이미 clone했다면 파일 → 폴더 열기로 기존 AutoVehicle 폴더를 열면 됩니다. 이후 변경 비교·Stage·Commit·Pull·Push는 왼쪽 소스 제어에서 할 수 있습니다. Git GUI 안내
+5. 실행 중인 Docker 컨테이너를 GUI로 엽니다.
+   Ubuntu에 연결된 VS Code 창에서:
+   Ctrl+Shift+P
+   → Dev Containers: Attach to Running Container...
+   → morai-final-... 컨테이너 선택
+   → 폴더 열기
+   → /opt/AutoVehicle/morai_ws
+   그러면 컨테이너 내부의 src, config, data, build, devel 등을 탐색기에서 볼 수 있습니다. 코드 편집과 컨테이너 내부 터미널 실행도 가능합니다. 컨테이너 연결 안내
+   새 컨테이너 터미널에서 ROS 환경이 잡히지 않았다면 다음을 실행합니다.
+   /usr/local/bin/morai-entrypoint bash
+현재 프로젝트에서 꼭 구분해야 할 부분이 있습니다.
+현재 Dockerfile은 Ubuntu의 코드를 이미지에 복사하는 방식입니다. 따라서 Ubuntu에서 clone한 파일을 수정해도 기존 컨테이너의 파일에 자동 반영되지는 않습니다. 또한 컨테이너 내부만 수정한 내용은 컨테이너를 삭제·재생성하면 사라질 수 있습니다.
+지속적으로 프로그래밍하려면 아래처럼 Ubuntu의 Git 폴더를 개발용 컨테이너에 연결하는 구성이 적합합니다. 이를 bind mount라고 합니다. 원격 폴더 연결 안내
+구성 요소	맡는 역할
+Ubuntu의 AutoVehicle 폴더	소스 저장·수정·Git 관리
+Docker 이미지	ROS, Python, PyTorch 등 실행 환경 설치
+개발용 컨테이너	연결된 소스로 메시지 생성·빌드·테스트
+.devcontainer/devcontainer.json	VS Code에서 개발 환경을 열고 준비하는 절차 설정
+.vscode/tasks.json	빌드·회귀 테스트 등을 메뉴에서 실행하도록 등록
+
+
+이렇게 구성하면 “Ubuntu 연결 → 프로젝트 열기 → Reopen in Container → 코드 수정 → 빌드/테스트 메뉴 실행” 흐름으로 사용할 수 있습니다. 다만 현재 이미지에 생성된 morai_msgs, build, devel을 폴더 연결로 가리지 않도록, 개발용 메시지 준비와 빌드 절차도 함께 구성해야 합니다.
+그리고 Git clone은 소스 파일을 받는 단계, Docker 빌드는 라이브러리 설치와 ROS 메시지 생성까지 수행하는 단계입니다. 두 단계를 VS Code 설정으로 이어서 실행하도록 만들 수 있습니다. RViz나 카메라 영상창까지 Windows에 표시하려면 화면 전달 설정을 별도로 추가해야 합니다.

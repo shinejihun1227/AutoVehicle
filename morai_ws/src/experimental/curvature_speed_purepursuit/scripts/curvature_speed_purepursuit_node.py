@@ -10,12 +10,15 @@ from __future__ import annotations
 
 import math
 import os
+import threading
 import time
+from collections import deque
 from typing import Optional, Tuple
 
 import rospy
 from geometry_msgs.msg import PointStamped, PoseStamped
 from morai_msgs.msg import CtrlCmd
+from morai_perception_msgs.msg import StopLineDetection
 from nav_msgs.msg import Odometry, Path
 from std_msgs.msg import Bool, Float64
 
@@ -30,7 +33,9 @@ from curvature_speed_purepursuit.planner import (
     clean_consecutive_duplicates,
     cumulative_arc_lengths,
     curvature_profile,
+    adaptive_lookahead_m,
     interpolate_by_s,
+    max_abs_curvature_ahead,
     load_path_file,
     nearest_projection,
     profile_value_at_s,
@@ -120,11 +125,38 @@ class CurvatureSpeedPurePursuitNode:
         self.wheelbase_m = float(rospy.get_param("~wheelbase_m", 3.0))
         self.lookahead_min_m = float(rospy.get_param("~lookahead_min_m", 4.0))
         self.lookahead_gain = float(rospy.get_param("~lookahead_gain", 0.35))
+        self.lookahead_curvature_gain = max(
+            0.0, float(rospy.get_param("~lookahead_curvature_gain", 6.0))
+        )
+        self.lookahead_tight_min_m = max(
+            0.5, float(rospy.get_param("~lookahead_tight_min_m", 2.2))
+        )
+        self.lookahead_max_m = max(
+            self.lookahead_tight_min_m,
+            float(rospy.get_param("~lookahead_max_m", 12.0)),
+        )
+        self.curvature_preview_distance_m = max(
+            0.0,
+            float(rospy.get_param("~curvature_preview_distance_m", 8.0)),
+        )
+        self.curvature_preview_step_m = max(
+            0.1,
+            float(rospy.get_param("~curvature_preview_step_m", 0.5)),
+        )
+        self.steering_feedforward_weight = clamp(
+            float(rospy.get_param("~steering_feedforward_weight", 0.35)),
+            0.0,
+            1.0,
+        )
         self.goal_tolerance_m = float(rospy.get_param("~goal_tolerance_m", 1.5))
         self.max_steering_rad = float(
             rospy.get_param("~max_steering_rad", math.radians(40.0))
         )
         self.steering_sign = 1.0 if float(rospy.get_param("~steering_sign", 1.0)) >= 0.0 else -1.0
+        self.max_steering_rate_rad_s = max(
+            0.0,
+            float(rospy.get_param("~max_steering_rate_rad_s", 2.5)),
+        )
         self.max_accel_mps2 = max(1e-6, float(rospy.get_param("~max_accel_mps2", 1.0)))
         self.max_decel_mps2 = max(1e-6, float(rospy.get_param("~max_decel_mps2", 1.5)))
         self.rate_hz = max(1.0, float(rospy.get_param("~control_rate_hz", 20.0)))
@@ -134,6 +166,34 @@ class CurvatureSpeedPurePursuitNode:
         self.progress_backtrack_m = max(
             0.0, float(rospy.get_param("~progress_backtrack_tolerance_m", 2.0))
         )
+        self.stopline_speed_cap_enabled = bool(
+            rospy.get_param("~stopline_speed_cap_enabled", False)
+        )
+        self.stopline_approach_speed_kph = float(
+            rospy.get_param("~stopline_approach_speed_kph", 30.0)
+        )
+        self.stopline_cap_release_after_m = float(
+            rospy.get_param("~stopline_cap_release_after_m", 5.0)
+        )
+        self.stopline_cap_max_detection_range_m = float(
+            rospy.get_param("~stopline_cap_max_detection_range_m", 60.0)
+        )
+        self.stopline_cap_min_confidence = float(
+            rospy.get_param("~stopline_cap_min_confidence", 0.55)
+        )
+        if (not math.isfinite(self.stopline_approach_speed_kph)
+                or self.stopline_approach_speed_kph <= 0
+                or not math.isfinite(self.stopline_cap_release_after_m)
+                or self.stopline_cap_release_after_m < 0
+                or not math.isfinite(self.stopline_cap_max_detection_range_m)
+                or self.stopline_cap_max_detection_range_m <= 0
+                or not 0 <= self.stopline_cap_min_confidence <= 1):
+            raise ValueError("Stopline speed-cap settings must be finite and in range")
+        self.stopline_lock = threading.RLock()
+        self.progress_history = deque(maxlen=200)
+        self.latest_stopline = None
+        self.last_stopline_stamp = 0.0
+        self.active_stopline_s = None
 
         self.pose_topic = rospy.get_param("~pose_topic", "/localization/odometry")
         self.pose_timeout_sec = max(
@@ -166,6 +226,7 @@ class CurvatureSpeedPurePursuitNode:
         self.last_progress_s: Optional[float] = None
         self.last_control_time: Optional[float] = None
         self.command_speed_mps = 0.0
+        self.last_steering_rad = 0.0
 
         self.command_pub = rospy.Publisher(self.command_topic, CtrlCmd, queue_size=1)
         self.target_pub = rospy.Publisher(
@@ -195,11 +256,24 @@ class CurvatureSpeedPurePursuitNode:
         self.progress_pub = rospy.Publisher(
             "/experimental/curvature_progress", Float64, queue_size=1
         )
+        self.stopline_cap_active_pub = rospy.Publisher(
+            "/experimental/stopline_speed_cap_active", Bool, queue_size=1
+        )
+        self.stopline_cap_target_pub = rospy.Publisher(
+            "/experimental/stopline_speed_cap_target", Float64, queue_size=1
+        )
         self.goal_pub = rospy.Publisher(
             "/experimental/curvature_goal_reached", Bool, queue_size=1, latch=True
         )
 
         rospy.Subscriber(self.pose_topic, Odometry, self.odom_callback, queue_size=10)
+        if self.stopline_speed_cap_enabled:
+            rospy.Subscriber(
+                rospy.get_param("~stopline_topic", "/perception/camera/stopline"),
+                StopLineDetection,
+                self.stopline_callback,
+                queue_size=10,
+            )
         self.publish_reference_path()
         self.timer = rospy.Timer(
             rospy.Duration(1.0 / self.rate_hz), self.control_callback
@@ -233,6 +307,52 @@ class CurvatureSpeedPurePursuitNode:
     def odom_callback(self, message: Odometry) -> None:
         self.latest_odom = message
         self.latest_odom_wall_time = time.monotonic()
+
+    def stopline_callback(self, message: StopLineDetection) -> None:
+        """Cache only the newest camera observation; the control timer matches its pose."""
+        if not self.stopline_speed_cap_enabled:
+            return
+        stamp = message.header.stamp.to_sec()
+        if not math.isfinite(stamp) or stamp <= 0:
+            return
+        with self.stopline_lock:
+            if self.latest_stopline is None or stamp > self.latest_stopline[0]:
+                self.latest_stopline = (stamp, message)
+
+    def update_stopline_speed_cap(self, progress_s: float, pose_stamp: float, ros_now: float) -> bool:
+        """Cap approach speed on a measured line, then release after the vehicle clears it."""
+        if not self.stopline_speed_cap_enabled:
+            return False
+        with self.stopline_lock:
+            if math.isfinite(pose_stamp) and pose_stamp > 0:
+                self.progress_history.append((pose_stamp, progress_s))
+            observation = self.latest_stopline
+            if observation is not None and observation[0] > self.last_stopline_stamp:
+                stamp, message = observation
+                self.last_stopline_stamp = stamp
+                age = ros_now - stamp
+                line = message
+                if (-0.05 <= age <= 0.8 and line.valid
+                        and line.header.frame_id == "base_link"
+                        and math.isfinite(line.distance_m)
+                        and 0 <= line.distance_m <= self.stopline_cap_max_detection_range_m
+                        and math.isfinite(line.confidence)
+                        and self.stopline_cap_min_confidence <= line.confidence <= 1.0):
+                    pose = min(self.progress_history, key=lambda item: abs(item[0] - stamp), default=None)
+                    if pose is not None and abs(pose[0] - stamp) <= 0.1:
+                        line_s = pose[1] + line.distance_m
+                        if line_s >= progress_s - self.stopline_cap_release_after_m:
+                            if self.active_stopline_s is None:
+                                self.active_stopline_s = line_s
+                            elif line_s > self.active_stopline_s + 6.0:
+                                # Keep the cap across closely spaced lines by moving the target forward.
+                                self.active_stopline_s = line_s
+                            elif line_s >= self.active_stopline_s - 2.0:
+                                self.active_stopline_s = min(self.active_stopline_s, line_s)
+            if (self.active_stopline_s is not None
+                    and progress_s > self.active_stopline_s + self.stopline_cap_release_after_m):
+                self.active_stopline_s = None
+            return self.active_stopline_s is not None
 
     def search_projection(self, x: float, y: float):
         if self.last_segment_index is None:
@@ -279,14 +399,47 @@ class CurvatureSpeedPurePursuitNode:
     def compute_steering(
         self, x: float, y: float, yaw: float, speed_mps: float, progress_s: float
     ) -> Tuple[float, PathPoint, float]:
-        lookahead = max(
+        # Keep this method usable by lightweight offline turn tests and tools
+        # that construct the controller with ``__new__`` and only provide the
+        # original Pure Pursuit fields.
+        curvatures = getattr(self, "curvatures", [0.0] * len(self.points))
+        curvature_preview_distance = getattr(
+            self, "curvature_preview_distance_m", 0.0
+        )
+        curvature_preview_step = getattr(self, "curvature_preview_step_m", 0.5)
+        curvature_gain = getattr(self, "lookahead_curvature_gain", 0.0)
+        tight_min_lookahead = getattr(self, "lookahead_tight_min_m", self.lookahead_min_m)
+        max_lookahead = getattr(
+            self,
+            "lookahead_max_m",
+            1000.0,
+        )
+        feedforward_weight = getattr(self, "steering_feedforward_weight", 0.0)
+        nominal_lookahead = max(
             self.lookahead_min_m,
             self.lookahead_min_m + self.lookahead_gain * max(0.0, speed_mps),
         )
+        preview_curvature = max_abs_curvature_ahead(
+            self.s_values,
+            curvatures,
+            progress_s,
+            max(curvature_preview_distance, nominal_lookahead),
+            curvature_preview_step,
+        )
+        lookahead = adaptive_lookahead_m(
+            speed_mps=speed_mps,
+            base_lookahead_m=self.lookahead_min_m,
+            speed_gain_s=self.lookahead_gain,
+            preview_curvature_abs_m_inv=preview_curvature,
+            curvature_gain_m=curvature_gain,
+            tight_min_lookahead_m=tight_min_lookahead,
+            max_lookahead_m=max_lookahead,
+        )
+        target_s = min(self.total_length_m, progress_s + lookahead)
         target, _ = interpolate_by_s(
             self.points,
             self.s_values,
-            min(self.total_length_m, progress_s + lookahead),
+            target_s,
         )
         dx = target.x - x
         dy = target.y - y
@@ -296,9 +449,42 @@ class CurvatureSpeedPurePursuitNode:
         target_y_body = -sin_yaw * dx + cos_yaw * dy
         actual_lookahead = max(math.hypot(target_x_body, target_y_body), 1e-3)
         alpha = math.atan2(target_y_body, target_x_body)
-        curvature = 2.0 * math.sin(alpha) / actual_lookahead
-        steering = math.atan(self.wheelbase_m * curvature) * self.steering_sign
+        pp_curvature = 2.0 * math.sin(alpha) / actual_lookahead
+
+        # Feed forward the path curvature at the target corridor.  Pure
+        # Pursuit alone reacts after the vehicle has entered a tight bend;
+        # blending this term starts the turn earlier without removing the
+        # lateral-error feedback that recentres the vehicle on the path.
+        feedforward_s = min(
+            self.total_length_m,
+            progress_s + 0.75 * lookahead,
+        )
+        path_curvature = profile_value_at_s(
+            self.s_values, curvatures, feedforward_s
+        )
+        feedback_steering = math.atan(self.wheelbase_m * pp_curvature)
+        feedforward_steering = math.atan(self.wheelbase_m * path_curvature)
+        steering = (
+            (1.0 - feedforward_weight) * feedback_steering
+            + feedforward_weight * feedforward_steering
+        ) * self.steering_sign
         return clamp(steering, -self.max_steering_rad, self.max_steering_rad), target, actual_lookahead
+
+    def limit_steering_rate(self, steering: float, dt: float) -> float:
+        """Limit steering slew so a noisy bend cannot create a jerk."""
+
+        target = clamp(float(steering), -self.max_steering_rad, self.max_steering_rad)
+        if self.max_steering_rate_rad_s <= 0.0:
+            self.last_steering_rad = target
+            return target
+        max_delta = self.max_steering_rate_rad_s * max(float(dt), 1e-3)
+        limited = clamp(
+            target,
+            self.last_steering_rad - max_delta,
+            self.last_steering_rad + max_delta,
+        )
+        self.last_steering_rad = limited
+        return limited
 
     def make_command(
         self,
@@ -361,6 +547,7 @@ class CurvatureSpeedPurePursuitNode:
             or time.monotonic() - self.latest_odom_wall_time > self.pose_timeout_sec
         ):
             self.command_speed_mps = 0.0
+            self.last_steering_rad = 0.0
             self.speed_controller.reset()
             self.speed_command_pub.publish(Float64(0.0))
             self.goal_pub.publish(Bool(False))
@@ -406,17 +593,24 @@ class CurvatureSpeedPurePursuitNode:
         remaining_m = max(0.0, self.total_length_m - progress_s)
         stop = remaining_m <= self.goal_tolerance_m
         speed_limit = profile_value_at_s(self.s_values, self.speed_profile, progress_s)
+        stopline_cap_active = self.update_stopline_speed_cap(
+            progress_s, self.latest_odom.header.stamp.to_sec(), now
+        )
+        if stopline_cap_active:
+            speed_limit = min(speed_limit, self.stopline_approach_speed_kph / MPS_TO_KPH)
         command_speed = 0.0 if stop else self.apply_speed_rate_limit(speed_limit, dt)
         curvature = profile_value_at_s(self.s_values, self.curvatures, progress_s)
 
         if stop:
             steering = 0.0
+            self.last_steering_rad = 0.0
             target = self.points[-1]
             actual_lookahead = 0.0
         else:
             steering, target, actual_lookahead = self.compute_steering(
                 x, y, yaw, measured_speed_mps, progress_s
             )
+            steering = self.limit_steering_rate(steering, dt)
 
         target_message = PointStamped()
         target_message.header.stamp = rospy.Time.now()
@@ -442,6 +636,10 @@ class CurvatureSpeedPurePursuitNode:
         self.steering_pub.publish(Float64(steering))
         self.progress_pub.publish(Float64(progress_s))
         self.goal_pub.publish(Bool(stop))
+        self.stopline_cap_active_pub.publish(Bool(stopline_cap_active))
+        self.stopline_cap_target_pub.publish(Float64(
+            self.stopline_approach_speed_kph if stopline_cap_active else 0.0
+        ))
 
         if self.publish_command:
             self.command_pub.publish(
@@ -459,7 +657,7 @@ class CurvatureSpeedPurePursuitNode:
             2.0,
             "Curvature PP progress=%.1f/%.1fm kappa=%.4f speed_limit=%.2f "
             "speed_cmd=%.2f measured=%.2f km/h accel=%.2f brake=%.2f "
-            "lookahead=%.2f steering=%.4f stop=%s",
+            "lookahead=%.2f steering=%.4f stop=%s stopline_cap=%s",
             progress_s,
             self.total_length_m,
             curvature,
@@ -471,6 +669,7 @@ class CurvatureSpeedPurePursuitNode:
             actual_lookahead,
             steering,
             stop,
+            stopline_cap_active,
         )
 
 

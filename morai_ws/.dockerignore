@@ -10,3 +10,6 @@ install
 logs
 .ros
 src/common/morai_msgs
+docker/final_ws/highway.env
+src/detection/camera_perception/models/highway_best.pt
+src/detection/camera_perception/models/highway_best.download

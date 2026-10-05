@@ -54,6 +54,11 @@ class RoiSensorSafetyAdapter:
         self.require_source_stamps = bool(rospy.get_param("~require_source_stamps", False))
         self.front_reference_offset_m = float(rospy.get_param("~front_reference_offset_m", 0.0))
         self.camera_updated = {}
+        self.managed_stop_topic = rospy.get_param("~managed_stop_topic", "")
+        self.managed_stop = True
+        self.managed_at = None
+        if self.managed_stop_topic:
+            rospy.Subscriber(self.managed_stop_topic, Bool, self._managed_cb, queue_size=1)
 
         self.latest_lidar: Optional[LidarObstacleArray] = None
         self.latest_odom: Optional[Odometry] = None
@@ -115,6 +120,10 @@ class RoiSensorSafetyAdapter:
         self.camera_stops[key] = bool(message.data)
         self.camera_updated[key] = time.monotonic()
 
+    def _managed_cb(self, message):
+        self.managed_stop = bool(message.data)
+        self.managed_at = time.monotonic()
+
     def source_fresh(self, message):
         age = rospy.get_time() - message.header.stamp.to_sec()
         return (message.header.stamp.to_sec() > 0 and -0.05 <= age <= self.input_timeout_sec
@@ -162,11 +171,16 @@ class RoiSensorSafetyAdapter:
             and now - self.last_odom_at <= self.input_timeout_sec
             and (not self.require_source_stamps or self.source_fresh(self.latest_odom))
         )
-        nearest = self.nearest_forward_obstacle() if lidar_fresh and odom_fresh else None
+        nearest = self.nearest_forward_obstacle() if lidar_fresh and odom_fresh and not self.managed_stop_topic else None
 
         camera_reason = next(
             (name for name, active in self.camera_stops.items() if active), None
         )
+        if camera_reason is None and self.managed_stop_topic:
+            if self.managed_at is None or not 0 <= now - self.managed_at <= self.input_timeout_sec:
+                camera_reason = "managed_trajectory_stale"
+            elif self.managed_stop:
+                camera_reason = "managed_trajectory_stop"
         if camera_reason is None and self.require_fresh_camera_stops:
             camera_reason = next((name + "_stale" for name, updated in self.camera_updated.items()
                                   if updated is None or not 0 <= now - updated <= self.input_timeout_sec), None)
@@ -176,7 +190,7 @@ class RoiSensorSafetyAdapter:
 
         if camera_reason is not None:
             stop_required = True
-            reason = "camera_" + camera_reason
+            reason = camera_reason if camera_reason.startswith("managed_") else "camera_" + camera_reason
             confidence = 1.0
         elif nearest is not None:
             reason = "roi_lidar_forward_obstacle"

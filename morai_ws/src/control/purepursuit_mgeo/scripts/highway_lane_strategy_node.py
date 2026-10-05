@@ -28,6 +28,7 @@ from __future__ import annotations
 import json
 import math
 import time
+import threading
 from collections import deque
 from dataclasses import dataclass
 from typing import List, Optional, Sequence, Tuple
@@ -41,6 +42,7 @@ from lidar_perception.msg import LidarObstacleArray
 from purepursuit_mgeo.path import PathPoint, load_mgeo_path
 from purepursuit_mgeo.lane_geometry import pose_at, reproject
 from purepursuit_mgeo.motion import lead_brake_decision
+from purepursuit_mgeo.plan_transport import plan_locked, read_trajectory, trajectory_payload
 
 
 def clamp(v: float, lo: float, hi: float) -> float:
@@ -127,6 +129,10 @@ class HighwayLaneStrategyNode:
 
     def __init__(self) -> None:
         rospy.init_node("highway_lane_strategy", anonymous=False)
+        self._plan_lock = threading.RLock()
+        self.base_trajectory_topic = rospy.get_param("~base_trajectory_topic", "")
+        self.base_reason = ""
+        self.trajectory_seq = 0
 
         self.map_frame = rospy.get_param("~map_frame", "map")
         self.path_file = rospy.get_param("~path_file")
@@ -469,6 +475,7 @@ class HighwayLaneStrategyNode:
         self.lane_change_locked_by_left_solid = False
 
         self.path_pub = rospy.Publisher("~active_path", RosPath, queue_size=1)
+        self.trajectory_pub = rospy.Publisher("~trajectory", String, queue_size=1)
         self.stop_pub = rospy.Publisher("~stop_required", Bool, queue_size=1)
         self.speed_pub = rospy.Publisher("~target_speed_mps", Float64, queue_size=1)
         self.active_pub = rospy.Publisher("~active", Bool, queue_size=1)
@@ -483,8 +490,11 @@ class HighwayLaneStrategyNode:
         )
         self.state_pub = rospy.Publisher("~state", String, queue_size=1)
 
-        rospy.Subscriber(self.base_path_topic, RosPath, self._base_path_cb, queue_size=1)
-        rospy.Subscriber(self.base_stop_topic, Bool, self._base_stop_cb, queue_size=1)
+        if self.base_trajectory_topic:
+            rospy.Subscriber(self.base_trajectory_topic, String, self._base_trajectory_cb, queue_size=1)
+        else:
+            rospy.Subscriber(self.base_path_topic, RosPath, self._base_path_cb, queue_size=1)
+            rospy.Subscriber(self.base_stop_topic, Bool, self._base_stop_cb, queue_size=1)
         rospy.Subscriber(self.odom_topic, Odometry, self._odom_cb, queue_size=5)
         rospy.Subscriber(self.obstacle_topic, LidarObstacleArray, self._obstacles_cb, queue_size=1)
         rospy.Subscriber(self.lane_info_topic, String, self._lane_info_cb, queue_size=1)
@@ -506,12 +516,37 @@ class HighwayLaneStrategyNode:
         )
 
     def _base_path_cb(self, msg: RosPath) -> None:
+        if self.base_trajectory_topic:
+            return
         self.latest_base_path = msg
         self.base_path_at = rospy.Time.now()
 
     def _base_stop_cb(self, msg: Bool) -> None:
+        if self.base_trajectory_topic:
+            return
         self.base_stop = bool(msg.data)
         self.base_stop_at = rospy.Time.now()
+
+    @plan_locked
+    def _base_trajectory_cb(self, msg: String) -> None:
+        try:
+            path, stop, _speed, reason = read_trajectory(
+                msg.data, self.map_frame, rospy.get_time(), self.base_timeout_s,
+                path_type=RosPath, pose_type=PoseStamped, stamp_type=rospy.Time,
+            )
+        except (KeyError, TypeError, ValueError) as exc:
+            self.latest_base_path = None
+            self.base_path_at = None
+            self.base_stop = True
+            self.base_stop_at = None
+            self.base_reason = "invalid_base_trajectory:" + str(exc)
+            rospy.logwarn_throttle(1.0, "%s", self.base_reason)
+            return
+        self.latest_base_path = path
+        self.base_path_at = path.header.stamp
+        self.base_stop = stop
+        self.base_stop_at = path.header.stamp
+        self.base_reason = reason
 
     def _odom_cb(self, msg: Odometry) -> None:
         self.latest_odom = msg
@@ -2183,11 +2218,14 @@ class HighwayLaneStrategyNode:
         lead_emergency = bool(active and lead_emergency)
         status["lead_brake_required"] = lead_brake
         status["lead_emergency_brake"] = lead_emergency
+        if path is not None and len(path.poses) < 2:
+            path = None
+            stop = True
+            status["reason"] = "trajectory_path_too_short"
         if path is not None:
             path.header.stamp = now
             if not path.header.frame_id:
                 path.header.frame_id = self.map_frame
-            self.path_pub.publish(path)
         else:
             stop = True
         if (
@@ -2215,6 +2253,16 @@ class HighwayLaneStrategyNode:
             speed_out = self._limit_speed_rate(
                 0.0 if stop else speed, dt, upper_speed_mps=follow_cap
             )
+        output_path = path if path is not None else RosPath()
+        output_path.header.stamp = now
+        output_path.header.frame_id = self.map_frame
+        self.trajectory_seq = (self.trajectory_seq + 1) & 0xFFFFFFFF
+        output_path.header.seq = self.trajectory_seq
+        self.trajectory_pub.publish(String(data=trajectory_payload(
+            output_path, bool(stop), float(speed_out), status.get("reason", self.state)
+        )))
+        if path is not None:
+            self.path_pub.publish(output_path)
         self.stop_pub.publish(Bool(data=bool(stop)))
         # The independent safety timer is the sole publisher for these two
         # topics. A late lane-change result must not overwrite its fresher assessment.
@@ -2254,6 +2302,7 @@ class HighwayLaneStrategyNode:
         if stop:
             rospy.logwarn_throttle(0.5, "HIGHWAY STOP state=%s reason=%s follow=%s", self.state, str(status.get("reason")), json.dumps(status.get("follow", {}), separators=(",", ":")))
 
+    @plan_locked
     def _tick(self, _event) -> None:
         now = rospy.Time.now()
         if self.last_timer_time is None:

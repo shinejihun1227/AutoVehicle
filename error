@@ -1,0 +1,163 @@
+source /opt/ros/noetic/setup.bash
+source "$HOME/AutoVehicle/morai_ws/devel/setup.bash"
+
+rosnode list | egrep "morai_udp_drive_bridge|curvature_speed_purepursuit"
+rosparam get /morai_udp_drive_bridge/control_output_enabled
+rosparam get /morai_udp_drive_bridge/control_remote_ip
+rosparam get /morai_udp_drive_bridge/control_remote_port
+rosparam get /morai_udp_drive_bridge/control_bind_port
+rostopic info /ctrl_cmd
+timeout 3s rostopic echo -n 1 /ctrl_cmd
+정상값은 다음과 같습니다.
+control_output_enabled: true
+control_remote_ip: 192.168.0.161
+control_remote_port: 9093
+control_bind_port: 9094
+rostopic info /ctrl_cmd에는 다음 연결이 있어야 합니다.
+Publisher: /curvature_speed_purepursuit
+Subscriber: /morai_udp_drive_bridge
+UDP 패킷이 실제로 MORAI까지 나가는지도 확인합니다.
+timeout 8s sudo tcpdump -ni any -c 20 \
+'udp and dst host 192.168.0.161 and dst port 9093'
+
+
+roslaunch morai_bringup final_ws_bringup.launch \
+workspace_path:="$HOME/AutoVehicle/morai_ws" \
+path_file:="$HOME/AutoVehicle/morai_ws/data/routes/2026_molit_comp_global_path.txt" \
+enable_control:=true \
+morai_host_ip:=192.168.0.161 \
+ego_status_port:=1911 \
+control_remote_port:=9093 \
+enable_roi_camera:=true \
+enable_roi_lidar:=false \
+enable_lane_fallback:=true \
+enable_maneuver_fusion:=true \
+max_speed_kph:=30.0
+
+rostopic echo -n 1 /control/camera_fallback_status
+
+timeout 5s rostopic echo -n 1 /control/mux_status
+timeout 5s rostopic echo -n 1 /control/maneuver_status
+timeout 5s rostopic echo -n 1 /control/camera_fallback_status
+timeout 5s rostopic echo -n 1 /control/stopline_status
+timeout 5s rostopic echo -n 1 /detection/fused_safety_stop
+
+
+ㅡㅡㅡㅡㅡㅡㅡㅡㅡㅡㅡㅡㅡㅡㅡㅡㅡㅡㅡㅡㅡㅡㅡㅡㅡㅡㅡ
+rosparam get /morai_udp_drive_bridge/control_remote_ip
+rosparam get /morai_udp_drive_bridge/control_remote_port
+rosparam get /morai_udp_drive_bridge/control_bind_port
+rosparam get /morai_udp_drive_bridge/control_output_enabled
+
+rostopic echo -n 1 /Ego_topic
+rostopic echo -n 1 /localization/odometry
+rostopic echo -n 1 /experimental/curvature_speed_command
+rostopic echo -n 1 /ctrl_cmd
+
+ss -lun | grep ':1911'
+rosparam get /morai_udp_drive_bridge/status_port
+
+sudo tcpdump -ni any -nn -c 5 \
+'udp and dst host 192.168.0.200 and dst port 1911'
+
+
+rosparam get /morai_udp_drive_bridge/control_output_enabled
+rosparam get /morai_udp_drive_bridge/control_remote_ip
+rosparam get /morai_udp_drive_bridge/control_remote_port
+
+rostopic info /ctrl_cmd
+rostopic echo -n 1 /Ego_topic
+
+sudo tcpdump -ni any -nn -c 10 \
+'udp and dst host 192.168.0.161 and dst port 9093'
+
+ㅡㅡ
+
+
+rostopic echo -n 1 /experimental/curvature_speed_limit
+rostopic echo -n 1 /experimental/curvature_speed_command
+rostopic echo -n 1 /experimental/curvature_value
+rostopic echo -n 1 /experimental/curvature_accel_command
+rostopic echo -n 1 /experimental/curvature_brake_command
+ㅡㅡ
+source "$HOME/morai_native_env.sh"
+
+roslaunch morai_bringup morai_udp_ekf_purepursuit.launch \
+workspace_path:="$HOME/AutoVehicle/morai_ws" \
+path_file:="$HOME/AutoVehicle/morai_ws/data/routes/2026_molit_comp_global_path.txt" \
+gps_port:=3001 \
+imu_port:=4001 \
+ego_status_port:=1911 \
+morai_host_ip:=192.168.0.161 \
+control_remote_port:=9093 \
+control_source_port:=9094 \
+enable_control:=true \
+use_curvature_speed_planner:=true \
+command_topic:=/ctrl_cmd \
+max_speed_kph:=5.0 \
+lateral_accel_limit_mps2:=1.0
+ㅡㅡ
+rostopic echo -n 1 /detection/fused_safety_stop
+rostopic echo -n 1 /control/mux_status
+
+rosparam get /roi_sensor_safety_adapter/require_fresh_lidar
+rosparam get /roi_sensor_safety_adapter/require_fresh_camera_stops
+
+
+rostopic echo -n 1 /detection/lane
+rostopic echo -n 1 /perception/camera/person_detected
+rostopic echo -n 1 /perception/intersection/driving_unavailable
+rostopic echo -n 1 /perception/traffic_light/stop_required
+
+
+
+
+
+source "$HOME/morai_native_env.sh"
+
+rostopic info /gps
+rostopic info /localization/gps
+rostopic info /Imu
+rostopic info /localization/odometry
+
+rosnode ping -c 2 /curvature_speed_purepursuit
+rosparam get /curvature_speed_purepursuit/publish_command
+rostopic info /control/ctrl_cmd
+그리고 메시지 수신도 확인하세요.
+rostopic echo -n 1 /gps
+rostopic echo -n 1 /Imu
+rostopic echo -n 1 /localization/gps
+rostopic echo -n 1 /localization/odometry
+
+
+rostopic echo -n 1 /experimental/curvature_speed_command
+rostopic echo -n 1 /experimental/curvature_accel_command
+rostopic echo -n 1 /experimental/curvature_brake_command
+rostopic echo -n 1 /experimental/curvature_goal_reached
+
+
+rostopic echo -n 1 /detection/fused_safety_stop
+rostopic echo -n 1 /control/mux_status
+rostopic echo -n 1 /ctrl_cmd
+
+
+source "$HOME/morai_native_env.sh"
+
+roslaunch morai_bringup final_ws_bringup.launch \
+workspace_path:="$HOME/AutoVehicle/morai_ws" \
+path_file:="$HOME/AutoVehicle/morai_ws/data/routes/2026_molit_comp_global_path.txt" \
+enable_control:=true \
+morai_host_ip:=192.168.0.161 \
+ego_status_port:=1911 \
+control_remote_port:=9093 \
+enable_roi_camera:=true \
+enable_roi_lidar:=false \
+roi_enable_lane:=true \
+roi_enable_yolo:=true \
+enable_lane_fallback:=true \
+enable_maneuver_fusion:=true \
+enable_turn_signal:=false \
+test_without_turn_signals:=true \
+max_speed_kph:=30.0 \
+fallback_speed_cap_kph:=3.0 \
+turn_signal_maneuvers_file:="$HOME/morai-native-config/turn_signal_maneuvers.yaml"

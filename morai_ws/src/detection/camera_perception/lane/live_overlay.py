@@ -9,7 +9,7 @@ C:/Users/user/anaconda3/envs/vision_env/python.exe live_overlay.py --bev
 
   CPU 라 끊기면      --every 2      (2프레임마다 추론)
   창이 크면          --scale 0.7
-  카메라 주소 변경   --ip 192.168.0.200 --port 1101
+  카메라 주소 변경   --ip 192.168.0.185 --port 1101
   GPU 로            --device cuda
 ===========================================================================
 

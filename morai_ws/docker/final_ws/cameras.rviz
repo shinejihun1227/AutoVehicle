@@ -1,0 +1,30 @@
+Panels:
+  - Class: rviz/Displays
+    Name: Displays
+Visualization Manager:
+  Class: ""
+  Displays:
+    - Class: rviz/Image
+      Enabled: true
+      Image Topic: /debug/cameras/cam1/image
+      Transport Hint: raw
+      Queue Size: 1
+      Name: CAM1 - Lane and Stop Line
+      Normalize Range: true
+    - Class: rviz/Image
+      Enabled: true
+      Image Topic: /debug/cameras/cam4/image
+      Transport Hint: raw
+      Queue Size: 1
+      Name: CAM4 - Traffic Light
+      Normalize Range: true
+  Enabled: true
+  Global Options:
+    Background Color: 40; 40; 40
+    Fixed Frame: map
+    Frame Rate: 10
+  Name: root
+  Tools: []
+Window Geometry:
+  Height: 850
+  Width: 1450

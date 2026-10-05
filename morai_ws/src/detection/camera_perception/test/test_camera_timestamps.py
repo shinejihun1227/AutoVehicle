@@ -131,6 +131,12 @@ class CameraTimestampTest(unittest.TestCase):
             received_stamp=stamp,
         )
 
+    def test_new_checkpoint_signal_labels_keep_direction_and_stop_colour(self):
+        yolo = load_module("scripts/camera_object_detection_node.py", self.modules)
+        self.assertEqual(yolo._parse_traffic_signal("red_left")[0], "Red_Left")
+        self.assertEqual(yolo._parse_traffic_signal("red_yellow")[0], "Yellow")
+        self.assertEqual(yolo._parse_traffic_signal("Green")[0], "Green")
+
     def test_udp_receipt_precedes_assembly_and_latest_skips_without_restamping(self):
         clock = Clock()
         socket = Mock()
@@ -316,7 +322,7 @@ class CameraTimestampTest(unittest.TestCase):
             [Stamp(), Stamp(), Stamp()],
         )
 
-    def run_yolo(self, custom=True, stamps=None):
+    def run_yolo(self, custom=True, stamps=None, preview=False, tracker_fails=False):
         ros_deps, publishers = ros_modules()
         ros = ros_deps["rospy"]
         clock = Clock(101.0)
@@ -343,7 +349,10 @@ class CameraTimestampTest(unittest.TestCase):
             return [SimpleNamespace(boxes=[])]
 
         base.predict.side_effect = base_predict
-        custom_model.predict.side_effect = custom_predict
+        custom_model.track.side_effect = (RuntimeError("tracker unavailable")
+                                          if tracker_fails else custom_predict)
+        if tracker_fails:
+            custom_model.predict.side_effect = custom_predict
         factory = Mock(side_effect=[base, custom_model] if custom else [base])
         receiver = Mock()
 
@@ -392,15 +401,40 @@ class CameraTimestampTest(unittest.TestCase):
             return pub
 
         ros.Publisher.side_effect = publisher
-        with patch.dict(sys.modules, deps), patch.object(yolo.os.path, "isfile", return_value=custom):
+        preview_writer = Mock()
+        deps['camera_perception.debug_images'] = SimpleNamespace(
+            DebugImagePublisher=Mock(return_value=preview_writer), render_objects=Mock())
+        with patch.dict(sys.modules, deps), patch.object(yolo.os.path, "isfile", return_value=custom), \
+                patch.dict(yolo.os.environ, {'MORAI_CAMERA_DEBUG': 'true' if preview else 'false'}):
             yolo.main(custom_model_path="test.pt")
         self.assertTrue(finished.is_set(), "worker must publish newest pending frame")
         ros.logerr_throttle.assert_not_called()
         ros.Time.now.assert_not_called()
         yolo.LatestCameraReceiver.assert_called_once_with(yolo.IP, yolo.PORT, stamp_clock=ros.Time.now)
         self.assertEqual([call.kwargs["source"].data for call in base.predict.call_args_list], [b"\x01", b"\x03"])
+        if custom:
+            self.assertEqual([call.kwargs["source"].data for call in custom_model.track.call_args_list],
+                             [b"\x01", b"\x03"])
+            self.assertEqual(custom_model.predict.call_count, 2 if tracker_fails else 0)
         receiver.close.assert_called_once()
+        if preview:
+            self.assertEqual([call.args[3] for call in preview_writer.submit.call_args_list], [1, 3])
+            for call in preview_writer.submit.call_args_list:
+                seq = call.args[3]
+                self.assertEqual(call.args[0].data, frames[seq-1].jpeg_data)
+                self.assertIs(call.args[2], frames[seq-1].received_stamp)
+                self.assertEqual(call.args[4]['custom_loaded'], custom)
+            preview_writer.close.assert_called_once()
         return publishers, frames, publish_times
+
+    def test_yolo_preview_reuses_inferred_frame_and_original_stamp(self):
+        self.run_yolo(preview=True)
+
+    def test_yolo_tracker_failure_keeps_signal_frames_and_original_stamps(self):
+        pubs, frames, _ = self.run_yolo(tracker_fails=True)
+        traffic = pubs["/detection/traffic_light"].messages
+        self.assertEqual([message.header.stamp for message in traffic],
+                         [frames[0].received_stamp, frames[2].received_stamp])
 
     def test_yolo_pending_replacement_and_two_inferences_preserve_frame_age(self):
         pubs, frames, published_at = self.run_yolo()

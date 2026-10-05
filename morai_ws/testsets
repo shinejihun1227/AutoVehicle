@@ -1,0 +1,20 @@
+set -e
+cd "$HOME/AutoVehicle/morai_ws/docker/final_ws"
+
+# 기존 설정 백업 및 컨테이너 정지
+cp -p highway.env "highway.env.backup-$(date +%Y%m%d-%H%M%S)"
+bash run_highway.sh stop
+
+# 변경된 IP와 새 컨테이너 이름 저장
+NEW_CONTAINER_NAME="morai-ip10-$(date +%Y%m%d-%H%M%S)"
+sed -i \
+  -e 's/^MORAI_IP=.*/MORAI_IP=192.168.0.1/' \
+  -e 's/^UBUNTU_IP=.*/UBUNTU_IP=192.168.0.10/' \
+  -e "s/^CONTAINER_NAME=.*/CONTAINER_NAME=$NEW_CONTAINER_NAME/" \
+  highway.env
+
+sed -i 's/^TEST_PROFILE=.*/TEST_PROFILE=curvature/' highway-test.env
+
+bash run_test.sh show
+bash run_highway.sh start
+bash run_test.sh drive

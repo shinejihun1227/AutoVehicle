@@ -1,11 +1,18 @@
 # MORAI 자율주행 통합 저장소
 
-현장에서 실행할 시험 순서·명령·통과 기준·결과 기록표는
-[MORAI 현장 테스트 절차 — 2026-09-21](morai_ws/docs/FIELD_TEST_CHECKLIST_20260921_KO.md)에 정리했습니다.
+현장 실행은 [주행 테스트 5가지 — 간단 실행 안내](morai_ws/docs/FIELD_TEST_CHECKLIST_20260921_KO.md)를 사용합니다.
+곡률 → 신호 정지 → 장애물 회피 → 끼어들기 → 전체 조합을 번호로 선택하고, 최고속도도 한 줄로 변경합니다.
+
+Ubuntu 22.04 + RTX 4090 제어 PC와 Windows MORAI를 사용하는 경우:
+**[Docker 처음 설치 → 재부팅 후 실행 → 기능별 테스트 안내](morai_ws/docs/TWO_PC_DOCKER_HIGHWAY_KO.md)**를 따릅니다.
+IP는 Ubuntu `192.168.0.185`, MORAI `192.168.0.147` 기준입니다.
 
 새로운 개발 기준은 `morai_ws/`입니다. 기존에 여러 팀과 실험에서 사용하던
 실행 코드는 정리했으며, 대회 경로·MGeo·센서·팀 간 인터페이스 정보는
 `morai_ws/docs`와 `morai_ws/data`에서 관리합니다.
+
+고속도로 차선 변경·차로 유지·경로 복귀와 회전교차로 위치 설정은
+[통합 기능 안내](morai_ws/docs/HIGHWAY_LANE_CHANGE_INTEGRATION_20261005_KO.md)를 참고하세요.
 
 카메라 포트는 다음으로 통일합니다.
 
