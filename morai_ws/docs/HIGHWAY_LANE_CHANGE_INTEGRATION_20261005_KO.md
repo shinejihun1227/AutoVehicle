@@ -58,30 +58,46 @@ MGeo 전역 경로 → 정적 장애물 우회 → 경로 관리자 → 고속�
 설정을 바꾼 뒤에는 고속도로 launch를 다시 시작한다. `handoff_s_m`은 경로 시작점부터의 누적 거리이며 지도 좌표나 MGeo 링크 ID를 직접 넣는 칸이 아니다.
 
 ```bash
-rosrun purepursuit_mgeo record_route_landmarks.py --output ~/highway_handoff_landmarks.jsonl
+rosrun purepursuit_mgeo record_route_landmarks.py \
+  --output ~/highway_handoff_landmarks.jsonl \
+  --path-file ~/AutoVehicle/morai_ws/data/routes/2026_molit_comp_global_path.txt
 ```
 
 지점 통과 시 `/planning/highway_handoff_due=true`가 된다. 주행 전략은 진행 중인 차선 변경을 끝낸 뒤, 현재 차로 경계 안에서 만들 수 있는 복귀 경로인지, 전역 경로와의 거리, LiDAR 충돌, 경로 관리자 정지 상태를 확인한다. 이 조건이 충족될 때 `REJOIN`을 거쳐 `DONE`에서 대회 경로를 사용한다. 지점이 지났다는 이유만으로 떨어진 경로에 바로 조향 명령을 넘기지 않는다. `/highway_lane_strategy/state`의 `handoff_permitted`, `state`와 `/route_mission_gate/status`의 `handoff_due`로 전환 상태를 볼 수 있다.
 
 ## MGeo 위치 측정과 회전교차로 보정
 
-위치 설정은 `purepursuit_mgeo/config/route_mission_regions.json`이다. 현재는 회전교차로의 양보선, 자차와 순환 차로의 충돌 중심, 순환 차량의 이동 방향 링크가 확인되지 않았으므로 `roundabout.enabled=false`와 위치값 `null`을 유지했다. 임의 좌표로 합류를 승인하지 않는다.
+위치 설정은 `purepursuit_mgeo/config/route_mission_regions.json`이다. 현재는 회전교차로 접근 시작, 양보선, 실제 진입점, 자차와 순환 차로의 충돌 중심, 순환 차량의 이동 방향 링크가 확인되지 않았으므로 `roundabout.enabled=false`와 위치값 `null`을 유지했다. 임의 좌표로 합류를 승인하지 않는다.
 
-1. RViz에서 `/localization/odometry`와 전역 경로를 `map` 좌표계에 표시한다. 회전교차로 접근 시작점, 양보선, 충돌 중심, 충돌 구역을 지난 종료점을 기록한다. 주행 중 아래 기록 도구에서 각 지점마다 Enter를 누르면 그 순간의 `map` 좌표와 `/experimental/curvature_progress`가 JSONL로 남는다. 회전교차로에 선 곳에서 측정하고, 눈으로만 추정한 값을 입력하지 않는다.
+먼저 정지선·신호등 MGeo 연결은 `turn_signal_controller/route_context.py`가 지도 신호등에 연결된 링크와 `node_set.json`의 `on_stop_line` 노드를 전역 경로에 자동 투영해 구성한다. 현재 대회 경로의 정적 검사 결과는 신호 구간 6개, 방향 미확인 0개, 지도 정지선 미확인 0개다. 이 검사는 지도 기하만 검증하며 카메라 장착 보정이나 실시간 신호 인식은 검증하지 않는다. Cam4의 지도 투영값은 [`turn_signal_maneuvers.yaml`](../src/control/turn_signal_controller/config/turn_signal_maneuvers.yaml)에서 보정 후 `calibrated: true`로 바꾸기 전까지 허가 근거로 쓰이지 않는다.
 
 ```bash
-rosrun purepursuit_mgeo record_route_landmarks.py --output ~/roundabout_landmarks.jsonl
+cd "$HOME/AutoVehicle/morai_ws"
+python3 src/control/turn_signal_controller/scripts/inspect_route_signals.py \
+  --path-file data/routes/2026_molit_comp_global_path.txt \
+  --mgeo-dir "$(rospack find camera_perception)/lane/mgeo/R_KR_PR_K-city_2025" \
+  --require-complete
 ```
-2. 기록한 지도 좌표를 아래 명령에 넣어 경로 거리 `s`, 경로 이탈 거리, 가장 가까운 MGeo 링크 ID와 방향을 확인한다. 경로가 같은 장소를 여러 번 지나는 경우 `--hint-s`에 관측된 진행 거리를 넣는다.
+
+일반 경로의 MGeo 신호 연동은 `final_ws_bringup.launch`의 경로 신호 융합이 담당한다. `final_ws_curvature_signal.launch`는 센서 전용 프로필이고, 고속도로 전용 launch는 다차로 경로 때문에 해당 융합을 끄고 정지선·신호 카메라 제어를 유지한다.
+
+1. RViz에서 `/localization/odometry`와 전역 경로를 `map` 좌표계에 표시한다. 회전교차로 접근 시작점, 양보선, 실제 진입점, 충돌 중심, 충돌 구역을 지난 종료점을 기록한다. 아래 기록 도구에서 각 지점마다 Enter를 누르면 차량의 `map` 좌표와 `/experimental/curvature_progress`를 JSONL로 남긴다. 경로 파일을 함께 주면 같은 영상 시각에 들어온 유효한 정지선 거리도 차량 yaw로 지도 좌표로 투영해 기록한다. 그 정지선 지도점의 시각이 맞지 않거나 검출이 오래되면 점을 만들지 않고 이유를 남긴다.
 
 ```bash
-python3 morai_ws/src/control/purepursuit_mgeo/scripts/locate_route_region.py \
-  --path-file morai_ws/data/routes/2026_molit_comp_global_path.txt \
-  --link-set-file morai_ws/data/mgeo/R_KR_PR_K-city_2025/link_set.json \
+rosrun purepursuit_mgeo record_route_landmarks.py \
+  --output ~/roundabout_landmarks.jsonl \
+  --path-file ~/AutoVehicle/morai_ws/data/routes/2026_molit_comp_global_path.txt
+```
+2. 고속도로 인계점은 기록한 차량 `map_xy`와 차량 `route_s_m`을 쓴다. 양보선은 `stopline_landmark.map_xy`와 `stopline_landmark.route_s_m`을 우선 사용한다. 이 정지선 투영값이 없으면 정지선에 정차했을 때의 차량 위치를 정지선 위치로 간주하지 말고 MGeo 원본 또는 지도 화면에서 선 자체를 별도로 측정한다. 좌표를 아래 명령에 넣어 경로 거리 `s`, 경로 이탈 거리, 가장 가까운 MGeo 링크 ID와 방향을 확인한다. 경로가 같은 장소를 여러 번 지나는 경우 `--hint-s`에 같은 시각의 관측 진행 거리를 넣는다.
+
+```bash
+python3 "$HOME/AutoVehicle/morai_ws/src/control/purepursuit_mgeo/scripts/locate_route_region.py" \
+  --path-file "$HOME/AutoVehicle/morai_ws/data/routes/2026_molit_comp_global_path.txt" \
+  --link-set-file "$(rospack find camera_perception)/lane/mgeo/R_KR_PR_K-city_2025/link_set.json" \
   --xy <map_x> <map_y> --hint-s <observed_s>
 ```
 
-3. 접근 정지를 시작할 `request_start_s_m`, 양보선 `yield_s_m`, 충돌 중심 `conflict_s_m`, 종료 `request_end_s_m`을 경로 진행 순으로 입력한다. `request_start_s_m`은 양보선에 닿기 전에 현재 속도에서 정지할 거리만큼 앞에 두되, 순환 차로가 LiDAR 관측 범위에 들어오는 위치를 선택한다. `conflict_xy_map`은 자차 경로와 **순환 차량 경로가 실제로 겹치는 지도 좌표**다. `circulating_link_ids`는 이 지점을 통과하는 순환 차로 링크를 차량 진행 순으로 적는다. 가까운 링크 ID만 보고 자동으로 방향을 확정하지 말고 MGeo 연결 관계와 시뮬레이터 주행 방향을 확인한다.
+3. 경로 진행 순으로 `request_start_s_m`, `yield_s_m`, `entry_s_m`, `conflict_s_m`, `request_end_s_m`을 입력한다. 현재 합류 게이트의 `/stop_required`는 비어 있는 간격을 확인하는 동안 즉시 제동을 요청한다. 따라서 `request_start_s_m`은 LiDAR에서 순환 차량이 관측되고, 즉시 제동해도 양보선 전에 정지할 만큼 앞선 위치로 잡는다. 안전한 간격이 확인되기 전까지 차량은 그 부근에서 대기한다. `yield_s_m`은 물리 양보선이고, `entry_s_m`은 차량 전면이 회전교차로 진입 경계를 통과하는 기준이다. `conflict_xy_map`은 자차 경로와 **순환 차량 경로가 실제로 겹치는 지도 좌표**다. 순환 차량 링크는 `camera_perception/lane/mgeo`의 전체 `link_set.json`에서 찾고, MGeo 노드 연결과 시뮬레이터 주행 방향을 확인해 차량 진행 순으로 적는다. 고속도로 회피 planner가 쓰는 축약 링크 파일과 회전교차로의 전체 링크 파일은 launch 인자가 분리되어 있다.
 4. 값과 경로 파일의 SHA-256이 맞는 것을 확인한 뒤 `enabled=true`로 바꾼다. 요청 구간이 고속도로 구간과 겹치거나 링크가 끊어져 있거나 충돌 원이 두 경로와 만나지 않으면 노드가 설정을 거부한다. `/route_mission_gate/status`, `/roundabout_merge_gate/status`, `/roundabout_merge_gate/stop_required`로 판단 상태를 관찰한다.
 
 회전교차로 게이트는 LiDAR 추적 물체를 순환 차로 링크에 대응시키고, 차량의 진행 방향 속도에 오차 여유를 더해 충돌 구역 도착·이탈 시간을 예측한다. 자차는 정지 후 출발 지연과 가속도 범위를 적용해 점유 시간을 잡는다. 시간 구간이 겹치거나 출처 시각이 오래된 센서 데이터면 정지 신호를 낸다. 가려진 차량이나 트래킹되지 않은 차량은 이 예측에 포함될 수 없으므로 현장 데이터로 탐지 범위와 정지 위치를 확인해야 한다.

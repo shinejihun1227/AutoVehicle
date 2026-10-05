@@ -3,6 +3,8 @@
   <arg name="workspace_path" default="$(env HOME)/AutoVehicle/morai_ws" />
   <arg name="path_file" default="$(arg workspace_path)/data/routes/2026_molit_comp_global_path.txt" />
   <arg name="link_set_file" default="$(arg workspace_path)/data/mgeo/R_KR_PR_K-city_2025/link_set.json" />
+  <!-- Roundabout circulation can use links outside the reduced highway planner map. -->
+  <arg name="roundabout_link_set_file" default="$(find camera_perception)/lane/mgeo/R_KR_PR_K-city_2025/link_set.json" />
   <arg name="mission_regions_file" default="$(find purepursuit_mgeo)/config/route_mission_regions.json" />
   <arg name="morai_host_ip" default="192.168.0.147" />
   <arg name="ego_status_port" default="1911" />
@@ -238,7 +240,7 @@
   </node>
   <node if="$(arg enable_roundabout_merge_gate)" pkg="purepursuit_mgeo" type="roundabout_merge_gate_node.py" name="roundabout_merge_gate" output="screen">
     <param name="path_file" value="$(arg path_file)" />
-    <param name="link_set_file" value="$(arg link_set_file)" />
+    <param name="link_set_file" value="$(arg roundabout_link_set_file)" />
     <param name="config_file" value="$(arg mission_regions_file)" />
     <param name="request_topic" value="$(arg merge_request_topic)" />
     <param name="odom_topic" value="/localization/odometry" />

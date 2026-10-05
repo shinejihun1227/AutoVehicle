@@ -141,13 +141,13 @@ class RoundaboutMergeGate:
         self.request_at = rospy.Time.now()
 
     def _odom_cb(self, msg: Odometry) -> None:
-        if msg.header.frame_id and msg.header.frame_id != "map":
+        if msg.header.frame_id != "map":
             return
         self.latest_odom = msg
         self.odom_at = rospy.Time.now()
 
     def _obstacle_cb(self, msg: LidarObstacleArray) -> None:
-        if msg.header.frame_id and msg.header.frame_id != "map":
+        if msg.header.frame_id != "map":
             return
         self.latest_obstacles = msg
         self.obstacles_at = rospy.Time.now()
@@ -294,6 +294,7 @@ class RoundaboutMergeGate:
             "stop_required": stop, "allowed": allowed,
             "ego_interval_s": None if ego_interval is None else [round(v, 2) for v in ego_interval],
             "blockers": blockers, "conflict_xy_map": self.conflict_xy,
+            "entry_s_m": self.region.get("entry_s_m"),
         }, ensure_ascii=False, separators=(",", ":"))))
         rospy.loginfo_throttle(1.0, "MergeGate state=%s reason=%s blockers=%d", self.state, reason, len(blockers))
 

@@ -69,7 +69,9 @@ class RouteMissionGate:
         self.progress_at = rospy.Time.now()
 
     def _odom_cb(self, msg: Odometry) -> None:
-        if msg.header.frame_id and msg.header.frame_id != "map":
+        # Mission regions and route projection are all in MGeo map coordinates.
+        # An empty frame is not enough evidence to activate a route-specific feature.
+        if msg.header.frame_id != "map":
             return
         self.odom = msg
         self.odom_at = rospy.Time.now()
@@ -157,6 +159,7 @@ class RouteMissionGate:
             "handoff_unconfigured_at_end": handoff_unconfigured_at_end,
             "committed_lane_change": committed_change,
             "merge_request": merge_request, "roundabout_calibrated": bool(roundabout["enabled"]),
+            "roundabout_entry_s_m": roundabout.get("entry_s_m"),
         }, separators=(",", ":"))))
 
 

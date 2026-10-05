@@ -558,6 +558,28 @@ class HighwayLaneStrategyNode:
         )))
 
     def _obstacles_cb(self, msg: LidarObstacleArray) -> None:
+        # This consumer performs all path and collision checks in map frame.
+        # Treat a frame mismatch or malformed track as missing sensor data;
+        # interpreting base_link coordinates as map coordinates can report a
+        # clear path while a real obstacle is present.
+        if getattr(getattr(msg, "header", None), "frame_id", None) != self.map_frame:
+            self.latest_obstacles = None
+            self.obstacles_at = None
+            return
+        try:
+            for obstacle in msg.obstacles:
+                values = (
+                    obstacle.center_x_map, obstacle.center_y_map, obstacle.yaw,
+                    obstacle.length, obstacle.width,
+                    obstacle.velocity_x_map, obstacle.velocity_y_map,
+                )
+                if (not all(math.isfinite(float(value)) for value in values)
+                        or float(obstacle.length) <= 0.0 or float(obstacle.width) <= 0.0):
+                    raise ValueError("invalid tracked obstacle")
+        except (AttributeError, TypeError, ValueError, OverflowError):
+            self.latest_obstacles = None
+            self.obstacles_at = None
+            return
         self.latest_obstacles = msg
         self.obstacles_at = rospy.Time.now()
 

@@ -11,6 +11,7 @@
     "enabled": false,
     "request_start_s_m": null,
     "yield_s_m": null,
+    "entry_s_m": null,
     "conflict_s_m": null,
     "request_end_s_m": null,
     "conflict_xy_map": null,

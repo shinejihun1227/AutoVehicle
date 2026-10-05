@@ -13,6 +13,8 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--path-file", required=True)
     parser.add_argument("--mgeo-dir", required=True)
+    parser.add_argument("--require-complete", action="store_true",
+                        help="return an error if a route signal lacks known direction or verified stop line")
     args = parser.parse_args()
     points = clean_consecutive_duplicates(load_path_file(args.path_file))
     contexts = load_route_contexts(args.mgeo_dir, points, cumulative_arc_lengths(points))
@@ -23,7 +25,11 @@ def main():
         "note": "Static preflight only; NOT camera calibration or driving approval",
         "contexts": contexts,
     }, indent=2, allow_nan=False))
-    return 0 if contexts else 2
+    incomplete = any(c["direction"] == "UNKNOWN" or c["stop_s"] is None
+                     for c in contexts)
+    if not contexts or (args.require_complete and incomplete):
+        return 2
+    return 0
 
 
 if __name__ == "__main__":
