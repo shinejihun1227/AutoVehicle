@@ -1,5 +1,9 @@
 # final_ws: Docker 첫 설치부터 메시지·환경 설정·MORAI 시험까지
 
+Docker 없이 Ubuntu 20.04/Noetic의 홈 폴더에 설치하고, 방향지시등 인터페이스 없이
+시험하려면 [Ubuntu 네이티브·방향지시등 제외 실행 안내](FINAL_WS_NATIVE_NO_LAMPS_TEST_KO.md)를 따른다.
+해당 안내는 Ubuntu `192.168.0.200`, MORAI `192.168.0.161`, Ego 수신 `1911` 기준이다.
+
 2026-09-09. 정지선·방향별 신호·좌우회전 속도/출구 정렬·GPS 음영 차선 유지를
 반영한 코드의 실행 안내다. 처음 사용하는 사람은 **0 → 1 → 2 → 3 → 4 → 5 → 6절**
 순서로 진행한다. 이미 만든 컨테이너에 다시 접속하려면 7절을 사용한다.
@@ -225,10 +229,11 @@ wc -c morai_ws/src/detection/camera_perception/lane/lane_seg_best.pt \
 `ObjectInfoArray`의 import는 `from common.msg import ObjectInfoArray`다.
 폴더 이름을 보고 `common_msgs.msg`로 import하면 안 된다.
 
-외부 메시지는 [MORAI 공식 ROS1 메시지 저장소](https://github.com/MORAI-Autonomous/MORAI-ROS_morai_msgs)를
-사용한다. ROS2 버전과 섞지 않는다. 대회에서 제공한 SDK와 대응하는 커밋을 알고 있으면
-그 **40자리 SHA**를 선택한다. 모르면 아래 명령으로 main의 SHA를 기록해 빌드 후보로
-사용할 수 있지만, 대회 SDK와 필드가 맞는지는 별도 확인해야 한다.
+외부 메시지는 [대회 지정 beta_drive 브랜치](https://github.com/MORAI-Autonomous/MORAI-ROS_morai_msgs/tree/beta_drive)를
+사용한다. 이전 안내의 `main` 선택은 잘못된 안내였다. 현재 코드는 `CtrlCmd.steering`과
+`EgoVehicleStatus.wheel_angle`을 사용하므로 `front_steer` 형식과 호환되지 않는다.
+아래 명령은 `beta_drive`의 **40자리 SHA**를 기록한다. Docker 빌드와 모델 검사에서
+생성된 메시지 필드까지 확인하며, 잘못된 형식이면 실패한다.
 
 ### 2-2. 코드·메시지 버전을 정하고 빌드
 
@@ -239,7 +244,7 @@ export CODE_REF="$(git rev-parse HEAD)"
 # 제공된 MORAI SDK 대응 SHA가 있으면 아래 값 대신 그 40자리 SHA를 사용한다.
 export MORAI_MSGS_REF="$(git ls-remote \
   https://github.com/MORAI-Autonomous/MORAI-ROS_morai_msgs.git \
-  refs/heads/main | awk '{print $1}')"
+  refs/heads/beta_drive | awk '{print $1}')"
 [[ "$MORAI_MSGS_REF" =~ ^[0-9a-f]{40}$ ]] || { echo 'MORAI 메시지 SHA 확인 실패'; exit 1; }
 
 # 오프라인 검사 기준은 cpu. GPU 환경이 준비됐으면 cu121로 설정한다.
@@ -487,6 +492,12 @@ print('MESSAGES_OK')
 print('TORCH', torch.__version__, 'CUDA_AVAILABLE', torch.cuda.is_available())
 PY
 ```
+
+```bash
+python "$MORAI_WS/docker/final_ws/check_morai_messages.py"
+```
+
+`MORAI_MESSAGES_OK`는 메시지 필드 호환 검사 통과다. 센서 수신과 주행은 별도로 확인한다.
 
 CPU 이미지에서는 `CUDA_AVAILABLE False`가 정상이다. GPU 이미지에 GPU를 전달해
 실행한 경우에는 True여야 한다. 외부 SDK·설치 버전 기록은 다음으로 확인한다.

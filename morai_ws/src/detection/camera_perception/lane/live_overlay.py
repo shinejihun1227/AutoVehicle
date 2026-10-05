@@ -109,6 +109,8 @@ def build_arg_parser():
                     help="차선 fallback용 morai_perception_msgs/LaneDetection 토픽")
     ap.add_argument("--lane-quality-topic", default="/perception/camera/lane_quality",
                     help="차선 품질 진단용 std_msgs/String 토픽")
+    ap.add_argument("--lane-info-topic", default="",
+                    help="ROI highway lane geometry; reuse this inference/UDP stream")
     return ap
 
 
@@ -125,6 +127,10 @@ def main(argv=None):
     stopline_publisher = None
     lane_detection_publisher = None
     lane_quality_publisher = None
+    lane_info_publisher = None
+    lane_info_stabilizer = None
+    lane_info_fresh_stamp = 0.0
+    lane_info_fresh_wall_stamp = None
     LaneDetection = None
     StopLineDetection = None
     String = None
@@ -168,6 +174,10 @@ def main(argv=None):
         lane_quality_publisher = rospy.Publisher(
             args.lane_quality_topic, String, queue_size=1
         )
+        if args.lane_info_topic:
+            from live_lane_info_publisher_v2 import LaneOutputStabilizer
+            lane_info_stabilizer = LaneOutputStabilizer()
+            lane_info_publisher = rospy.Publisher(args.lane_info_topic, String, queue_size=1)
 
     pipe = LaneDetector(args.checkpoint, cam_set=args.cam_set,
                         bonnet_mask=False if args.no_bonnet else args.bonnet,
@@ -216,6 +226,28 @@ def main(argv=None):
                                 if source_frame.received_stamp is not None
                                 else rospy.Time()
                             )
+                            if lane_info_publisher is not None:
+                                lane_info = lane_info_stabilizer.update(res, now=frame_stamp.to_sec())
+                                receive_age_s = time.monotonic() - source_frame.received_at
+                                observation_wall_stamp = (
+                                    time.time() - receive_age_s
+                                    if frame_stamp.to_sec() > 0.0
+                                    and 0.0 <= receive_age_s <= 30.0
+                                    else None
+                                )
+                                if lane_info.get("output_status") == "FRESH":
+                                    lane_info_fresh_stamp = frame_stamp.to_sec()
+                                    lane_info_fresh_wall_stamp = observation_wall_stamp
+                                elif lane_info.get("output_status") in ("HELD", "HOLD"):
+                                    # Held geometry must retain the age of its observation.
+                                    lane_info["timestamp"] = lane_info_fresh_stamp
+                                if lane_info.get("output_status") in ("FRESH", "HELD", "HOLD") and lane_info_fresh_wall_stamp is not None:
+                                    # Keep the ROS receipt stamp for existing consumers;
+                                    # supply a wall-clock observation for LiDAR/odom
+                                    # reprojection, even when ROS uses simulated time.
+                                    lane_info["observation_wall_timestamp"] = lane_info_fresh_wall_stamp
+                                    lane_info["observation_time_source"] = "camera_receive_wall"
+                                lane_info_publisher.publish(String(data=json.dumps(lane_info)))
                             left_dashed = bool(
                                 res.ego_left is not None
                                 and res.ego_left.is_dashed

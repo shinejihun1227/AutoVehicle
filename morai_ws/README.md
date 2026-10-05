@@ -1,9 +1,15 @@
 # MORAI 통합 작업공간
 
+현장에서 실행할 시험 순서·명령·통과 기준·결과 기록표는
+[MORAI 현장 테스트 절차 — 2026-09-21](docs/FIELD_TEST_CHECKLIST_20260921_KO.md)를 사용합니다.
+T01~T06의 빌드·센서·Cam4·출발·속도·신호 정지 시험부터 진행합니다.
+
 > 현재 `final_ws`는 구현 백업본이며 주행 승인본이 아닙니다.
 > [미해결 안전 문제와 검증 조건](docs/KNOWN_ISSUES_FINAL_WS.md)을 먼저 확인하세요.
 
-새 환경 설치와 최종 실행은 [Docker 구성·주행 시험 안내](docs/DOCKER_FINAL_WS_FROM_SCRATCH_KO.md)를 사용합니다.
+Docker 없이 새 Ubuntu 20.04 PC에서 시작하려면 [Ubuntu 최초 설치·센서 확인·주행 통합 안내](docs/UBUNTU_NATIVE_FIRST_SETUP_KO.md)를 사용합니다.
+주행 코드의 `final_ws`와 대회 메시지의 `beta_drive`를 구분해 설치합니다.
+Docker를 사용하는 새 환경 설치와 최종 실행은 [Docker 구성·주행 시험 안내](docs/DOCKER_FINAL_WS_FROM_SCRATCH_KO.md)를 사용합니다.
 정지선·신호·회전·GPS 음영구간 보완본의 재빌드와 시험 명령은
 [final_ws 보완본 Docker 빠른 실행](docs/FINAL_WS_UPDATED_DOCKER_TEST_KO.md)에 정리했습니다.
 
@@ -118,6 +124,14 @@ control_mux와 ROI `dev/merged_code`의 카메라·LiDAR 인식 패키지를 함
 `morai_sensor_fusion/roi_sensor_safety_adapter.py`가 현재 `SafetyStop` 계약으로
 변환합니다. 자세한 연결은 [final_ws 통합 안내](docs/FINAL_WS_INTEGRATION.md)를
 참고합니다.
+
+2026-09-21: ROI `cb41b5f`의 최신 우회·차선 전략을 반영했습니다. 모델 4개는 최신 원본과
+동일합니다. 기존 곡률/신호·정지선 실행 구성과 별도 고속도로 시험 구성의 차이는
+[ROI 업데이트 및 실행 안내](docs/ROI_UPDATE_20260921_KO.md)를 참고하세요.
+
+2026-10-05: ROI `test/rrt`의 최신 차선 기준 5차 경로와 1차로씩 변경·충돌 제동을
+고속도로 전용 launch에 통합했습니다. 기능별 적용 상황과 제어 우선순위는
+[고속도로 차선 변경 통합 안내](docs/HIGHWAY_LANE_CHANGE_INTEGRATION_20261005_KO.md)에 정리했습니다.
 
 검증 단계에서는 다음처럼 제어를 끈 상태로 시작합니다.
 

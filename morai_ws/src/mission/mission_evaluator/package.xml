@@ -12,4 +12,10 @@
   <depend>nav_msgs</depend>
   <depend>rospy</depend>
   <depend>std_msgs</depend>
+  <depend>std_srvs</depend>
+  <exec_depend>morai_bringup</exec_depend>
+  <exec_depend>turn_signal_controller</exec_depend>
+  <exec_depend>camera_perception</exec_depend>
+  <exec_depend>rosbag</exec_depend>
+  <test_depend>python3-nose</test_depend>
 </package>

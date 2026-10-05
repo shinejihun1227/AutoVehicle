@@ -5,6 +5,7 @@ Clocks and inference are controlled; no simulator or wall-clock sleeps needed.
 """
 
 import importlib.util
+import json
 from pathlib import Path
 import struct
 import sys
@@ -230,7 +231,7 @@ class CameraTimestampTest(unittest.TestCase):
         )
         receiver.close.assert_called_once()
 
-    def run_overlay(self, stamps):
+    def run_overlay(self, stamps, lane_info=False):
         ros_deps, publishers = ros_modules()
         ros = ros_deps["rospy"]
         clock = Clock()
@@ -271,14 +272,29 @@ class CameraTimestampTest(unittest.TestCase):
                 DEFAULT_IP="127.0.0.1", DEFAULT_PORT=1101, CameraStream=Mock(return_value=stream),
             ),
         }
+        stabilizer = Mock()
+        statuses = iter(("FRESH", "HELD"))
+        stabilizer.update.side_effect = lambda res, now: {"timestamp": now, "output_status": next(statuses)}
+        deps["live_lane_info_publisher_v2"] = SimpleNamespace(LaneOutputStabilizer=Mock(return_value=stabilizer))
         overlay = load_module("lane/live_overlay.py", deps)
         with patch.dict(sys.modules, deps):
-            overlay.main(["--ros-publish", "--no-values", "--every", "2"])
+            overlay.main(["--ros-publish", "--no-values", "--every", "2"] +
+                         (["--lane-info-topic", "/perception/camera/lane_info"] if lane_info else []))
         deps["morai_camera"].CameraStream.assert_called_once_with(
             "127.0.0.1", 1101, stamp_clock=ros.Time.now,
         )
         ros.Time.now.assert_not_called()
+        self.assertEqual(detector.run.call_count, 2)
         return publishers, frames
+
+    def test_lane_info_shares_inference_and_preserves_held_geometry_age(self):
+        pubs, _ = self.run_overlay([Stamp(100.1), Stamp(100.2), Stamp(100.3), Stamp(100.4)], lane_info=True)
+        info = [json.loads(msg.data) for msg in pubs["/perception/camera/lane_info"].messages]
+        self.assertEqual([p["output_status"] for p in info], ["FRESH", "HELD"])
+        self.assertEqual([p["timestamp"] for p in info], [100.2, 100.2])
+        # Existing timestamped stop-line observations are still emitted for BOTH inferences.
+        self.assertEqual([m.header.stamp.to_sec() for m in pubs["/perception/camera/stopline"].messages[:-1]],
+                         [100.2, 100.4])
 
     def test_lane_publishes_inferred_frame_stamp_and_stopline_geometry_quality(self):
         pubs, frames = self.run_overlay([Stamp(100.1), Stamp(100.2), Stamp(100.3), Stamp(100.4)])

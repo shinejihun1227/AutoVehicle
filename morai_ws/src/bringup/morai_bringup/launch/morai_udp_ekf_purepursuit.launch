@@ -10,6 +10,9 @@
   <arg name="control_remote_port" default="9093" />
   <arg name="control_source_port" default="9094" />
   <arg name="enable_control" default="false" />
+  <!-- Set false when another controller (for example an active-path
+       curvature controller) consumes the same localization/UDP stack. -->
+  <arg name="enable_purepursuit" default="true" />
   <arg name="wheelbase_m" default="3.0" />
   <arg name="command_topic" default="/ctrl_cmd" />
   <arg name="longl_cmd_type" default="1" />
@@ -100,6 +103,7 @@
   </include>
 
   <!-- 6. EKF pose + 경로 -> 조향 및 종방향 CtrlCmd -->
+  <group if="$(arg enable_purepursuit)">
   <group unless="$(arg use_curvature_speed_planner)">
     <include file="$(find purepursuit_mgeo)/launch/purepursuit_mgeo.launch">
       <arg name="workspace_path" value="$(arg workspace_path)" />
@@ -152,5 +156,6 @@
       <param name="progress_search_window_points" value="250" />
       <param name="progress_backtrack_tolerance_m" value="2.0" />
     </node>
+  </group>
   </group>
 </launch>

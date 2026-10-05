@@ -44,10 +44,10 @@ COPY config ./config
 COPY data ./data
 COPY docker/final_ws ./docker/final_ws
 
-# Explicit SHA avoids an unnoticed change of the external ROS1 message API.
-# Check this revision against the competition SDK before using the simulator.
+# Pin a competition beta_drive SHA, then check the generated field contract.
 RUN [[ "${MORAI_MSGS_REF}" =~ ^[0-9a-fA-F]{40}$ ]] \
-    && git clone https://github.com/MORAI-Autonomous/MORAI-ROS_morai_msgs.git src/common/morai_msgs \
+    && git clone --branch beta_drive --single-branch https://github.com/MORAI-Autonomous/MORAI-ROS_morai_msgs.git src/common/morai_msgs \
+    && git -C src/common/morai_msgs merge-base --is-ancestor "${MORAI_MSGS_REF}" origin/beta_drive \
     && git -C src/common/morai_msgs checkout --detach "${MORAI_MSGS_REF}" \
     && test -f src/common/morai_msgs/msg/CtrlCmd.msg \
     && test -f src/common/morai_msgs/msg/GPSMessage.msg \
@@ -56,6 +56,7 @@ RUN [[ "${MORAI_MSGS_REF}" =~ ^[0-9a-fA-F]{40}$ ]] \
 RUN source /opt/ros/noetic/setup.bash \
     && catkin_make -j2 -l2 -DPYTHON_EXECUTABLE=/opt/morai-venv/bin/python3 \
     && source devel/setup.bash \
+    && python docker/final_ws/check_morai_messages.py \
     && python -c 'import rospy, cv2, torch, torchvision, ultralytics; from morai_msgs.msg import CtrlCmd, GPSMessage, EgoVehicleStatus; from morai_perception_msgs.msg import StopLineDetection; from common.msg import ObjectInfoArray' \
     && python docker/final_ws/run_regression.py \
     && python -m pip freeze > /opt/morai-build/pip-freeze.txt \

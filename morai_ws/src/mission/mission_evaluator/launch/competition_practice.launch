@@ -1,0 +1,51 @@
+<launch>
+  <!-- Separate practice wrapper. Production final_ws_bringup is unchanged. -->
+  <arg name="workspace_path" default="$(env HOME)/morai_ws" />
+  <arg name="path_file" default="$(arg workspace_path)/data/routes/2026_molit_comp_global_path.txt" />
+  <arg name="rules_file" default="$(find mission_evaluator)/config/competition_rules_v1_1.json" />
+  <arg name="mgeo_path" default="$(arg workspace_path)/data/mgeo/R_KR_PR_K-city_2025" />
+  <arg name="signal_mgeo_path" default="$(find camera_perception)/lane/mgeo/R_KR_PR_K-city_2025" />
+  <arg name="morai_host_ip" default="192.168.0.151" />
+  <arg name="launch_driving" default="true" />
+  <arg name="enable_control" default="false" />
+  <arg name="max_speed_kph" default="7.2" />
+  <arg name="fallback_speed_cap_kph" default="7.2" />
+  <arg name="enable_roi_camera" default="true" />
+  <arg name="enable_roi_lidar" default="true" />
+  <arg name="auto_start" default="true" />
+  <arg name="output_dir" default="$(env HOME)/.ros/competition_runs" />
+  <arg name="lane_mode" default="map_estimate" />
+  <arg name="collision_udp_enabled" default="true" />
+  <arg name="collision_port" default="9092" />
+  <arg name="collision_protocol_verified" default="false" />
+  <arg name="record_bag" default="false" />
+  <arg name="bag_prefix" default="$(env HOME)/competition_practice" />
+
+  <include if="$(arg launch_driving)" file="$(find morai_bringup)/launch/final_ws_bringup.launch">
+    <arg name="workspace_path" value="$(arg workspace_path)" />
+    <arg name="path_file" value="$(arg path_file)" />
+    <arg name="signal_mgeo_path" value="$(arg signal_mgeo_path)" />
+    <arg name="morai_host_ip" value="$(arg morai_host_ip)" />
+    <arg name="enable_control" value="$(arg enable_control)" />
+    <arg name="max_speed_kph" value="$(arg max_speed_kph)" />
+    <arg name="fallback_speed_cap_kph" value="$(arg fallback_speed_cap_kph)" />
+    <arg name="enable_roi_camera" value="$(arg enable_roi_camera)" />
+    <arg name="enable_roi_lidar" value="$(arg enable_roi_lidar)" />
+  </include>
+  <include file="$(find mission_evaluator)/launch/competition_lap.launch">
+    <arg name="workspace_path" value="$(arg workspace_path)" />
+    <arg name="path_file" value="$(arg path_file)" />
+    <arg name="rules_file" value="$(arg rules_file)" />
+    <arg name="mgeo_path" value="$(arg mgeo_path)" />
+    <arg name="signal_mgeo_path" value="$(arg signal_mgeo_path)" />
+    <arg name="output_dir" value="$(arg output_dir)" />
+    <arg name="auto_start" value="$(arg auto_start)" />
+    <arg name="lane_mode" value="$(arg lane_mode)" />
+    <arg name="collision_udp_enabled" value="$(arg collision_udp_enabled)" />
+    <arg name="collision_port" value="$(arg collision_port)" />
+    <arg name="collision_sender_ip" value="$(arg morai_host_ip)" />
+    <arg name="collision_protocol_verified" value="$(arg collision_protocol_verified)" />
+  </include>
+  <node if="$(arg record_bag)" pkg="rosbag" type="record" name="competition_practice_recorder" output="screen"
+        args="-o $(arg bag_prefix) /clock /localization/odometry /Ego_topic /localization/sensor_quality /evaluation/collision_snapshot /evaluation/lane_snapshot /control/maneuver_status /perception/traffic_light/directional_state /evaluation/status /evaluation/event /evaluation/result /ctrl_cmd" />
+</launch>

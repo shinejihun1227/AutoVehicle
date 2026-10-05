@@ -78,8 +78,7 @@ roslaunch stability_stack morai_udp_ekf_curvature_only.launch \
   enable_control:=false
 다른 터미널에서 확인합니다.
 rostopic hz /localization/gps
-rostopic hz /localization/gps_filtered
-rostopic hz /Imu_filtered
+rostopic hz /localization/gps_health
 rostopic hz /localization/odometry
 곡률과 속도 결과를 확인합니다.
 rostopic echo /experimental/curvature_value
@@ -122,14 +121,7 @@ roslaunch stability_stack morai_udp_ekf_curvature_camera_fallback.launch \
   show_camera_windows:=true
 현재 카메라 통합은 /camera/front/image/compressed 형식을 사용합니다. 실제 카메라 토픽명이 다르면 다음처럼 바꿉니다.
 front_camera_topic:=/실제/카메라/토픽
-8. 실제 GPS·IMU 노이즈 측정
-인위적인 noise injector를 사용하지 않고 MORAI 원본 센서의 변동을 측정하려면 주행 launch를 종료한 뒤 실행합니다.
-roslaunch sensor_noise_estimator sensor_noise_measurement.launch \
-  csv_path:=/root/AutoVehicle/morai_ws/data/measurements/raw_sensor_noise.csv
-결과 확인:
-rostopic echo /localization/noise_statistics
-rostopic echo /localization/noise_statistics_json
-rostopic hz /localization/noise_statistics
-실제 MORAI 주행 테스트에서는 다음 두 launch를 우선 사용하면 됩니다.
+8. 실제 MORAI 주행 테스트
+센서 입력에는 인위적인 noise를 추가하지 않으며, 다음 두 launch를 우선 사용하면 됩니다.
 - 곡선 주행만: morai_udp_ekf_curvature_only.launch
 - 카메라 fallback 포함: morai_udp_ekf_curvature_camera_fallback.launch

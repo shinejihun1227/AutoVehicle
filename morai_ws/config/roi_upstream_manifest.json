@@ -1,0 +1,154 @@
+{
+  "repository": "https://github.com/hyunho0429/ROI",
+  "branch": "dev/merged_code",
+  "commit": "cb41b5fa4598d680d715cde9a0deaf6a5a1035f3",
+  "checked_on": "2026-09-21",
+  "baseline_commit": "c75205052c343a406e469849a8ed34aeeb25555e",
+  "files": [
+    {
+      "upstream_path": "src/control/purepursuit_mgeo/launch/frenet_avoidance_debug.launch",
+      "upstream_git_blob": "e9c0855b0ea6f05a77f0ea8605c43a84f14e1ec5",
+      "workspace_path": "src/control/purepursuit_mgeo/launch/frenet_avoidance_debug.launch",
+      "disposition": "synced_with_package_imports",
+      "note": ""
+    },
+    {
+      "upstream_path": "src/control/purepursuit_mgeo/launch/morai_avoidance_highway_roundabout_final.launch",
+      "upstream_git_blob": "03a6b7e4b8a81bf2c5043bd89074327fdf0723ac",
+      "workspace_path": "src/control/purepursuit_mgeo/launch/morai_avoidance_highway_roundabout_final.launch",
+      "disposition": "adapted_launch_alias",
+      "note": "Includes morai_bringup/final_ws_highway_bringup.launch with unified camera inference and adaptive curvature controller; separate highway scenario test."
+    },
+    {
+      "upstream_path": "src/control/purepursuit_mgeo/scripts/avoidance_frenet_debug_node.py",
+      "upstream_git_blob": "0bdab7abeecff707ae7ddf45a013ac3d8d05ca77",
+      "workspace_path": "src/control/purepursuit_mgeo/scripts/avoidance_frenet_debug_node.py",
+      "disposition": "synced_with_package_imports",
+      "note": ""
+    },
+    {
+      "upstream_path": "src/control/purepursuit_mgeo/scripts/avoidance_path_manager_node.py",
+      "upstream_git_blob": "b2fa6afbab98a2621a65cd05e3e7692d7362493b",
+      "workspace_path": "src/control/purepursuit_mgeo/scripts/avoidance_path_manager_node.py",
+      "disposition": "synced_with_package_imports",
+      "note": ""
+    },
+    {
+      "upstream_path": "src/control/purepursuit_mgeo/scripts/bypass_lane_guard_node.py",
+      "upstream_git_blob": "f40e0f2956add03caa2bebddec41655e64457e23",
+      "workspace_path": "src/control/purepursuit_mgeo/scripts/bypass_lane_guard_node.py",
+      "disposition": "synced_with_package_imports",
+      "note": ""
+    },
+    {
+      "upstream_path": "src/control/purepursuit_mgeo/scripts/frenet_path.py",
+      "upstream_git_blob": "b1bf0587fd27dcf353b023fa30d013863cb9b012",
+      "workspace_path": "src/control/purepursuit_mgeo/src/purepursuit_mgeo/frenet_path.py",
+      "disposition": "synced_with_package_imports",
+      "note": ""
+    },
+    {
+      "upstream_path": "src/control/purepursuit_mgeo/scripts/frenet_sampling_planner.py",
+      "upstream_git_blob": "aa7eef6411fdce46dce5bb24f76dde11dc1634fa",
+      "workspace_path": "src/control/purepursuit_mgeo/src/purepursuit_mgeo/frenet_sampling_planner.py",
+      "disposition": "synced_with_package_imports",
+      "note": ""
+    },
+    {
+      "upstream_path": "src/control/purepursuit_mgeo/scripts/highway_lane_strategy_node.py",
+      "upstream_git_blob": "ba279b6a114f2443b0b7f51a94e713e96f390141",
+      "workspace_path": "src/control/purepursuit_mgeo/scripts/highway_lane_strategy_node.py",
+      "disposition": "synced_with_source_timestamp_guard",
+      "note": ""
+    },
+    {
+      "upstream_path": "src/control/purepursuit_mgeo/scripts/lane_info_runner.py",
+      "upstream_git_blob": "8fe94e79f1f70073953b5bd1ee256a3bd2aa328a",
+      "workspace_path": "src/control/purepursuit_mgeo/scripts/lane_info_runner.py",
+      "disposition": "compatibility_only_not_started_in_integrated_launch",
+      "note": "Integrated live_overlay publishes lane_info alongside timestamped lane/stopline messages from one UDP stream."
+    },
+    {
+      "upstream_path": "src/control/purepursuit_mgeo/scripts/lane_info_semantic_adapter.py",
+      "upstream_git_blob": "a275468a6fc6b113a5549c740f91ef56eb9af012",
+      "workspace_path": "src/control/purepursuit_mgeo/scripts/lane_info_semantic_adapter.py",
+      "disposition": "compatibility_only_not_started_in_integrated_launch",
+      "note": "Integrated live_overlay publishes lane_info alongside timestamped lane/stopline messages from one UDP stream."
+    },
+    {
+      "upstream_path": "src/control/purepursuit_mgeo/scripts/purepursuit_mgeo_node.py",
+      "upstream_git_blob": "916f07e33f1e918f5025074f19b78d450286389d",
+      "workspace_path": "src/experimental/curvature_speed_purepursuit/scripts/adaptive_curvature_purepursuit_node.py",
+      "disposition": "adapted_to_curvature_controller",
+      "note": "Active path, speed override and merge stop use the local curvature/PI controller. Downstream stopline and safety mux retain authority; no intersection-stop suppression."
+    },
+    {
+      "upstream_path": "src/control/purepursuit_mgeo/scripts/purepursuit_mgeo_node2.py",
+      "upstream_git_blob": "5f9c3aacdf7af6532c58291a5c523b927b29aca8",
+      "workspace_path": "src/control/purepursuit_mgeo/scripts/purepursuit_mgeo_node.py",
+      "disposition": "duplicate_legacy_controller_not_installed",
+      "note": "The upstream duplicate depends on path_planning.PedalSpeedController; preserve the existing km/h PI fallback and run only the selected curvature controller."
+    },
+    {
+      "upstream_path": "src/control/purepursuit_mgeo/scripts/roundabout_merge_gate_node.py",
+      "upstream_git_blob": "7c2e1acf486db2f55fff16a28e3c433dbd3833e6",
+      "workspace_path": "src/control/purepursuit_mgeo/scripts/roundabout_merge_gate_node.py",
+      "disposition": "synced_with_package_imports",
+      "note": ""
+    },
+    {
+      "upstream_path": "src/control/purepursuit_mgeo/scripts/trajectory_safety.py",
+      "upstream_git_blob": "49c3625ebd5f2167e7eb6baca9fad28eef8818d4",
+      "workspace_path": "src/control/purepursuit_mgeo/src/purepursuit_mgeo/trajectory_safety.py",
+      "disposition": "synced_with_package_imports",
+      "note": ""
+    }
+  ],
+  "models": [
+    {
+      "workspace_path": "src/detection/camera_perception/lane/lane_seg_best.pt",
+      "upstream_path": "src/detection/camera_perception/lane/lane_seg_best.pt",
+      "size_bytes": 97898559,
+      "git_blob": "590f2f23187076d6d47e5b9c5ae34d3078e6ff83",
+      "sha256": "d04e54c5bf64eab2ad633a096adc5c00b3aabe3310068581024750c62093b829",
+      "matches_upstream": true
+    },
+    {
+      "workspace_path": "src/detection/camera_perception/models/best0902.pt",
+      "upstream_path": "src/detection/camera_perception/models/best0902.pt",
+      "size_bytes": 22608810,
+      "git_blob": "2aa15cf1b133a36158e5491453635798c85af38c",
+      "sha256": "9bea560730e370c6e1b29fac762490aab8b9d43f92d1af080d6cd7aa3a0fc00f",
+      "matches_upstream": true
+    },
+    {
+      "workspace_path": "src/detection/camera_perception/models/yolov8n.pt",
+      "upstream_path": "src/detection/camera_perception/models/yolov8n.pt",
+      "size_bytes": 6549796,
+      "git_blob": "0db4ca4b4d25d68a4497220353592645ca4f71bf",
+      "sha256": "f59b3d833e2ff32e194b5bb8e08d211dc7c5bdf144b90d2c8412c47ccfc83b36",
+      "matches_upstream": true
+    },
+    {
+      "workspace_path": "src/detection/sensor_runtime/lane_segmentation.onnx",
+      "upstream_path": "src/detection/sensor_runtime/lane_segmentation.onnx",
+      "size_bytes": 1800549,
+      "git_blob": "17a175e716fcb6cc479ce7ffd5367810830e3122",
+      "sha256": "f505b56bd7c9e4e38b2928373aa4daa191a9a398e07e1fb340024b9ce84d4285",
+      "matches_upstream": true
+    }
+  ],
+  "validation": {
+    "offline_tests": {
+      "camera": 69,
+      "curvature": 20,
+      "planning": 14,
+      "stopline": 54,
+      "turn": 200,
+      "blackout": 41
+    },
+    "catkin_build": "not_run_no_ROS_environment",
+    "MORAI_driving": "not_run",
+    "GPU_inference": "not_run"
+  }
+}

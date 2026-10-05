@@ -570,6 +570,17 @@ class LaneOutputStabilizer:
 
                     # 우측 차선
                     "right_lane": _lane_meta(res.ego_right),
+                    # 고속도로 다차로 판정: 현재 좌측 경계와 그 바깥 경계를
+                    # 구분하고, 차량 바로 아래를 지나는 선은 차로 중심에서 제외한다.
+                    "left_outer_lane": _lane_meta(next(
+                        (lane for lane in res.lanes if lane.lane_id == -2), None
+                    )),
+                    "straddling_lane": _lane_meta(next(
+                        (lane for lane in res.lanes
+                         if lane.lane_id in (-1, 1)
+                         and lane.x_range[0] <= 8.0
+                         and abs(float(np.polyval(lane.coef, 1.0))) < 0.45), None
+                    )),
 
                     # 차로 폭
                     "lane_width_m": (
@@ -624,7 +635,7 @@ class LaneOutputStabilizer:
             out = dict(self.last_good)
 
             out.update({
-                "timestamp": now,
+                "published_timestamp": now,
                 "lane_valid": True,
                 "output_status": "HELD",
                 "raw_lane_state": lane_state,

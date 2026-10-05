@@ -91,6 +91,9 @@ class CurvatureSpeedPurePursuitNode:
         initial_speed_kph = rospy.get_param("~initial_speed_kph", None)
         if initial_speed_kph is None:
             initial_speed_kph = legacy_initial_speed_mps * MPS_TO_KPH
+        initial_speed_mps = float(initial_speed_kph) / MPS_TO_KPH
+        if not math.isfinite(initial_speed_mps) or initial_speed_mps < 0.0:
+            raise ValueError("initial_speed_kph must be finite and nonnegative")
 
         legacy_final_speed_mps = float(rospy.get_param("~final_speed_mps", 0.0))
         final_speed_kph = rospy.get_param("~final_speed_kph", None)
@@ -106,7 +109,11 @@ class CurvatureSpeedPurePursuitNode:
             ),
             max_accel_mps2=float(rospy.get_param("~max_accel_mps2", 1.0)),
             max_decel_mps2=float(rospy.get_param("~max_decel_mps2", 1.5)),
-            initial_speed_mps=max(0.0, float(initial_speed_kph)) / MPS_TO_KPH,
+            # At rest, a fixed v(s=0)=0 ceiling prevents any departure from s=0.
+            # The command starts at zero and apply_speed_rate_limit handles
+            # acceleration in time. Keep curve/goal limits in the spatial
+            # profile, and preserve an explicitly positive initial-speed cap.
+            initial_speed_mps=initial_speed_mps if initial_speed_mps > 0.0 else None,
             final_speed_mps=max(0.0, float(final_speed_kph)) / MPS_TO_KPH,
         )
 

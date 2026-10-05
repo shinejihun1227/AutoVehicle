@@ -110,7 +110,13 @@ class ManeuverFusionNode:
         self.unmapped_signal_seen = False
         self.next_guard_id = None
         self.next_guard_core = None
-        self.lamp_enabled = bool(rospy.get_param("~lamp_output_enabled", False))
+        # Explicit simulator-only opt-out when the MORAI build has no lamp API.
+        # This must never disable route, signal, stop-line or sensor checks.
+        self.test_without_turn_signals = bool(rospy.get_param("~test_without_turn_signals", False))
+        self.lamp_enabled = (bool(rospy.get_param("~lamp_output_enabled", False))
+                             and not self.test_without_turn_signals)
+        if self.test_without_turn_signals:
+            rospy.logwarn("Simulator test mode: turn-signal UDP and indicator lead requirement disabled")
         self.remote = (rospy.get_param("~remote_ip", "192.168.0.151"),
                        int(rospy.get_param("~remote_port", 9097)))
         self.socket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM) if self.lamp_enabled else None
@@ -729,7 +735,8 @@ class ManeuverFusionNode:
             # already entered turn's indication before its exit is verified.
             keep_lamp = bool(self.event and self.event["committed"])
             self.send_lamp(lamp if route_valid or keep_lamp else "OFF", now, ros_now)
-            ready = direction == "STRAIGHT" or self.lead.ready(lamp, now, ros_now)
+            ready = direction == "STRAIGHT" or (direction in ("LEFT", "RIGHT") and
+                    (self.test_without_turn_signals or self.lead.ready(lamp, now, ros_now)))
             signal_ok = (signal is not None and signal.value.valid
                          and finite(signal.value.confidence) and 0.5 <= signal.value.confidence <= 1.0)
             permitted = bool(signal_ok and signal_permits(signal.value.state, direction, self.right_on_green))
@@ -937,6 +944,8 @@ class ManeuverFusionNode:
                 "reference_path_match": self.reference_path_match,
                 "reference_path_reason": self.reference_path_reason,
                 "indicator_ready": ready, "lamp_udp_enabled": self.lamp_enabled,
+                "test_without_turn_signals": self.test_without_turn_signals,
+                "indicator_lead_required": not self.test_without_turn_signals,
                 "lamp_requested": self.lamp_requested, "lamp_transmit_ok": self.lamp_transmit_ok,
                 "permission": self.enter_permission, "progress_s_m": self.progress,
                 "entry_fault": bool(event and event.get("entry_fault")),

@@ -13,12 +13,17 @@ MGeo 경로별 신호 연결과 Cam4 영상 투영을 기본 사용한다. Cam4 
 
 - 현재 주행 스택: GPS/IMU UDP, MGeo ENU EKF, Pure Pursuit, 곡률 기반 속도 제한,
   km/h 기준 PI, `longlCmdType=1` accel/brake, `control_mux`, MORAI CtrlCmd UDP
-- ROI `dev/merged_code` (`c752050`): `camera_perception`, `lidar_perception`,
+- ROI 센서 최초 통합 `dev/merged_code` (`c752050`): `camera_perception`, `lidar_perception`,
   `common` 메시지, `morai_network`, `sensor_runtime` 및 관련 센서 문서
 
-ROI의 구형 `purepursuit_mgeo`, UDP bridge, `morai_bringup`은 가져오지 않았다.
-현재 주행 코드와 패키지명이 겹치고, 속도·명령 계약이 달라 두 주행 스택을 동시에
-설치하면 어떤 노드가 최종 명령을 발행하는지 불명확해지기 때문이다.
+2026-09-21에 ROI `cb41b5f`의 우회·차선 전략 코드를 현재 `purepursuit_mgeo` 패키지에 반영했다.
+원본 UDP bridge·bringup·구형 종방향 제어기는 현재 구현을 유지한다. 최신 차선 출력은
+카메라 추론을 공유하며, 고속도로 시험은 곡률 기반 제어기를 사용하는 별도 launch로 제공한다.
+적용 범위·모델 해시·실행 방법·검증 한계는 [ROI 업데이트 안내](ROI_UPDATE_20260921_KO.md)를 참고한다.
+
+2026-10-05 고속도로 전용 launch에는 ROI `test/rrt`의 차선 기준 5차 경로와
+단일 차로 변경·충돌 제동을 반영했다. 경로/속도/정지 권한과 기능별 적용 상황은
+[고속도로 차선 변경 통합 안내](HIGHWAY_LANE_CHANGE_INTEGRATION_20261005_KO.md)를 참고한다.
 
 ## 기본 실행
 

@@ -1,0 +1,63 @@
+<launch>
+  <!-- Workspace-adapted ROI test/rrt lane strategy; see docs/HIGHWAY_LANE_CHANGE_INTEGRATION_20261005_KO.md. -->
+  <arg name="workspace_path" default="$(env HOME)/AutoVehicle/morai_ws" />
+  <arg name="path_file" default="$(arg workspace_path)/data/routes/2026_molit_comp_global_path.txt" />
+  <arg name="link_set_file" default="$(arg workspace_path)/data/mgeo/R_KR_PR_K-city_2025/link_set.json" />
+  <arg name="mission_regions_file" default="$(find purepursuit_mgeo)/config/route_mission_regions.json" />
+  <arg name="morai_host_ip" default="192.168.0.161" />
+  <arg name="ego_status_port" default="1911" />
+  <arg name="control_remote_port" default="9093" />
+  <arg name="control_source_port" default="9094" />
+  <arg name="enable_control" default="false" />
+  <arg name="max_speed_kph" default="7.2" />
+  <arg name="target_speed_mps" default="$(eval float(arg('max_speed_kph')) / 3.6)" />
+  <arg name="lateral_accel_limit_mps2" default="1.0" />
+  <arg name="max_accel_mps2" default="1.0" />
+  <arg name="max_decel_mps2" default="1.5" />
+  <arg name="managed_timeout_s" default="1.0" />
+  <arg name="roi_lane_port" default="1101" />
+  <arg name="roi_yolo_port" default="1131" />
+  <arg name="roi_lidar_host_port" default="2000" />
+  <arg name="roi_lidar_port" default="2001" />
+  <arg name="lane_info_topic" default="/perception/camera/lane_info" />
+  <arg name="highway_environment_topic" default="/perception/camera/highway_environment" />
+  <arg name="highway_request_topic" default="/planning/highway_lane_change_request" />
+  <arg name="enable_roundabout_merge_gate" default="true" />
+  <arg name="merge_request_topic" default="/planning/merge_request" />
+  <arg name="publish_lidar_tf" default="false" />
+  <arg name="lidar_x_m" default="0.0" />
+  <arg name="lidar_y_m" default="0.0" />
+  <arg name="lidar_z_m" default="0.0" />
+  <arg name="lidar_yaw_deg" default="0.0" />
+  <include file="$(find morai_bringup)/launch/final_ws_highway_bringup.launch">
+    <arg name="workspace_path" value="$(arg workspace_path)" />
+    <arg name="path_file" value="$(arg path_file)" />
+    <arg name="link_set_file" value="$(arg link_set_file)" />
+    <arg name="mission_regions_file" value="$(arg mission_regions_file)" />
+    <arg name="morai_host_ip" value="$(arg morai_host_ip)" />
+    <arg name="ego_status_port" value="$(arg ego_status_port)" />
+    <arg name="control_remote_port" value="$(arg control_remote_port)" />
+    <arg name="control_source_port" value="$(arg control_source_port)" />
+    <arg name="enable_control" value="$(arg enable_control)" />
+    <arg name="max_speed_kph" value="$(arg max_speed_kph)" />
+    <arg name="target_speed_mps" value="$(arg target_speed_mps)" />
+    <arg name="lateral_accel_limit_mps2" value="$(arg lateral_accel_limit_mps2)" />
+    <arg name="max_accel_mps2" value="$(arg max_accel_mps2)" />
+    <arg name="max_decel_mps2" value="$(arg max_decel_mps2)" />
+    <arg name="managed_timeout_s" value="$(arg managed_timeout_s)" />
+    <arg name="roi_lane_port" value="$(arg roi_lane_port)" />
+    <arg name="roi_yolo_port" value="$(arg roi_yolo_port)" />
+    <arg name="roi_lidar_host_port" value="$(arg roi_lidar_host_port)" />
+    <arg name="roi_lidar_port" value="$(arg roi_lidar_port)" />
+    <arg name="lane_info_topic" value="$(arg lane_info_topic)" />
+    <arg name="highway_environment_topic" value="$(arg highway_environment_topic)" />
+    <arg name="highway_request_topic" value="$(arg highway_request_topic)" />
+    <arg name="enable_roundabout_merge_gate" value="$(arg enable_roundabout_merge_gate)" />
+    <arg name="merge_request_topic" value="$(arg merge_request_topic)" />
+    <arg name="publish_lidar_tf" value="$(arg publish_lidar_tf)" />
+    <arg name="lidar_x_m" value="$(arg lidar_x_m)" />
+    <arg name="lidar_y_m" value="$(arg lidar_y_m)" />
+    <arg name="lidar_z_m" value="$(arg lidar_z_m)" />
+    <arg name="lidar_yaw_deg" value="$(arg lidar_yaw_deg)" />
+  </include>
+</launch>

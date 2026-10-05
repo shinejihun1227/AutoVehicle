@@ -1,0 +1,50 @@
+<launch>
+  <!-- Observer only. No /ctrl_cmd publisher or connection to control_mux. -->
+  <arg name="workspace_path" default="$(env HOME)/morai_ws" />
+  <arg name="path_file" default="$(arg workspace_path)/data/routes/2026_molit_comp_global_path.txt" />
+  <arg name="rules_file" default="$(find mission_evaluator)/config/competition_rules_v1_1.json" />
+  <arg name="mgeo_path" default="$(arg workspace_path)/data/mgeo/R_KR_PR_K-city_2025" />
+  <arg name="signal_mgeo_path" default="$(find camera_perception)/lane/mgeo/R_KR_PR_K-city_2025" />
+  <arg name="output_dir" default="$(env HOME)/.ros/competition_runs" />
+  <arg name="auto_start" default="true" />
+  <arg name="lane_mode" default="map_estimate" />
+  <arg name="odometry_topic" default="/localization/odometry" />
+  <arg name="ego_topic" default="/Ego_topic" />
+  <arg name="quality_topic" default="/localization/sensor_quality" />
+  <arg name="lane_topic" default="/evaluation/lane_snapshot" />
+  <arg name="collision_topic" default="/evaluation/collision_snapshot" />
+  <arg name="maneuver_topic" default="/control/maneuver_status" />
+  <arg name="traffic_topic" default="/perception/traffic_light/directional_state" />
+  <!-- Turn on only when this launch owns the simulator's collision UDP port. -->
+  <arg name="collision_udp_enabled" default="false" />
+  <arg name="collision_bind_ip" default="0.0.0.0" />
+  <arg name="collision_port" default="9092" />
+  <arg name="collision_sender_ip" default="" />
+  <arg name="collision_packet_header" default="#CollisionData$" />
+  <arg name="collision_protocol_verified" default="false" />
+
+  <node pkg="mission_evaluator" type="competition_lap_node.py" name="competition_lap_evaluator" output="screen" required="true">
+    <param name="path_file" value="$(arg path_file)" />
+    <param name="rules_file" value="$(arg rules_file)" />
+    <param name="mgeo_path" value="$(arg mgeo_path)" />
+    <param name="signal_mgeo_path" value="$(arg signal_mgeo_path)" />
+    <param name="output_dir" value="$(arg output_dir)" />
+    <param name="auto_start" value="$(arg auto_start)" />
+    <param name="lane_mode" value="$(arg lane_mode)" />
+    <param name="odometry_topic" value="$(arg odometry_topic)" />
+    <param name="ego_topic" value="$(arg ego_topic)" />
+    <param name="quality_topic" value="$(arg quality_topic)" />
+    <param name="lane_topic" value="$(arg lane_topic)" />
+    <param name="collision_topic" value="$(arg collision_topic)" />
+    <param name="maneuver_topic" value="$(arg maneuver_topic)" />
+    <param name="traffic_topic" value="$(arg traffic_topic)" />
+  </node>
+  <node if="$(arg collision_udp_enabled)" pkg="mission_evaluator" type="collision_evaluation_bridge.py" name="collision_evaluation_bridge" output="screen" required="true">
+    <param name="bind_ip" value="$(arg collision_bind_ip)" />
+    <param name="port" value="$(arg collision_port)" />
+    <param name="allowed_sender_ip" value="$(arg collision_sender_ip)" />
+    <param name="packet_header" value="$(arg collision_packet_header)" />
+    <param name="protocol_verified" value="$(arg collision_protocol_verified)" />
+    <param name="output_topic" value="$(arg collision_topic)" />
+  </node>
+</launch>

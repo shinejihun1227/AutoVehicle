@@ -1,5 +1,8 @@
 # MORAI 자율주행 통합 저장소
 
+현장에서 실행할 시험 순서·명령·통과 기준·결과 기록표는
+[MORAI 현장 테스트 절차 — 2026-09-21](morai_ws/docs/FIELD_TEST_CHECKLIST_20260921_KO.md)에 정리했습니다.
+
 새로운 개발 기준은 `morai_ws/`입니다. 기존에 여러 팀과 실험에서 사용하던
 실행 코드는 정리했으며, 대회 경로·MGeo·센서·팀 간 인터페이스 정보는
 `morai_ws/docs`와 `morai_ws/data`에서 관리합니다.

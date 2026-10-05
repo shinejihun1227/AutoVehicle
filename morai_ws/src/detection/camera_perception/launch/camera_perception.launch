@@ -35,6 +35,7 @@
   <arg name="stopline_detected_topic" default="/perception/camera/stopline_detected" />
   <arg name="stopline_distance_topic" default="/perception/camera/stopline_distance_m" />
   <arg name="stopline_topic" default="/perception/camera/stopline" />
+  <arg name="lane_info_topic" default="/perception/camera/lane_info" />
   <arg name="lane_detection_topic" default="/detection/lane" />
   <arg name="lane_quality_topic" default="/perception/camera/lane_quality" />
   <arg name="highway_environment_topic" default="/perception/camera/highway_environment" />
@@ -45,6 +46,8 @@
   <arg name="require_left_parallel_dynamic" default="false" />
   <arg name="left_parallel_dynamic_hold_s" default="0.5" />
   <arg name="highway_latch_once" default="true" />
+  <arg name="lane_pattern_enabled" default="false" />
+  <arg name="lane_pattern_min_speed_mps" default="10.0" />
   <arg name="car_detection_hold_s" default="2.0" />
   <arg name="enable_pedestrian_crossing" default="$(arg enable_yolo)" />
   <arg name="pedestrian_stop_topic" default="/perception/pedestrian_crossing/stop_required" />
@@ -70,7 +73,7 @@
         name="lane_camera"
         output="screen"
         respawn="false"
-        args="--mode lane --camera-stack-root $(arg camera_stack_root) --cam-ip $(arg camera_ip) --cam-port $(arg lane_port) --lane-checkpoint $(arg lane_checkpoint) --lane-cam-set $(arg lane_cam_set) --lane-device $(arg lane_device) --lane-every $(arg lane_every) --lane-scale $(arg lane_scale) --lane-ros-publish --dashed-lane-topic $(arg dashed_lane_topic) --left-solid-lane-topic $(arg left_solid_lane_topic) --left-yellow-solid-lane-topic $(arg left_yellow_solid_lane_topic) --right-solid-lane-topic $(arg right_solid_lane_topic) --stopline-detected-topic $(arg stopline_detected_topic) --stopline-distance-topic $(arg stopline_distance_topic) --stopline-topic $(arg stopline_topic) --lane-detection-topic $(arg lane_detection_topic) --lane-quality-topic $(arg lane_quality_topic)" />
+        args="--mode lane --camera-stack-root $(arg camera_stack_root) --cam-ip $(arg camera_ip) --cam-port $(arg lane_port) --lane-checkpoint $(arg lane_checkpoint) --lane-cam-set $(arg lane_cam_set) --lane-device $(arg lane_device) --lane-every $(arg lane_every) --lane-scale $(arg lane_scale) --lane-ros-publish --dashed-lane-topic $(arg dashed_lane_topic) --left-solid-lane-topic $(arg left_solid_lane_topic) --left-yellow-solid-lane-topic $(arg left_yellow_solid_lane_topic) --right-solid-lane-topic $(arg right_solid_lane_topic) --stopline-detected-topic $(arg stopline_detected_topic) --stopline-distance-topic $(arg stopline_distance_topic) --stopline-topic $(arg stopline_topic) --lane-detection-topic $(arg lane_detection_topic) --lane-quality-topic $(arg lane_quality_topic) --lane-info-topic $(arg lane_info_topic)" />
 
   <node if="$(arg enable_yolo)"
         pkg="camera_perception"
@@ -100,6 +103,11 @@
         output="screen">
     <param name="car_detected_topic" value="$(arg car_detected_topic)" />
     <param name="dashed_lane_topic" value="$(arg dashed_lane_topic)" />
+    <param name="left_solid_lane_topic" value="$(arg left_solid_lane_topic)" />
+    <param name="lane_info_topic" value="$(arg lane_info_topic)" />
+    <param name="odom_topic" value="$(arg odometry_topic)" />
+    <param name="lane_pattern_enabled" value="$(arg lane_pattern_enabled)" />
+    <param name="lane_pattern_min_speed_mps" value="$(arg lane_pattern_min_speed_mps)" />
     <param name="output_topic" value="$(arg highway_environment_topic)" />
     <param name="intersection_detected_topic" value="$(arg intersection_detected_topic)" />
     <param name="require_dashed_lane" value="$(arg require_dashed_lane)" />

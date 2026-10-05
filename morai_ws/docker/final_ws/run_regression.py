@@ -18,13 +18,14 @@ SUITES = {
     "turn": "src/control/turn_signal_controller/test",
     "blackout": "src/experimental/stability_stack/test",
     "curvature": "src/experimental/curvature_speed_purepursuit/test",
+    "planning": "src/control/purepursuit_mgeo/test",
 }
 
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--workspace", type=Path, default=Path(__file__).resolve().parents[2])
-    parser.add_argument("--suite", choices=list(SUITES), help="Run only one suite; default: all five")
+    parser.add_argument("--suite", choices=list(SUITES), help="Run only one suite; default: all")
     args = parser.parse_args()
     workspace = args.workspace.resolve()
     selected = {args.suite: SUITES[args.suite]} if args.suite else SUITES
@@ -33,6 +34,7 @@ def main():
     source_roots = [workspace / "src/detection/camera_perception/src",
                     workspace / "src/control/stopline_control/src",
                     workspace / "src/control/turn_signal_controller/src",
+                    workspace / "src/control/purepursuit_mgeo/src",
                     workspace / "src/experimental/curvature_speed_purepursuit/src"]
     env["PYTHONPATH"] = os.pathsep.join([str(p) for p in source_roots]
                                       + ([env["PYTHONPATH"]] if env.get("PYTHONPATH") else []))

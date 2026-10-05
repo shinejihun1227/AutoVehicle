@@ -16,6 +16,15 @@ steering:
   maximum_wheel_angle_deg: 40.0
   maximum_wheel_angle_rad: 0.6981317008
 
+performance:
+  longitudinal:
+    full_acceleration_0_to_100_kph:
+      time_sec: 7.4
+      distance_m: 184.29
+    full_braking_100_to_0_kph:
+      time_sec: 3.08
+      distance_m: 43.73
+
 notes:
   - Pure Pursuit의 wheelbase는 뒤 차축 중앙에서 앞 차축 중앙까지의 3.000 m를 사용한다.
   - 최대 휠각 40도는 Pure Pursuit 조향 출력의 안전 상한으로 사용한다.

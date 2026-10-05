@@ -1,0 +1,176 @@
+<launch>
+  <!--
+    Active-path integrated driving launch.
+
+    2026_molit_comp_global_path.txt is the immutable reference route.  The
+    Frenet planner generates a temporary bypass or MGeo-link lane-change path
+    when a tracked obstacle blocks that route.  The path manager commits the
+    selected maneuver, and adaptive_curvature_purepursuit follows that active
+    path with curvature-based steering and speed limiting.
+  -->
+  <arg name="workspace_path" default="$(env HOME)/morai_ws" />
+  <arg name="path_file" default="$(arg workspace_path)/data/routes/2026_molit_comp_global_path.txt" />
+  <arg name="link_set_file" default="$(arg workspace_path)/data/mgeo/R_KR_PR_K-city_2025/link_set.json" />
+
+  <arg name="morai_host_ip" default="192.168.0.161" />
+  <arg name="ego_status_port" default="1911" />
+  <arg name="control_remote_port" default="9093" />
+  <arg name="control_source_port" default="9094" />
+  <arg name="gps_port" default="3001" />
+  <arg name="imu_port" default="4001" />
+  <arg name="enable_control" default="false" />
+
+  <!-- Vehicle and curvature limits from the MORAI specification. -->
+  <arg name="max_speed_kph" default="30.0" />
+  <arg name="lateral_accel_limit_mps2" default="1.0" />
+  <arg name="max_accel_mps2" default="1.0" />
+  <arg name="max_decel_mps2" default="1.5" />
+  <!-- Candidate safety evaluation speed during a maneuver.  The controller
+       still allows 30 km/h on straight global segments; this value only
+       rejects geometries that are unsafe at the slower lateral transition. -->
+  <arg name="evaluation_speed_mps" default="2.0" />
+  <arg name="candidate_max_lateral_accel_mps2" default="2.5" />
+  <arg name="wheelbase_m" default="3.0" />
+  <arg name="max_steering_rad" default="0.6981317008" />
+
+  <!-- ROI LiDAR publishes lidar_perception/LidarObstacleArray used by the
+       Frenet planner. Set false only for controller-only tests. -->
+  <arg name="enable_roi_lidar" default="true" />
+  <arg name="roi_lidar_host_port" default="2000" />
+  <arg name="roi_lidar_port" default="2001" />
+  <arg name="roi_lidar_rviz" default="false" />
+
+  <!-- MGeo adjacent-link lane changes + free-space bypass are both enabled. -->
+  <arg name="enable_mgeo_lane_candidates" default="true" />
+  <arg name="allow_bypass_with_adjacent_lane" default="true" />
+  <arg name="allow_lane_change_control" default="true" />
+  <arg name="trigger_distance_m" default="35.0" />
+  <arg name="trigger_lateral_margin_m" default="0.05" />
+  <arg name="bypass_lateral_margin_m" default="0.85" />
+  <arg name="bypass_longitudinal_margin_m" default="3.0" />
+  <arg name="bypass_departure_length_m" default="22.0" />
+  <arg name="bypass_return_length_m" default="22.0" />
+  <arg name="bypass_max_abs_d_m" default="3.8" />
+  <arg name="bypass_min_transition_length_m" default="10.0" />
+
+  <!-- Keep the existing camera/stopline stack available, but do not start its
+       static Pure Pursuit node; adaptive Pure Pursuit is the sole nominal source. -->
+  <include file="$(find morai_bringup)/launch/perception_control_bringup.launch">
+    <arg name="workspace_path" value="$(arg workspace_path)" />
+    <arg name="path_file" value="$(arg path_file)" />
+    <arg name="morai_host_ip" value="$(arg morai_host_ip)" />
+    <arg name="ego_status_port" value="$(arg ego_status_port)" />
+    <arg name="control_remote_port" value="$(arg control_remote_port)" />
+    <arg name="control_source_port" value="$(arg control_source_port)" />
+    <arg name="enable_control" value="$(arg enable_control)" />
+    <arg name="enable_nominal_purepursuit" value="false" />
+    <arg name="use_curvature_speed_planner" value="true" />
+    <arg name="use_roi_sensor_stack" value="true" />
+    <arg name="enable_roi_camera" value="false" />
+    <arg name="enable_roi_lidar" value="$(arg enable_roi_lidar)" />
+    <arg name="roi_lidar_host_port" value="$(arg roi_lidar_host_port)" />
+    <arg name="roi_lidar_port" value="$(arg roi_lidar_port)" />
+    <arg name="roi_lidar_rviz" value="$(arg roi_lidar_rviz)" />
+    <arg name="enable_sensor_quality" value="false" />
+    <arg name="enable_lane_fallback" value="false" />
+    <arg name="enable_stopline_control" value="true" />
+    <arg name="enable_maneuver_fusion" value="false" />
+    <arg name="enable_turn_signal" value="false" />
+    <arg name="test_without_turn_signals" value="true" />
+    <arg name="max_speed_kph" value="$(arg max_speed_kph)" />
+    <arg name="lateral_accel_limit_mps2" value="$(arg lateral_accel_limit_mps2)" />
+  </include>
+
+  <!-- Candidate generation from the immutable global route. -->
+  <include file="$(find purepursuit_mgeo)/launch/frenet_avoidance_debug.launch">
+    <arg name="path_file" value="$(arg path_file)" />
+    <arg name="link_set_file" value="$(arg link_set_file)" />
+    <arg name="obstacle_topic" value="/perception/lidar/tracked_obstacles_map" />
+    <arg name="enable_mgeo_lane_candidates" value="$(arg enable_mgeo_lane_candidates)" />
+    <arg name="allow_bypass_with_adjacent_lane" value="$(arg allow_bypass_with_adjacent_lane)" />
+    <arg name="vehicle_length_m" value="4.635" />
+    <arg name="vehicle_width_m" value="1.892" />
+    <arg name="vehicle_height_m" value="2.434" />
+    <arg name="vehicle_center_from_base_m" value="1.50" />
+    <arg name="wheelbase_m" value="$(arg wheelbase_m)" />
+    <arg name="max_steering_rad" value="$(arg max_steering_rad)" />
+    <arg name="evaluation_speed_mps" value="$(arg evaluation_speed_mps)" />
+    <arg name="max_lateral_accel_mps2" value="$(arg candidate_max_lateral_accel_mps2)" />
+    <arg name="publish_lidar_tf" value="false" />
+    <arg name="publish_lidar_visualization" value="false" />
+    <arg name="trigger_distance_m" value="$(arg trigger_distance_m)" />
+    <arg name="trigger_lateral_margin_m" value="$(arg trigger_lateral_margin_m)" />
+    <arg name="candidate_corridor_margin_m" value="0.45" />
+    <arg name="bypass_lateral_margin_m" value="$(arg bypass_lateral_margin_m)" />
+    <arg name="bypass_longitudinal_margin_m" value="$(arg bypass_longitudinal_margin_m)" />
+    <arg name="bypass_departure_length_m" value="$(arg bypass_departure_length_m)" />
+    <arg name="bypass_return_length_m" value="$(arg bypass_return_length_m)" />
+    <arg name="bypass_extra_clearances_m" value="[0.0, 0.4, 0.8]" />
+    <arg name="bypass_max_abs_d_m" value="$(arg bypass_max_abs_d_m)" />
+    <arg name="bypass_min_transition_length_m" value="$(arg bypass_min_transition_length_m)" />
+    <arg name="collision_longitudinal_margin_m" value="0.40" />
+    <arg name="collision_lateral_margin_m" value="0.45" />
+    <arg name="escape_prefix_m" value="3.0" />
+  </include>
+
+  <!-- Commits a safe path and locks the maneuver side until rejoin. -->
+  <node pkg="purepursuit_mgeo"
+        type="avoidance_path_manager_node.py"
+        name="avoidance_path_manager"
+        output="screen">
+    <param name="path_file" value="$(arg path_file)" />
+    <param name="map_frame" value="map" />
+    <param name="odom_topic" value="/localization/odometry" />
+    <param name="obstacle_topic" value="/perception/lidar/tracked_obstacles_map" />
+    <param name="selected_path_topic" value="/avoidance_frenet_debug/selected_path" />
+    <param name="planner_ready_topic" value="/avoidance_frenet_debug/planner_ready" />
+    <param name="avoidance_required_topic" value="/avoidance_frenet_debug/avoidance_required" />
+    <param name="safe_path_available_topic" value="/avoidance_frenet_debug/safe_path_available" />
+    <param name="selected_kind_topic" value="/avoidance_frenet_debug/selected_kind" />
+    <param name="selected_side_topic" value="/avoidance_frenet_debug/selected_side" />
+    <param name="plan_status_topic" value="/avoidance_frenet_debug/plan_status" />
+    <param name="use_atomic_plan_status" value="true" />
+    <param name="allow_lane_change_control" value="$(arg allow_lane_change_control)" />
+    <param name="vehicle_length_m" value="4.635" />
+    <param name="vehicle_width_m" value="1.892" />
+    <param name="vehicle_center_from_base_m" value="1.50" />
+    <param name="collision_longitudinal_margin_m" value="0.40" />
+    <param name="collision_lateral_margin_m" value="0.45" />
+    <param name="wheelbase_m" value="$(arg wheelbase_m)" />
+    <param name="max_steering_rad" value="$(arg max_steering_rad)" />
+    <param name="collision_sample_stride" value="1" />
+    <param name="escape_prefix_m" value="3.0" />
+    <param name="allow_same_side_guard_refresh" value="true" />
+    <param name="cancel_cleared_bypass_near_global" value="true" />
+  </node>
+
+  <!-- Dynamic curvature PP is the only node publishing /control/ctrl_cmd. -->
+  <node pkg="curvature_speed_purepursuit"
+        type="adaptive_curvature_purepursuit_node.py"
+        name="adaptive_curvature_purepursuit"
+        output="screen">
+    <param name="path_file" value="$(arg path_file)" />
+    <param name="pose_topic" value="/localization/odometry" />
+    <param name="command_topic" value="/control/ctrl_cmd" />
+    <param name="publish_command" value="$(arg enable_control)" />
+    <param name="use_active_path" value="true" />
+    <param name="active_path_topic" value="/avoidance_path_manager/active_path" />
+    <param name="active_path_timeout_sec" value="1.0" />
+    <param name="require_active_path" value="true" />
+    <param name="stop_required_topic" value="/avoidance_path_manager/stop_required" />
+    <param name="require_fresh_stop_status" value="true" />
+    <param name="stop_status_timeout_sec" value="1.0" />
+    <param name="max_speed_kph" value="$(arg max_speed_kph)" />
+    <param name="lateral_accel_limit_mps2" value="$(arg lateral_accel_limit_mps2)" />
+    <param name="max_accel_mps2" value="$(arg max_accel_mps2)" />
+    <param name="max_decel_mps2" value="$(arg max_decel_mps2)" />
+    <param name="wheelbase_m" value="$(arg wheelbase_m)" />
+    <param name="max_steering_rad" value="$(arg max_steering_rad)" />
+    <param name="longl_cmd_type" value="1" />
+    <param name="speed_kp" value="0.8" />
+    <param name="speed_ki" value="0.05" />
+    <param name="speed_integral_limit_kph_s" value="10.8" />
+    <param name="speed_error_deadband_kph" value="0.1" />
+    <param name="control_rate_hz" value="20.0" />
+  </node>
+</launch>

@@ -63,6 +63,7 @@ def main():
         default="/perception/camera/stopline",
     )
     parser.add_argument("--lane-detection-topic", default="/detection/lane")
+    parser.add_argument("--lane-info-topic", default="")
     parser.add_argument(
         "--lane-quality-topic", default="/perception/camera/lane_quality"
     )
@@ -113,6 +114,8 @@ def main():
                     "--lane-quality-topic", args.lane_quality_topic,
                 )
             )
+            if args.lane_info_topic:
+                target_args.extend(("--lane-info-topic", args.lane_info_topic))
     else:
         target = package_root / "scripts" / "camera_object_detection_node.py"
         target_args = [

@@ -88,15 +88,15 @@ wc -c morai_ws/src/detection/camera_perception/lane/lane_seg_best.pt \
 
 ## 4. MORAI 메시지 버전 선택과 이미지 빌드
 
-`morai_msgs`는 이 저장소에 없다. Dockerfile은 [MORAI 공식 ROS1 메시지 저장소](https://github.com/MORAI-Autonomous/MORAI-ROS_morai_msgs)를 별도로 가져온다. ROS2 저장소가 아니다. 공식 저장소는 Ubuntu 20.04/Noetic 시험 이력을 명시한다. **해당 대회 SDK와 메시지 정의의 일치는 별도 확인 사항**이다.
+`morai_msgs`는 이 저장소에 없다. Dockerfile은 [대회 지정 beta_drive 브랜치](https://github.com/MORAI-Autonomous/MORAI-ROS_morai_msgs/tree/beta_drive)를 별도로 가져온다. ROS1 메시지이며, 현재 코드가 사용하는 `CtrlCmd.steering`과 `EgoVehicleStatus.wheel_angle`이 이 브랜치에 있다.
 
-대회 제공 SDK의 대응 커밋을 알고 있으면 그 40자리 SHA를 사용한다. 모르면 우선 공식 ROS1 main의 SHA를 기록해 빌드 후보로 사용할 수 있다. 이 선택 자체가 대회 버전 호환 승인은 아니다.
+대회에서 커밋까지 지정했다면 그 40자리 SHA를 사용한다. 아래는 `beta_drive`의 SHA를 기록한다. 이전 안내의 `main` 선택은 잘못되었으며, `front_steer` 형식은 현재 코드의 메시지 계약과 다르다. Docker 빌드에서 생성된 메시지의 필드와 타입을 검사한다.
 
 ```bash
 # Ubuntu 호스트, AutoVehicle 저장소 루트에서
 export MORAI_MSGS_REF="$(git ls-remote \
   https://github.com/MORAI-Autonomous/MORAI-ROS_morai_msgs.git \
-  refs/heads/main | awk '{print $1}')"
+  refs/heads/beta_drive | awk '{print $1}')"
 [[ "$MORAI_MSGS_REF" =~ ^[0-9a-f]{40}$ ]] || { echo '메시지 SHA 확인 실패'; exit 1; }
 printf 'code=%s\nmorai_msgs=%s\n' "$CODE_REF" "$MORAI_MSGS_REF"
 
