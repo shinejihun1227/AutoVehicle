@@ -244,6 +244,7 @@
     <param name="config_file" value="$(arg mission_regions_file)" />
     <param name="request_topic" value="$(arg merge_request_topic)" />
     <param name="odom_topic" value="/localization/odometry" />
+    <param name="progress_topic" value="/experimental/curvature_progress" />
     <param name="obstacle_topic" value="/perception/lidar/tracked_obstacles_map" />
     <param name="rate_hz" value="20.0" />
     <param name="entry_speed_mps" value="$(arg target_speed_mps)" />

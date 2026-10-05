@@ -31,8 +31,9 @@ def project_stopline(route, x: float, y: float, yaw: float, distance_m: float,
     if not all(math.isfinite(value) for value in
                (x, y, yaw, distance_m, route_progress_m, window_m)):
         raise ValueError("stop-line projection inputs must be finite")
-    if distance_m < 0.0 or route_progress_m < 0.0 or window_m <= 0.0:
-        raise ValueError("distance/progress must be nonnegative and window positive")
+    if (distance_m < 0.0 or not 0.0 <= route_progress_m <= route.length
+            or window_m <= 0.0):
+        raise ValueError("distance must be nonnegative, progress must lie on route, and window positive")
 
     line_x = x + distance_m * math.cos(yaw)
     line_y = y + distance_m * math.sin(yaw)

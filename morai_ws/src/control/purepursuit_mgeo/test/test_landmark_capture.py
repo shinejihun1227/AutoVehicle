@@ -22,10 +22,21 @@ class LandmarkCaptureTests(unittest.TestCase):
         self.assertAlmostEqual(result["map_xy"][1], 15.0, places=6)
         self.assertAlmostEqual(result["route_s_m"], 15.0)
 
+    def test_uses_progress_hint_at_repeated_route_geometry(self):
+        route = RoutePolyline([
+            (0.0, 0.0), (10.0, 0.0), (10.0, 10.0),
+            (0.0, 10.0), (0.0, 0.0), (10.0, 0.0),
+        ])
+        result = project_stopline(route, 2.0, 0.0, 0.0, 3.0, 42.0)
+        self.assertAlmostEqual(result["route_s_m"], 45.0)
+        self.assertAlmostEqual(result["route_offset_m"], 0.0)
+
     def test_rejects_invalid_pose_and_zero_quaternion(self):
         route = RoutePolyline([(0.0, 0.0), (100.0, 0.0)])
         with self.assertRaises(ValueError):
             project_stopline(route, 0.0, 0.0, float("nan"), 2.0, 0.0)
+        with self.assertRaises(ValueError):
+            project_stopline(route, 0.0, 0.0, 0.0, 2.0, route.length + 1.0)
         with self.assertRaises(ValueError):
             quaternion_yaw(0.0, 0.0, 0.0, 0.0)
 

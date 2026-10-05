@@ -15,7 +15,7 @@ from typing import List, Optional, Tuple
 
 import rospy
 from nav_msgs.msg import Odometry
-from std_msgs.msg import Bool, String
+from std_msgs.msg import Bool, Float64, String
 
 from lidar_perception.msg import LidarObstacleArray
 from purepursuit_mgeo.mission_regions import load_mission_regions
@@ -49,12 +49,14 @@ class RoundaboutMergeGate:
         rospy.init_node("roundabout_merge_gate", anonymous=False)
         self.request_topic = rospy.get_param("~request_topic", "/planning/merge_request")
         self.odom_topic = rospy.get_param("~odom_topic", "/localization/odometry")
+        self.progress_topic = rospy.get_param("~progress_topic", "/experimental/curvature_progress")
         self.obstacle_topic = rospy.get_param("~obstacle_topic", "/perception/lidar/tracked_obstacles_map")
         self.path_file = rospy.get_param("~path_file")
         self.link_set_file = rospy.get_param("~link_set_file")
         self.config_file = rospy.get_param("~config_file")
         self.rate_hz = float(rospy.get_param("~rate_hz", 20.0))
         self.odom_timeout_s = float(rospy.get_param("~odom_timeout_s", 0.5))
+        self.progress_timeout_s = float(rospy.get_param("~progress_timeout_s", 0.5))
         self.obstacle_timeout_s = float(rospy.get_param("~obstacle_timeout_s", 0.6))
         self.request_timeout_s = float(rospy.get_param("~request_timeout_s", 0.6))
         self.clear_confirm_s = float(rospy.get_param("~clear_confirm_s", 0.8))
@@ -71,7 +73,7 @@ class RoundaboutMergeGate:
         self.slow_accel_mps2 = float(rospy.get_param("~slow_accel_mps2", 0.5))
         self.launch_delay_min_s = float(rospy.get_param("~launch_delay_min_s", 0.0))
         self.launch_delay_max_s = float(rospy.get_param("~launch_delay_max_s", 0.5))
-        if min(self.rate_hz, self.odom_timeout_s, self.obstacle_timeout_s,
+        if min(self.rate_hz, self.odom_timeout_s, self.progress_timeout_s, self.obstacle_timeout_s,
                self.request_timeout_s, self.prediction_horizon_s, self.entry_speed_mps,
                self.fast_accel_mps2, self.slow_accel_mps2,
                self.vehicle_length_m, self.vehicle_width_m) <= 0.0:
@@ -115,6 +117,8 @@ class RoundaboutMergeGate:
 
         self.requested = False
         self.request_at = None
+        self.progress: Optional[float] = None
+        self.progress_at = None
         self.latest_odom: Optional[Odometry] = None
         self.odom_at = None
         self.latest_obstacles: Optional[LidarObstacleArray] = None
@@ -126,6 +130,7 @@ class RoundaboutMergeGate:
         self.allowed_pub = rospy.Publisher("~allowed", Bool, queue_size=1)
         self.status_pub = rospy.Publisher("~status", String, queue_size=1)
         rospy.Subscriber(self.request_topic, Bool, self._request_cb, queue_size=1)
+        rospy.Subscriber(self.progress_topic, Float64, self._progress_cb, queue_size=1)
         rospy.Subscriber(self.odom_topic, Odometry, self._odom_cb, queue_size=1)
         rospy.Subscriber(self.obstacle_topic, LidarObstacleArray, self._obstacle_cb, queue_size=1)
         self.timer = rospy.Timer(rospy.Duration(1.0 / self.rate_hz), self._timer_cb)
@@ -139,6 +144,11 @@ class RoundaboutMergeGate:
             self.state = self.IDLE
         self.requested = requested
         self.request_at = rospy.Time.now()
+
+    def _progress_cb(self, msg: Float64) -> None:
+        value = float(msg.data)
+        self.progress = value if math.isfinite(value) else None
+        self.progress_at = rospy.Time.now()
 
     def _odom_cb(self, msg: Odometry) -> None:
         if msg.header.frame_id != "map":
@@ -164,16 +174,19 @@ class RoundaboutMergeGate:
         return 0.0 <= age <= timeout_s
 
     def _ego_interval(self) -> Optional[Tuple[float, float]]:
+        if self.progress is None or not math.isfinite(float(self.progress)):
+            return None
+        progress = float(self.progress)
+        if not 0.0 <= progress <= self.route.length:
+            return None
         pose = self.latest_odom.pose.pose.position
         if not math.isfinite(float(pose.x)) or not math.isfinite(float(pose.y)):
             return None
-        match = self.route.project(
-            float(pose.x), float(pose.y), expected_s=float(self.region["yield_s_m"]),
-            window_m=max(60.0, self.region["request_end_s_m"] - self.region["request_start_s_m"] + 20.0),
-        )
-        if match["distance_m"] > float(self.region["max_route_offset_m"]):
+        route_x, route_y = self.route.point_at(progress)
+        route_offset = math.hypot(float(pose.x) - route_x, float(pose.y) - route_y)
+        if (not math.isfinite(route_offset)
+                or route_offset > float(self.region["max_route_offset_m"])):
             return None
-        progress = match["s_m"]
         if not self.region["request_start_s_m"] - 3.0 <= progress < self.region["request_end_s_m"]:
             return None
         speed = _speed(self.latest_odom)
@@ -244,6 +257,7 @@ class RoundaboutMergeGate:
         ego_interval = None
         request_fresh = self._fresh(self.request_at, self.request_timeout_s, now)
         sensors_fresh = (self._fresh(self.odom_at, self.odom_timeout_s, now)
+                         and self._fresh(self.progress_at, self.progress_timeout_s, now)
                          and self._fresh(self.obstacles_at, self.obstacle_timeout_s, now)
                          and self._source_fresh(self.latest_odom, self.odom_timeout_s, now)
                          and self._source_fresh(self.latest_obstacles, self.obstacle_timeout_s, now))
@@ -290,6 +304,7 @@ class RoundaboutMergeGate:
         self.status_pub.publish(String(data=json.dumps({
             "state": self.state, "reason": reason, "requested": self.requested,
             "request_fresh": request_fresh, "sensor_fresh": sensors_fresh,
+            "route_progress_s_m": self.progress if sensors_fresh else None,
             "calibrated": self.calibrated, "committed": self.committed,
             "stop_required": stop, "allowed": allowed,
             "ego_interval_s": None if ego_interval is None else [round(v, 2) for v in ego_interval],
