@@ -15,9 +15,14 @@ def main():
         names=output.splitlines()
         assert len(names)==len(set(names)), output
         for required in ('/adaptive_curvature_purepursuit','/control_mux',
-                         '/highway_lane_camera','/lane_info_contract',
+                         '/lane_info_contract',
                          '/avoidance_path_manager','/highway_lane_strategy'):
             assert required in names, (required,output)
+        # The highway launch uses the ROI camera stack, whose lane runner is
+        # named lane_camera (sometimes under an inherited namespace). The
+        # dedicated highway_lane_camera node belongs to curvature_signal.
+        assert any(name.endswith('/lane_camera') for name in names), ('ROI lane camera missing',output)
+        assert '/yolo_camera' in names, ('ROI YOLO camera missing',output)
         assert '/purepursuit_mgeo' not in names and '/curvature_speed_purepursuit' not in names
     print('HIGHWAY_LAUNCH_OK: ROS resolved all includes; control was not started')
     for control in ('false', 'true'):
