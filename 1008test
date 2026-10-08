@@ -1,0 +1,27 @@
+위치 찍기 전 테스트
+rostopic echo -n 1 /localization/odometry
+rostopic echo -n 1 /experimental/curvature_progress
+
+위치 찍기
+
+rosrun purepursuit_mgeo locate_route_region.py \
+  --path-file /opt/AutoVehicle/morai_ws/data/routes/2026_molit_comp_global_path.txt \
+  --link-set-file /opt/AutoVehicle/morai_ws/src/detection/camera_perception/lane/mgeo/R_KR_PR_K-city_2025/link_set.json \
+  --xy X Y --hint-s 예상경로거리
+
+
+cd ~/AutoVehicle
+git switch final_ws
+git pull --ff-only origin final_ws
+git log -1 --oneline
+
+cd ~/AutoVehicle/morai_ws/docker/final_ws
+bash run_highway.sh stop
+cp highway.env.example highway.env
+cp highway-test.env.example highway-test.env
+nano highway.env
+
+bash run_highway.sh build
+bash run_highway.sh start
+bash run_highway.sh test
+bash run_test.sh show
