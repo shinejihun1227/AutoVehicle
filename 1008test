@@ -67,17 +67,6 @@ git rev-parse --short HEAD
 git rev-parse --short origin/final_ws
 
 
-git -C ~/AutoVehicle/morai_ws fetch origin
-git -C ~/AutoVehicle/morai_ws rev-parse --short HEAD
-git -C ~/AutoVehicle/morai_ws rev-parse --short origin/final_ws
-grep -n -B 25 -A 50 -E 'FAIL:|ERROR:|Traceback|FAILED \(|REGRESSION_(START|FAIL)' ~/morai-highway-build.log | tail -n 160
-
-
-cd ~/AutoVehicle/morai_ws
-git status -sb
-git pull --ff-only origin final_ws
-git rev-parse --short HEAD
-git rev-parse --short origin/final_ws
-
-git stash push -m "before-final_ws-update"
-git pull --ff-only origin final_ws
+cd ~/AutoVehicle/morai_ws/docker/final_ws
+set -o pipefail
+BUILDKIT_PROGRESS=plain bash run_highway.sh build 2>&1 | tee ~/morai-highway-build-0671aec.log
