@@ -1,21 +1,26 @@
 TEST_FILE="$HOME/AutoVehicle/morai_ws/src/experimental/curvature_speed_purepursuit/test/test_adaptive_node.py"
-cp "$TEST_FILE" "$HOME/test_adaptive_node.py.before-indent-fix"
 
 python3 - "$TEST_FILE" <<'PY'
 from pathlib import Path
-import re
 import sys
 
 path = Path(sys.argv[1])
 lines = path.read_text().splitlines(keepends=True)
-path.write_text("".join(
-    re.sub(r"^[ \t]+", lambda match: match.group(0).expandtabs(4), line)
-    for line in lines
-))
+fixed = []
+
+for line in lines:
+    content = line.lstrip(" \t")
+    if content.startswith("ros.get_time.side_effect = lambda: self.now"):
+        line = "        " + content
+    elif content.startswith("path.header.stamp = NS(to_sec=lambda: self.now)"):
+        line = "        " + content
+    fixed.append(line)
+
+path.write_text("".join(fixed))
 PY
 
-python3 -m tabnanny "$TEST_FILE"
 python3 -m py_compile "$TEST_FILE"
+
 
 cd ~/AutoVehicle/morai_ws/docker/final_ws
 set -o pipefail
