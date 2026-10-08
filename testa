@@ -1,7 +1,11 @@
-cd ~/AutoVehicle
-printf '%s\n' 'morai_ws/docker/final_ws/check_highway_launch.py -text -eol' >> .git/info/attributes
-git check-attr text eol -- morai_ws/docker/final_ws/check_highway_launch.py
-git status --short -- morai_ws/docker/final_ws/check_highway_launch.py
-check-attr에 text: unset, eol: unset이 나오고 git status에는 아무 출력도 없어야 합니다. 그때 실행하세요.
-git pull --ff-only origin final_ws
-grep -n '^ultralytics' morai_ws/docker/final_ws/requirements.txt
+cd ~/AutoVehicle/morai_ws/docker/final_ws
+bash run_highway.sh build
+빌드가 성공하면 새 이미지를 쓰는 새 컨테이너 이름을 설정하세요. 기존 이름으로 start하면 예전 컨테이너가 다시 시작됩니다.
+printf '\nCONTAINER_NAME=morai-highway-153-49f96b5\n' >> highway.env
+bash run_highway.sh start
+bash run_highway.sh shell
+컨테이너 안에서 버전과 모델 로딩을 확인하세요.
+python -c "import ultralytics; print(ultralytics.__version__)"
+python /opt/AutoVehicle/morai_ws/docker/final_ws/smoke_models.py
+버전이 8.4.153이고 모델 검사에 OFFLINE_SMOKE_PASS가 나오면, exit으로 호스트에 돌아와 교차로·곡률 주행 모니터링부터 시작하세요.
+bash run_test.sh monitor 2
