@@ -35,6 +35,10 @@
   <arg name="wheelbase_m" default="3.0" />
   <arg name="max_steering_rad" default="0.6981317008" />
   <arg name="steering_sign" default="1.0" />
+  <arg name="enable_lane_centering" default="false" />
+  <arg name="lane_centering_weight" default="0.15" />
+  <arg name="lane_centering_max_correction_rad" default="0.06" />
+  <arg name="lane_centering_min_confidence" default="0.65" />
 
   <arg name="lane_info_port" default="1101" />
   <arg name="yolo_port" default="1131" />
@@ -103,9 +107,14 @@
     <param name="wheelbase_m" value="$(arg wheelbase_m)" />
     <param name="max_steering_rad" value="$(arg max_steering_rad)" />
     <param name="steering_sign" value="$(arg steering_sign)" />
+    <param name="enable_lane_centering" value="$(arg enable_lane_centering)" />
+    <param name="lane_centering_weight" value="$(arg lane_centering_weight)" />
+    <param name="lane_centering_max_correction_rad" value="$(arg lane_centering_max_correction_rad)" />
+    <param name="lane_centering_min_confidence" value="$(arg lane_centering_min_confidence)" />
+    <param name="lane_topic" value="/detection/lane" />
   </node>
 
-  <!-- The real_lane model supplies stop-line observations, not steering. -->
+  <!-- The real_lane model supplies stop lines and optional bounded lane centering. -->
   <node pkg="camera_perception" type="highway_lane_camera_node.py" name="highway_lane_camera"
         output="screen" args="--ip $(arg bind_ip) --port $(arg lane_info_port) --checkpoint $(arg lane_info_checkpoint) --cam-set $(arg lane_info_cam_set) --device $(arg lane_info_device) --every $(arg lane_info_every) --topic /perception/camera/lane_info_raw">
     <env name="MORAI_CAMERA_DEBUG" value="$(arg enable_camera_dashboard)" />

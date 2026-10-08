@@ -3,10 +3,10 @@
 set -euo pipefail
 SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 ACTION="${1:-show}"
-if [[ $# -gt 2 || ! "$ACTION" =~ ^(show|monitor|drive|diagnose|speed|models|request-merge|view|rviz)$ ]] ||
+if [[ $# -gt 2 || ! "$ACTION" =~ ^(show|monitor|drive|diagnose|speed|lane|models|request-merge|view|rviz)$ ]] ||
    [[ "$ACTION" =~ ^(models|request-merge|view|rviz)$ && $# -gt 1 ]] ||
    [[ "$ACTION" == diagnose && $# -gt 1 && "$2" != 2 ]]; then
-  echo 'Usage: bash run_test.sh {show|monitor|drive} [1-5]; or {speed KMH|models|request-merge|diagnose [2]|view|rviz}' >&2
+  echo 'Usage: bash run_test.sh {show|monitor|drive} [1-5]; or {speed KMH|lane on/off|models|request-merge|diagnose [2]|view|rviz}' >&2
   exit 2
 fi
 if [[ ! -f "$SCRIPT_DIR/highway.env" || ! -f "$SCRIPT_DIR/highway-test.env" ]]; then
@@ -41,6 +41,21 @@ if [[ "$ACTION" == speed ]]; then
     printf '\nMAX_SPEED_KPH=%s\n' "$VALUE" >> "$SCRIPT_DIR/highway-test.env"
   fi
   echo "MAX_SPEED_KPH=$VALUE saved. Restart the driving launch to apply; no live parameter was changed."
+  exit 0
+fi
+if [[ "$ACTION" == lane ]]; then
+  case "${2:-}" in
+    on) VALUE=true ;;
+    off) VALUE=false ;;
+    *) echo 'Usage: bash run_test.sh lane {on|off}' >&2; exit 2 ;;
+  esac
+  cp -p "$SCRIPT_DIR/highway-test.env" "$SCRIPT_DIR/highway-test.env.bak"
+  if grep -q '^LANE_CENTERING_ENABLED=' "$SCRIPT_DIR/highway-test.env"; then
+    sed -i "s/^LANE_CENTERING_ENABLED=.*/LANE_CENTERING_ENABLED=$VALUE/" "$SCRIPT_DIR/highway-test.env"
+  else
+    printf '\nLANE_CENTERING_ENABLED=%s\n' "$VALUE" >> "$SCRIPT_DIR/highway-test.env"
+  fi
+  echo "LANE_CENTERING_ENABLED=$VALUE saved for case 2. Restart the launch to apply."
   exit 0
 fi
 if [[ "$ACTION" == request-merge ]]; then
@@ -106,6 +121,10 @@ case "$TEST_PROFILE" in
       "lane_info_port:=$LANE_INFO_PORT" "yolo_port:=$YOLO_PORT"
       "lane_info_device:=$LANE_INFO_DEVICE" "lane_info_every:=$LANE_INFO_EVERY"
       "lane_min_confidence:=$LANE_MIN_CONFIDENCE" "lane_info_timeout_s:=$LANE_INFO_TIMEOUT_S"
+      "enable_lane_centering:=${LANE_CENTERING_ENABLED:-false}"
+      "lane_centering_weight:=${LANE_CENTERING_WEIGHT:-0.15}"
+      "lane_centering_max_correction_rad:=${LANE_CENTERING_MAX_CORRECTION_RAD:-0.06}"
+      "lane_centering_min_confidence:=${LANE_CENTERING_MIN_CONFIDENCE:-0.65}"
       "stopline_front_reference_offset_m:=$STOPLINE_FRONT_REFERENCE_OFFSET_M"
       "stopline_approach_speed_kph:=$STOPLINE_APPROACH_SPEED_KPH"
       "stopline_cap_release_after_m:=$STOPLINE_CAP_RELEASE_AFTER_M"
@@ -146,6 +165,9 @@ case "$TEST_PROFILE" in
 esac
 
 echo "Profile=$TEST_PROFILE  action=$ACTION  max_speed_kph=$MAX_SPEED_KPH"
+if [[ "$TEST_PROFILE" == curvature_signal ]]; then
+  echo "Lane_centering=${LANE_CENTERING_ENABLED:-false} weight=${LANE_CENTERING_WEIGHT:-0.15} max_delta_rad=${LANE_CENTERING_MAX_CORRECTION_RAD:-0.06}"
+fi
 echo "Ubuntu=$UBUNTU_IP  MORAI=$MORAI_IP  container=$CONTAINER_NAME"
 if [[ "$ACTION" == show ]]; then
   echo "Launch=$LAUNCH (show does not contact Docker or send control)"

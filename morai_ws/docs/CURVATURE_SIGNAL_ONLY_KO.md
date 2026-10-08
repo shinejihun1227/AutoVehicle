@@ -13,7 +13,7 @@ MGeo 지정 정지선 + CAM1 확인 + CAM4 방향별 신호 ─→ 교차로 제
 - 지정된 정지선에 접근하면 해당 MGeo 위치를 이용해 신호가 없거나 불명이어도 정지 준비를 한다. 정지선이 보이지 않으면 허용 신호만으로 통과하지 않는다.
 - CAM1 정지선 위치가 현재 지정 정지선과 2 m 이내로 맞고, CAM4 한 프레임에 유효 신호 후보가 하나여야 신호를 적용한다.
 - 진행 방향은 해당 MGeo 연결의 직진·좌회전·우회전을 따른다. 기존 방향별 신호 판단을 적용하며, 빨강·노랑·불명 신호 또는 진행 방향과 맞지 않는 화살표에서는 멈춘다. 초록 통과는 서로 다른 프레임의 확인이 필요하다.
-- 지정 목록 밖의 정지선은 신호 제어와 독립적인 정지선 속도 제한을 만들지 않는다. 조향은 계속 곡률 기준 경로가 담당한다.
+- 지정 목록 밖의 정지선은 신호 제어와 독립적인 정지선 속도 제한을 만들지 않는다. 기본 조향은 계속 곡률 기준 경로가 담당한다.
 - CAM4 신호등의 화면 위치와 지도 신호등 ID를 연결할 보정값은 없다. 여러 후보가 동시에 보이면 통과 허가를 내지 않는다. 이 구성을 MORAI 모니터 모드에서 먼저 확인한다.
 
 선택한 MGeo 정지선 ID와 예상 거리는 [교차로 매핑 표](ROUTE_SIGNAL_GATE_PROPOSAL_KO.md)에 정리했다. 위치가 실제 주행과 다르면 `config/curvature_signal.yaml`의 ID 목록을 수정하고 컨테이너에 다시 설치한다.
@@ -55,6 +55,58 @@ ROI `dev/merged_sensor`의 `a994022`까지 확인해 CAM4 기본 사물 모델�
 원본 브랜치의 중앙 일부만 남기는 가로 크롭은 적용하지 않았다. CAM4 화면 오른쪽의 신호등도 필요하며, 전체 프레임에서 사용자 차량에 보이는 신호 후보를 계속 확인해야 하기 때문이다. 새 모델 파일은 `install_curvature_signal.sh`가 체크섬을 검사한 뒤 정지된 도커 컨테이너에 복사한다. 컨테이너 업데이트 후 `bash run_test.sh models`로 모델 로딩·추론을 확인한다. 이어 `monitor 2`에서 CAM4 모델 표시가 `best0917.pt · 로드됨`인지 확인하고 빨강/초록 전환을 관찰한다.
 
 좌·우회전 조향이 늦으면 `highway-test.env`의 `MAX_STEERING_RATE_RAD_S`가 0.5처럼 낮지 않은지 먼저 확인한다. 0.5 rad/s에서는 핸들 명령 변화가 느리게 제한된다. 시뮬레이터 모니터 시험의 시작값으로 `MAX_STEERING_RATE_RAD_S=1.2`, `STEERING_FEEDFORWARD_WEIGHT=0.50`, `LOOKAHEAD_GAIN=0.25`를 한 항목씩 적용한다. `LOOKAHEAD_GAIN`을 낮추면 속도가 높을 때 조향 목표점이 가까워져 반응이 빨라지고, 피드포워드 비중을 높이면 경로 곡률에 더 일찍 반응한다. 급격한 조향이나 좌우 흔들림이 생기면 직전 값으로 되돌린다. 물리 조향 각도 제한인 `max_steering_rad`와 조향 부호는 차량 설정을 확인하지 않고 바꾸지 않는다.
+
+## 커브에서 차선을 밟을 때
+
+이 프로필의 기본 조향은 고정된 GPS 경로를 따르며 CAM1 차선 중심을 사용하지 않는다.
+커브마다 밟는 쪽이 달라지면 경로 전체를 한쪽으로 평행 이동시키지 않는다. 먼저
+`/experimental/curvature_path_lateral_error_m`를 확인한다. 양수는 차량 중심이 경로의
+왼쪽, 음수는 오른쪽이다. 직선에서는 거의 0이고 커브에서만 커지면 lookahead,
+조향 변화율, 피드포워드, 해당 구간의 속도를 순서대로 조정한다. 직선에서도 한쪽
+오차가 일정하면 경로 중심이나 GPS/EKF 정렬을 확인한다.
+
+```bash
+cd "$HOME/AutoVehicle/morai_ws/docker/final_ws"
+bash run_test.sh speed 5
+bash run_test.sh show 2
+bash run_test.sh drive 2
+```
+
+새 터미널에서 컨테이너 셸에 들어가 아래 값을 관찰한다.
+
+```bash
+bash run_highway.sh shell
+rostopic echo /experimental/curvature_path_lateral_error_m
+rostopic echo /detection/lane
+rostopic echo /experimental/curvature_steering
+```
+
+`rostopic echo`는 계속 출력되므로 명령마다 `Ctrl+C`로 종료하고 다음 명령을 실행한다.
+
+조향이 커브 진입보다 늦으면 `MAX_STEERING_RATE_RAD_S`를 먼저 0.5에서 1.2로
+올리고 같은 커브를 비교한다. 반응은 빠르지만 커브 안쪽을 잘라 가면
+`LOOKAHEAD_GAIN`을 0.35에서 0.25로 낮춰 비교한다. 경로 곡률이 조향보다
+앞서 변하는 구간에서는 `STEERING_FEEDFORWARD_WEIGHT`를 0.35에서 0.50으로
+올려 비교한다. 한 번에 한 값만 바꾸고 launch를 다시 시작한다. 차가 커브에서
+크게 흔들리면 직전 값으로 되돌린다.
+
+CAM1 중심선이 실제 주행 차로와 맞는 것을 확인한 뒤에는 제한된 차선 중심
+보정을 켤 수 있다. CAM1의 연속된 유효 관측 세 개가 들어올 때만 적용하고,
+보정 조향은 기본값으로 최대 0.06 rad이다. 신호등·정지선 제어는 기존 경로
+구성을 유지한다. 이 기능은 GPS 경로의 큰 오차를 해결하는 용도가 아니다.
+
+```bash
+bash run_test.sh lane on
+bash run_test.sh show 2
+bash run_test.sh monitor 2
+```
+
+모니터에서 `/experimental/curvature_lane_correction_active`가 `true`이고
+`/experimental/curvature_lane_correction_rad`의 방향이 차선 중심 쪽인지 확인한다.
+그 뒤 launch를 종료하고 `bash run_test.sh drive 2`로 5 km/h부터 비교한다.
+카메라가 차선을 잘못 잡거나 보정 방향이 틀리면 `bash run_test.sh lane off`로
+끄고 launch를 다시 시작한다. 이 기능은 실제 MORAI 주행에서 아직 검증되지
+않았으므로 차선 안쪽 유지가 확인될 때까지 속도를 올리지 않는다.
 
 ## 주요 설정
 

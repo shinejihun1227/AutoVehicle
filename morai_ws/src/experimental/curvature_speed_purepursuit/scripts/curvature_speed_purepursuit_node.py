@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import math
 import os
+import statistics
 import threading
 import time
 from collections import deque
@@ -18,7 +19,7 @@ from typing import Optional, Tuple
 import rospy
 from geometry_msgs.msg import PointStamped, PoseStamped
 from morai_msgs.msg import CtrlCmd
-from morai_perception_msgs.msg import StopLineDetection
+from morai_perception_msgs.msg import LaneDetection, StopLineDetection
 from nav_msgs.msg import Odometry, Path
 from std_msgs.msg import Bool, Float64
 
@@ -157,6 +158,32 @@ class CurvatureSpeedPurePursuitNode:
             0.0,
             float(rospy.get_param("~max_steering_rate_rad_s", 2.5)),
         )
+        self.enable_lane_centering = bool(rospy.get_param("~enable_lane_centering", False))
+        self.lane_centering_weight = float(rospy.get_param("~lane_centering_weight", 0.15))
+        self.lane_centering_max_correction_rad = float(
+            rospy.get_param("~lane_centering_max_correction_rad", 0.06)
+        )
+        self.lane_centering_min_confidence = float(
+            rospy.get_param("~lane_centering_min_confidence", 0.65)
+        )
+        self.lane_centering_timeout_sec = float(
+            rospy.get_param("~lane_centering_timeout_sec", 0.3)
+        )
+        if (not all(math.isfinite(value) for value in (
+                self.lane_centering_weight,
+                self.lane_centering_max_correction_rad,
+                self.lane_centering_min_confidence,
+                self.lane_centering_timeout_sec,
+            ))
+                or not 0.0 <= self.lane_centering_weight <= 1.0
+                or not 0.0 <= self.lane_centering_max_correction_rad <= 0.15
+                or not 0.0 <= self.lane_centering_min_confidence <= 1.0
+                or not 0.0 < self.lane_centering_timeout_sec <= 1.0):
+            raise ValueError("Lane centering settings must be finite and in range")
+        self.lane_lock = threading.RLock()
+        self.lane_samples = deque(maxlen=3)
+        self.last_lane_stamp = 0.0
+        self.last_lane_wall_time = 0.0
         self.max_accel_mps2 = max(1e-6, float(rospy.get_param("~max_accel_mps2", 1.0)))
         self.max_decel_mps2 = max(1e-6, float(rospy.get_param("~max_decel_mps2", 1.5)))
         self.rate_hz = max(1.0, float(rospy.get_param("~control_rate_hz", 20.0)))
@@ -253,6 +280,15 @@ class CurvatureSpeedPurePursuitNode:
         self.steering_pub = rospy.Publisher(
             "/experimental/curvature_steering", Float64, queue_size=1
         )
+        self.path_lateral_error_pub = rospy.Publisher(
+            "/experimental/curvature_path_lateral_error_m", Float64, queue_size=1
+        )
+        self.lane_correction_pub = rospy.Publisher(
+            "/experimental/curvature_lane_correction_rad", Float64, queue_size=1
+        )
+        self.lane_correction_active_pub = rospy.Publisher(
+            "/experimental/curvature_lane_correction_active", Bool, queue_size=1
+        )
         self.progress_pub = rospy.Publisher(
             "/experimental/curvature_progress", Float64, queue_size=1
         )
@@ -267,6 +303,13 @@ class CurvatureSpeedPurePursuitNode:
         )
 
         rospy.Subscriber(self.pose_topic, Odometry, self.odom_callback, queue_size=10)
+        if self.enable_lane_centering:
+            rospy.Subscriber(
+                rospy.get_param("~lane_topic", "/detection/lane"),
+                LaneDetection,
+                self.lane_callback,
+                queue_size=10,
+            )
         if self.stopline_speed_cap_enabled:
             rospy.Subscriber(
                 rospy.get_param("~stopline_topic", "/perception/camera/stopline"),
@@ -307,6 +350,35 @@ class CurvatureSpeedPurePursuitNode:
     def odom_callback(self, message: Odometry) -> None:
         self.latest_odom = message
         self.latest_odom_wall_time = time.monotonic()
+
+    def lane_callback(self, message: LaneDetection) -> None:
+        """Accept only fresh, plausible CAM1 lane observations in body coordinates."""
+        stamp = message.header.stamp.to_sec()
+        age = rospy.Time.now().to_sec() - stamp
+        lateral = float(message.lateral_offset_m)
+        heading = float(message.heading_error_rad)
+        confidence = float(message.confidence)
+        valid = (
+            message.valid and message.header.frame_id == "base_link"
+            and all(math.isfinite(value) for value in (stamp, age, lateral, heading, confidence))
+            and -0.05 <= age <= self.lane_centering_timeout_sec
+            and self.lane_centering_min_confidence <= confidence <= 1.0
+            and abs(lateral) <= 1.5 and abs(heading) <= 0.35
+        )
+        with self.lane_lock:
+            if not valid:
+                self.lane_samples.clear()
+                return
+            if stamp <= self.last_lane_stamp:
+                return
+            if self.lane_samples and (
+                abs(lateral - self.lane_samples[-1][0]) > 0.75
+                or abs(heading - self.lane_samples[-1][1]) > 0.25
+            ):
+                self.lane_samples.clear()
+            self.lane_samples.append((lateral, heading))
+            self.last_lane_stamp = stamp
+            self.last_lane_wall_time = time.monotonic()
 
     def stopline_callback(self, message: StopLineDetection) -> None:
         """Cache only the newest camera observation; the control timer matches its pose."""
@@ -486,6 +558,38 @@ class CurvatureSpeedPurePursuitNode:
         self.last_steering_rad = limited
         return limited
 
+    def lane_centered_steering(self, nominal: float) -> Tuple[float, float, bool]:
+        """Blend a small CAM1 correction into the path command when lane data is stable."""
+        if not self.enable_lane_centering:
+            return nominal, 0.0, False
+        with self.lane_lock:
+            age = rospy.Time.now().to_sec() - self.last_lane_stamp
+            wall_age = time.monotonic() - self.last_lane_wall_time
+            if (len(self.lane_samples) < 3
+                    or not -0.05 <= age <= self.lane_centering_timeout_sec
+                    or not 0.0 <= wall_age <= self.lane_centering_timeout_sec):
+                return nominal, 0.0, False
+            lateral = statistics.median(item[0] for item in self.lane_samples)
+            heading = statistics.median(item[1] for item in self.lane_samples)
+        # LaneDetection is based on the centre at 7 m and its chord to 14 m.
+        # Positive lateral_offset means the lane centre is to the vehicle's
+        # right.  Recover the camera's near/far target in x-forward, y-left.
+        near_x, far_x = 7.0, 14.0
+        near_y = -lateral
+        far_y = near_y + (far_x - near_x) * math.tan(heading)
+        near_curvature = 2.0 * near_y / (near_x * near_x + near_y * near_y)
+        far_curvature = 2.0 * far_y / (far_x * far_x + far_y * far_y)
+        lane_steering = self.steering_sign * math.atan(
+            self.wheelbase_m * (near_curvature + far_curvature) / 2.0
+        )
+        correction = clamp(
+            self.lane_centering_weight * (lane_steering - nominal),
+            -self.lane_centering_max_correction_rad,
+            self.lane_centering_max_correction_rad,
+        )
+        centered = clamp(nominal + correction, -self.max_steering_rad, self.max_steering_rad)
+        return centered, centered - nominal, True
+
     def make_command(
         self,
         steering: float,
@@ -583,6 +687,14 @@ class CurvatureSpeedPurePursuitNode:
         measured_speed_kph = measured_speed_mps * MPS_TO_KPH
 
         projection = self.search_projection(x, y)
+        path_start = self.points[projection.segment_index]
+        path_end = self.points[projection.segment_index + 1]
+        path_dx = path_end.x - path_start.x
+        path_dy = path_end.y - path_start.y
+        path_length = max(math.hypot(path_dx, path_dy), 1e-9)
+        path_lateral_error = (
+            path_dx * (y - path_start.y) - path_dy * (x - path_start.x)
+        ) / path_length
         self.last_segment_index = projection.segment_index
         progress_s = projection.progress_s
         if self.last_progress_s is not None:
@@ -606,9 +718,14 @@ class CurvatureSpeedPurePursuitNode:
             self.last_steering_rad = 0.0
             target = self.points[-1]
             actual_lookahead = 0.0
+            lane_correction = 0.0
+            lane_correction_active = False
         else:
             steering, target, actual_lookahead = self.compute_steering(
                 x, y, yaw, measured_speed_mps, progress_s
+            )
+            steering, lane_correction, lane_correction_active = self.lane_centered_steering(
+                steering
             )
             steering = self.limit_steering_rate(steering, dt)
 
@@ -634,6 +751,9 @@ class CurvatureSpeedPurePursuitNode:
         self.accel_command_pub.publish(Float64(pedal.accel))
         self.brake_command_pub.publish(Float64(pedal.brake))
         self.steering_pub.publish(Float64(steering))
+        self.path_lateral_error_pub.publish(Float64(path_lateral_error))
+        self.lane_correction_pub.publish(Float64(lane_correction))
+        self.lane_correction_active_pub.publish(Bool(lane_correction_active))
         self.progress_pub.publish(Float64(progress_s))
         self.goal_pub.publish(Bool(stop))
         self.stopline_cap_active_pub.publish(Bool(stopline_cap_active))
@@ -657,7 +777,8 @@ class CurvatureSpeedPurePursuitNode:
             2.0,
             "Curvature PP progress=%.1f/%.1fm kappa=%.4f speed_limit=%.2f "
             "speed_cmd=%.2f measured=%.2f km/h accel=%.2f brake=%.2f "
-            "lookahead=%.2f steering=%.4f stop=%s stopline_cap=%s",
+            "lookahead=%.2f steering=%.4f path_lateral_error=%.2f "
+            "lane_correction=%.4f lane_active=%s stop=%s stopline_cap=%s",
             progress_s,
             self.total_length_m,
             curvature,
@@ -668,6 +789,9 @@ class CurvatureSpeedPurePursuitNode:
             pedal.brake,
             actual_lookahead,
             steering,
+            path_lateral_error,
+            lane_correction,
+            lane_correction_active,
             stop,
             stopline_cap_active,
         )
