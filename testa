@@ -1,4 +1,3 @@
-roslaunch morai_bringup morai_udp_ekf_purepursuit_lidar_camera.launch \
-  morai_host_ip:=192.168.0.147 \
-  enable_control:=true \
-  custom_model:=best0917.pt
+cd ~/AutoVehicle/morai_ws/docker/final_ws
+bash run_highway.sh shell
+tail -n 80 "$(ls -t /root/.ros/log/*/highway_lane_camera-*.log | head -n 1)
