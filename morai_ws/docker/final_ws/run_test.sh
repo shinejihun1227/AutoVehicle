@@ -158,7 +158,7 @@ if [[ "$TEST_PROFILE" != curvature && "$TEST_PROFILE" != curvature_signal ]]; th
 fi
 DISPLAY_ARGS=()
 if [[ "$TEST_PROFILE" == curvature_signal ]]; then
-  echo 'Original curvature route + paired CAM1 stopline/CAM4 signal gate; no MGeo signal map, LiDAR, avoidance, merge, or lane steering.'
+  echo 'Curvature route + selected MGeo stop lines + CAM1/CAM4 directional signal gate; no LiDAR, avoidance, merge, or lane steering.'
   echo 'CAM1 + CAM4 and stop reasons: http://127.0.0.1:8765 (Ubuntu browser)'
   echo 'RViz alternative (new host terminal): bash run_test.sh rviz'
   if [[ "$OPEN_CAMERA_DASHBOARD" == true && -n "${DISPLAY:-}${WAYLAND_DISPLAY:-}" ]]; then
@@ -179,14 +179,23 @@ if [[ "$TEST_PROFILE" == curvature_signal ]]; then
   INSTALLED_CAMERA_LAUNCH=/opt/AutoVehicle/morai_ws/src/detection/camera_perception/launch/camera_perception.launch
   INSTALLED_CAMERA_NODE=/opt/AutoVehicle/morai_ws/src/detection/camera_perception/scripts/camera_object_detection_node.py
   INSTALLED_CAMERA_MODELS=/opt/AutoVehicle/morai_ws/src/detection/camera_perception/models
+  INSTALLED_CONFIG=/opt/AutoVehicle/morai_ws/config/curvature_signal.yaml
+  INSTALLED_MGEO=/opt/AutoVehicle/morai_ws/src/detection/camera_perception/lane/mgeo/R_KR_PR_K-city_2025
   if ! "${DOCKER[@]}" exec "$CONTAINER_NAME" grep -Fq \
       '<param name="require_route_signal_context" value="false" />' "$INSTALLED_LAUNCH" ||
      ! "${DOCKER[@]}" exec "$CONTAINER_NAME" grep -Fq \
       '<param name="stopline_requires_detected_signal" value="true" />' "$INSTALLED_LAUNCH" ||
      ! "${DOCKER[@]}" exec "$CONTAINER_NAME" grep -Fq \
-      '<param name="stopline_speed_cap_enabled" value="true" />' "$INSTALLED_LAUNCH" ||
+      '<param name="require_signalized_contexts" value="true" />' "$INSTALLED_LAUNCH" ||
      ! "${DOCKER[@]}" exec "$CONTAINER_NAME" grep -Fq \
-      'def valid_sensor_stop_pair' "$INSTALLED_FUSION" ||
+       '<param name="stopline_speed_cap_enabled" value="false" />' "$INSTALLED_LAUNCH" ||
+      ! "${DOCKER[@]}" exec "$CONTAINER_NAME" grep -Fq \
+       'name="signal_mgeo_path"' "$INSTALLED_LAUNCH" ||
+      ! "${DOCKER[@]}" exec "$CONTAINER_NAME" grep -Fq \
+       'def consume_route_signals' "$INSTALLED_FUSION" ||
+      ! "${DOCKER[@]}" exec "$CONTAINER_NAME" grep -Eq \
+       '^[[:space:]]*- "mgeo:' "$INSTALLED_CONFIG" ||
+      ! "${DOCKER[@]}" exec "$CONTAINER_NAME" test -s "$INSTALLED_MGEO/traffic_light_set.json" ||
      ! "${DOCKER[@]}" exec "$CONTAINER_NAME" grep -Fq \
       'def update_stopline_speed_cap' "$INSTALLED_CURVATURE" ||
      ! "${DOCKER[@]}" exec "$CONTAINER_NAME" grep -Fq \
@@ -197,11 +206,11 @@ if [[ "$TEST_PROFILE" == curvature_signal ]]; then
       'TrackedSignalVotes' "$INSTALLED_CAMERA_NODE" ||
      ! "${DOCKER[@]}" exec "$CONTAINER_NAME" test -s "$INSTALLED_CAMERA_MODELS/best0917.pt" ||
      ! "${DOCKER[@]}" exec "$CONTAINER_NAME" test -s "$INSTALLED_CAMERA_MODELS/yolov8s.pt"; then
-    echo 'ERROR: The container has not been updated with the current signal and CAM4 models.' >&2
-    echo 'No driving launch was started. Stop the container, run install_curvature_signal.sh, then start it again.' >&2
+    echo 'ERROR: The container is missing the selected route signal profile or CAM4 models.' >&2
+    echo 'No driving launch was started. Stop the container, run install_curvature_signal.sh --config, then start it again.' >&2
     exit 2
   fi
-  echo "Verified profile: MGeo OFF; stopline-only approach cap=${STOPLINE_APPROACH_SPEED_KPH} km/h; CAM4 signal gates stopping."
+  echo 'Verified profile: selected MGeo stop lines; unmapped stop lines do not cap speed; CAM1 + CAM4 gate entry.'
 fi
 exec "${DOCKER[@]}" exec -it "$CONTAINER_NAME" /usr/local/bin/morai-entrypoint \
   "${DISPLAY_ARGS[@]}" roslaunch morai_bringup "$LAUNCH" "enable_control:=$CONTROL" \

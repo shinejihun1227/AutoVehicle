@@ -64,6 +64,8 @@ def main():
             control_output_enabled=rospy.get_param('/morai_udp_drive_bridge/control_output_enabled', None),
             require_route_signal_context=rospy.get_param(
                 '/curvature_signal_controller/require_route_signal_context', None),
+            signalized_context_ids=rospy.get_param(
+                '/curvature_signal_controller/signalized_context_ids', []),
             stopline_requires_detected_signal=rospy.get_param(
                 '/curvature_signal_controller/stopline_requires_detected_signal', None)))
     settings()

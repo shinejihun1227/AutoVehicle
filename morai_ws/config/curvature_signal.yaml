@@ -1,6 +1,13 @@
-# Sensor-only profile. MGeo geometry and map-to-camera projection are not used.
-# A measured stop line is acted on only together with a fresh, recognized CAM4
-# signal state. Route steering remains the curvature Pure Pursuit reference.
+# Four signalized areas on the fixed route. The last area has two successive
+# mapped stop lines (RIGHT and LEFT). The far-side LCS01 lane-control signal
+# is not treated as an ordinary intersection. The route remains the steering
+# reference; CAM4 pixel-to-map projection is not used.
+signalized_context_ids:
+  - "mgeo:A2256W000215:0"  # 208 m, STRAIGHT
+  - "mgeo:A2256W000222:0"  # 316 m, STRAIGHT
+  - "mgeo:A2256W000599:0"  # 437 m, STRAIGHT
+  - "mgeo:A2256W000318:0"  # 551 m, RIGHT
+  - "mgeo:A2256W000083:0"  # 610 m, LEFT
 
 input_timeout_sec: 0.5
 signal_timeout_sec: 0.8

@@ -20,6 +20,7 @@ RUNNING="$("${DOCKER[@]}" inspect --format '{{.State.Running}}' "$CONTAINER_NAME
 DEST=/opt/AutoVehicle/morai_ws
 CAM=src/detection/camera_perception
 CURVE=src/experimental/curvature_speed_purepursuit
+MGEO="$CAM/lane/mgeo/R_KR_PR_K-city_2025"
 FILES=(
   src/bringup/morai_bringup/launch/final_ws_curvature_signal.launch
   "$CURVE/scripts/curvature_speed_purepursuit_node.py"
@@ -29,12 +30,18 @@ FILES=(
   "$CURVE/test/test_node_startup.py"
   src/control/purepursuit_mgeo/src/purepursuit_mgeo/longitudinal_controller.py
   src/control/turn_signal_controller/scripts/maneuver_fusion_node.py
+  src/control/turn_signal_controller/src/turn_signal_controller/route_context.py
+  src/control/turn_signal_controller/src/turn_signal_controller/fusion.py
+  src/control/stopline_control/src/stopline_control/core.py
   "$CAM/launch/camera_perception.launch"
   "$CAM/post_processing/real_lane_node.py"
   "$CAM/scripts/camera_object_detection_node.py"
   "$CAM/scripts/camera_feature_runner.py"
   "$CAM/scripts/camera_debug_dashboard.py"
   "$CAM/src/camera_perception/traffic_signal.py"
+  "$MGEO/link_set.json"
+  "$MGEO/node_set.json"
+  "$MGEO/traffic_light_set.json"
   "$CAM/models/yolov8s.pt"
   "$CAM/models/best0917.pt"
   "$CAM/src/camera_perception/debug_images.py"
@@ -72,7 +79,7 @@ CONFIG=/opt/AutoVehicle/morai_ws/config/curvature_signal.yaml
 if [[ "${1:-}" == --config ]]; then
   "${DOCKER[@]}" cp "$WS/config/curvature_signal.yaml" "$CONTAINER_NAME:$CONFIG"
 elif "${DOCKER[@]}" cp "$CONTAINER_NAME:$CONFIG" - >/dev/null 2>&1; then
-  echo 'Existing signal camera config preserved; use --config to copy the host file.'
+  echo 'Existing signal camera config preserved; use --config to activate the selected route junctions.'
 else
   "${DOCKER[@]}" cp "$WS/config/curvature_signal.yaml" "$CONTAINER_NAME:$CONFIG"
 fi

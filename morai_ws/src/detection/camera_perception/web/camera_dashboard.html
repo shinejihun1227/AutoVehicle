@@ -37,10 +37,11 @@ function paint(data){
  text('lane',lane?'좌측: '+boundary(lane.left_lane)+' / 우측: '+boundary(lane.right_lane):'차선 상태 미수신 / 지연');
  text('stopline',line?(line.valid?'정지선: '+number(line.distance_m)+' m · 신뢰도 '+number(line.confidence):'유효한 정지선 없음'):'정지선 관측 미수신 / 지연');
  text('signal',signal?'관측 신호: '+signal.state+' · 신뢰도 '+number(signal.confidence)+(signal.valid?'':' · 무효'):'신호 관측 미수신 / 지연');
- const sensorOnly=config?.require_route_signal_context===false&&config?.stopline_requires_detected_signal===true;
- const profile=status?.controller_profile||(sensorOnly?'sensor_only':'mgeo_or_legacy');
- text('selected',status?'제어 모드: '+profile+' / 주행 방향: '+status.route_direction+' / 신호 판단: '+(sensorOnly?'정지선과 유효 신호 동시 관측':'경로 연결 상태'):'주행 상태 대기');
- text('calibration',sensorOnly?'MGeo 경로·신호 연결 미사용 · CAM4 지도 투영 보정 불필요':config?'경로 신호 모드 · CAM4 지도 투영 설정 확인':'제어 설정 대기');
+ const routeCamera=Boolean(config?.signalized_context_ids?.length)||status?.controller_profile==='route_camera';
+ const sensorOnly=!routeCamera&&config?.require_route_signal_context===false&&config?.stopline_requires_detected_signal===true;
+ const profile=status?.controller_profile||(routeCamera?'route_camera':sensorOnly?'sensor_only':'mgeo_or_legacy');
+ text('selected',status?'제어 모드: '+profile+' / 주행 방향: '+status.route_direction+' / 신호 판단: '+(routeCamera?'지정 교차로 정지선 + CAM4 신호':sensorOnly?'정지선과 유효 신호 동시 관측':'경로 연결 상태'):'주행 상태 대기');
+ text('calibration',routeCamera?'MGeo 정지선·진행 방향 사용 · CAM4 지도 투영 미사용':sensorOnly?'MGeo 경로·신호 연결 미사용 · CAM4 지도 투영 보정 불필요':config?'경로 신호 모드 · CAM4 지도 투영 설정 확인':'제어 설정 대기');
  const cam1=value(data,'cam1',3),cam4=value(data,'cam4',3);
  text('model-cam1',cam1?cam1.model+' · '+cam1.device+' · 추론 '+number(cam1.infer_ms,0)+' ms · 입력 '+cam1.source_size.join('×')+' / 보정 '+cam1.camera_size.join('×'):'차선 모델 정보 수신 대기');
  text('model-cam4',cam4?cam4.custom_model+' · '+(cam4.custom_loaded?'로드됨':'모델 누락!')+' · 추론 '+number(cam4.inference_ms,0)+' ms · '+cam4.source_size.join('×'):'신호 모델 정보 수신 대기');

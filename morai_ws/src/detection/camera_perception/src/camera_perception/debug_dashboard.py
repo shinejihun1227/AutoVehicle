@@ -82,9 +82,15 @@ def diagnose(values):
         if selection and selection not in codes:
             codes.append(selection)
     notes = [dict(code=c, text=EXPLANATIONS.get(c, c)) for c in codes]
-    sensor_only = (config is not None
+    route_camera = (config is not None
+                    and config.get('require_route_signal_context') is False
+                    and bool(config.get('signalized_context_ids')))
+    sensor_only = (config is not None and not route_camera
                    and config.get('require_route_signal_context') is False
                    and config.get('stopline_requires_detected_signal') is True)
+    if route_camera and status and status.get('controller_profile') != 'route_camera':
+        notes.append(dict(code='controller_profile_mismatch',
+                          text='실행 중인 신호 제어기가 지정 교차로 설정과 다릅니다. 설치한 launch와 ID 목록을 확인하세요.'))
     if sensor_only and status and status.get('controller_profile') != 'sensor_only':
         notes.append(dict(code='controller_profile_mismatch',
                           text='실행 중인 신호 제어기가 센서 전용 설정과 다릅니다. 이전 launch를 종료하고 센서 전용 파일을 설치한 뒤 다시 실행하세요.'))
