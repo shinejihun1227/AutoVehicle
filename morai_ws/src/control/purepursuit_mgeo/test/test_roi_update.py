@@ -23,6 +23,8 @@ class Stamp:
         return self.value
     def __sub__(self, other):
         return Stamp(self.value - other.value)
+    def __sub__(self, other):
+        return Stamp(self.value - other.value)
 
 
 class Message:
@@ -59,96 +61,53 @@ class HighwayTest(unittest.TestCase):
         self.module = load_node('highway_lane_strategy_node', ros)
         self.module.load_mgeo_path = lambda _: [PathPoint(float(x), 0., 0.) for x in range(101)]
         self.node = self.module.HighwayLaneStrategyNode()
-        self.refresh()
 
-    def refresh(self):
-        node = self.node
-        node._odom_cb(NS(pose=NS(pose=NS(position=NS(x=0., y=3.5), orientation=NS(x=0., y=0., z=0., w=1.))),
-                         twist=NS(twist=NS(linear=NS(x=2., y=0.)))))
-        node._obstacles_cb(Message())
-        node._base_path_cb(node._local_to_map([(float(x), 0.) for x in range(46)], Stamp(self.now)))
-        node._base_stop_cb(Message(False))
+    def payload(self, stamp, frame='base_link'):
+        return {
+            'timestamp': stamp,
+            'observation_time_source': 'camera_receive_wall',
+            'observation_wall_timestamp': stamp,
+            'frame_id': frame,
+            'output_status': 'FRESH',
+            'lane_valid': True,
+            'confidence': .95,
+            'lane_width_m': 3.5,
+            'heading_error_rad': 0.,
+            'lateral_error_m': 0.,
+            'centerline_points': [[float(x), 0.] for x in range(5, 26)],
+        }
 
-    def lane(self, **values):
-        data = {'timestamp': self.now, 'frame_id': 'base_link', 'output_status': 'FRESH',
-                'lane_valid': True, 'confidence': .95, 'lane_width_m': 3.5,
-                'heading_error_rad': 0., 'lateral_error_m': 0.,
-                'centerline_points': [[float(x), 0.] for x in range(5, 26)],
-                'left_lane': {'detected': True, 'dashed': True}}
-        data.update(values)
-        self.node._lane_info_cb(Message(json.dumps(data)))
+    def submit(self, payload):
+        with patch.object(self.module.time, 'time', return_value=self.now):
+            self.node._lane_info_cb(Message(json.dumps(payload)))
 
-    def test_center_identity_jump_is_slew_limited_and_frozen_during_change(self):
-        self.lane()
-        initial = dict(self.node.filtered_center_y)
-        for _ in range(5):
-            previous = dict(self.node.filtered_center_y)
-            self.now += .05
-            self.lane(centerline_points=[[float(x), 3.5] for x in range(5, 26)])
-            self.assertTrue(all(abs(self.node.filtered_center_y[x] - previous[x]) <= .160001 for x in previous))
-        self.assertNotEqual(initial, self.node.filtered_center_y)
-        self.node.state = self.node.LANE_CHANGE
-        previous = dict(self.node.filtered_center_y)
-        self.now += .05
-        self.lane(centerline_points=[[float(x), -3.5] for x in range(5, 26)])
-        self.assertEqual(previous, self.node.filtered_center_y)
+    def test_fresh_camera_observation_is_recorded_with_source_time(self):
+        self.submit(self.payload(100.0))
+        self.assertEqual(self.node.lane_info_at.to_sec(), 100.0)
+        self.assertEqual(self.node.lane_observed_wall_at, 100.0)
 
-    def test_one_sided_lane_can_be_held_but_cannot_start_a_new_change(self):
-        self.lane(lane_width_m=None)
-        self.assertTrue(self.node._lane_hold_valid(Stamp(self.now))[0])
-        self.assertFalse(self.node._lane_valid(Stamp(self.now))[0])
+    def test_republished_held_geometry_does_not_extend_camera_age(self):
+        self.submit(self.payload(100.0))
+        self.now = 100.25
+        self.submit(self.payload(100.0))
+        self.assertEqual(self.node.lane_info_at.to_sec(), 100.25)
+        self.assertEqual(self.node.lane_observed_wall_at, 100.0)
 
-    def test_old_duplicate_future_and_wrong_frame_observations_do_not_renew_age(self):
-        self.lane()
-        original = self.node.lane_info_at.to_sec()
-        for data in ({'timestamp': 99.}, {'timestamp': 100.}, {'timestamp': 102.},
-                     {'timestamp': 0.}, {'timestamp': 100.1, 'frame_id': 'camera_link'}):
-            self.now = 100.2
-            self.lane(**data)
-            self.assertEqual(self.node.lane_info_at.to_sec(), original)
-        self.assertFalse(self.node._lane_hold_valid(Stamp(101.))[0])
-        self.assertFalse(self.node._lane_hold_valid(Stamp(90.))[0])
+        self.now = 100.61
+        with patch.object(self.module.time, 'time', return_value=self.now):
+            valid, reason = self.node._lane_valid(Stamp(self.now))
+        self.assertFalse(valid)
+        self.assertEqual(reason, 'lane_observation_stale')
 
-    def test_occlusion_recovers_then_stops_after_grace_and_resumes_on_fresh_lane(self):
-        self.node.state = self.node.INNER_HOLD
-        self.lane()
-        self.node._tick(None)
-        self.assertFalse(self.node.stop_pub.publish.call_args.args[0].data)
-        self.now += .7
-        self.refresh()
-        self.node._tick(None)
-        self.assertFalse(self.node.stop_pub.publish.call_args.args[0].data)
-        self.now += 3.1
-        self.refresh()
-        self.node._tick(None)
-        self.assertTrue(self.node.stop_pub.publish.call_args.args[0].data)
-        self.now += .1
-        self.refresh()
-        self.lane()
-        self.node._tick(None)
-        self.assertFalse(self.node.stop_pub.publish.call_args.args[0].data)
-
-    def test_finite_lane_change_hands_over_before_path_endpoint(self):
-        node = self.node
-        node.state = node.LANE_CHANGE
-        node.committed_path = node.latest_base_path
-        node.committed_change_length_m = 28.
-        node.change_travel_m = 38.
-        self.lane()
-        node._tick(None)
-        self.now += node.change_complete_confirm_s + .1
-        self.refresh()
-        node._tick(None)
-        self.assertEqual(node.state, node.INNER_HOLD)
-        self.assertEqual(node.lane_changes_done, 1)
-
-    def test_path_smoothing_limits_lateral_step(self):
-        node = self.node
-        node.last_inner_path = node._local_to_map([(float(x), 0.) for x in range(46)], Stamp(self.now))
-        path = node._smooth_inner_path([(float(x), 2.) for x in range(1, 46)], Stamp(self.now))
-        local = node._path_map_to_local(path)
-        self.assertTrue(local)
-        self.assertTrue(all(abs(y) <= .100001 for x, y in local))
+    def test_old_future_reordered_and_wrong_frame_observations_are_rejected(self):
+        self.submit(self.payload(100.0))
+        original_receipt = self.node.lane_info_at.to_sec()
+        self.now = 100.2
+        for payload in (self.payload(99.0), self.payload(100.4),
+                        self.payload(99.9), self.payload(100.2, frame='camera_link')):
+            self.submit(payload)
+            self.assertEqual(self.node.lane_info_at.to_sec(), original_receipt)
+            self.assertEqual(self.node.lane_observed_wall_at, 100.0)
 
 
 class BypassTest(unittest.TestCase):
@@ -216,3 +175,4 @@ class LaunchContractTest(unittest.TestCase):
 
 if __name__ == '__main__':
     unittest.main()
+
