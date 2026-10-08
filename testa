@@ -1,8 +1,8 @@
 cd ~/AutoVehicle
-git stash push -m "save-checker-before-pull" -- morai_ws/docker/final_ws/check_highway_launch.py
+git fetch origin
+git show origin/final_ws:morai_ws/docker/final_ws/requirements.txt | grep '^ultralytics=='
+여기서 8.4.153이 나오면, tracked 로컬 수정을 보관한 뒤 pull하세요. stash는 수정 사항을 보관하며, 지금은 복원하지 않습니다.
+git stash push -m "before-final-ws-update"
 git pull --ff-only origin final_ws
-보관한 수정은 stash에 남고, 다른 미추적 파일은 건드리지 않습니다. 이어서 확인하세요.
 git rev-parse --short HEAD
 grep -n '^ultralytics' morai_ws/docker/final_ws/requirements.txt
-버전이 ultralytics==8.4.153으로 바뀐 것을 확인한 다음 다시 빌드하면 됩니다.
-bash ~/AutoVehicle/morai_ws/docker/final_ws/run_highway.sh build
