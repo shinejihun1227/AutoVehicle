@@ -144,6 +144,7 @@ class HighwayLaneStrategyNode:
         self.odom_topic = rospy.get_param("~odom_topic", "/localization/odometry")
         self.obstacle_topic = rospy.get_param("~obstacle_topic", "/perception/lidar/tracked_obstacles_map")
         self.lane_info_topic = rospy.get_param("~lane_info_topic", "/perception/camera/lane_info")
+        self.lane_info_frame = rospy.get_param("~lane_info_frame", "base_link")
         self.highway_topic = rospy.get_param("~highway_topic", "/perception/camera/highway_environment")
         self.highway_request_topic = rospy.get_param("~highway_request_topic", "/planning/highway_lane_change_request")
         self.route_gate_required = bool(rospy.get_param("~route_gate_required", False))
@@ -593,22 +594,41 @@ class HighwayLaneStrategyNode:
     def _lane_info_cb(self, msg: String) -> None:
         try:
             data = json.loads(msg.data)
-            if isinstance(data, dict):
-                self.lane_info = data
-                self.lane_info_at = rospy.Time.now()
-                self.lane_observed_wall_at = None
-                self.lane_observed_pose = None
-                if data.get("observation_time_source") == "camera_receive_wall":
-                    try:
-                        stamp = float(data.get("observation_wall_timestamp", data.get("timestamp", 0.0)))
-                    except (TypeError, ValueError):
-                        stamp = 0.0
-                    age = time.time()-stamp
-                    self.lane_observed_wall_at = stamp if math.isfinite(stamp) else 0.0
-                    if math.isfinite(stamp) and -0.1 <= age <= 10.0:
-                        self.lane_observed_pose = pose_at(
-                            self.odom_pose_history, stamp
-                        )
+            if not isinstance(data, dict):
+                return
+
+            frame_id = data.get("frame_id")
+            if frame_id is not None and str(frame_id) != self.lane_info_frame:
+                rospy.logwarn_throttle(2.0, "lane_info ignored: frame=%s expected=%s",
+                                       frame_id, self.lane_info_frame)
+                return
+
+            observed_at = None
+            observed_pose = None
+            source = data.get("observation_time_source")
+            # The camera publisher's timestamp is Unix wall time, independent
+            # of ROS simulated time. Use it to reject replayed, delayed and
+            # future lane geometry before renewing the callback receipt time.
+            if source == "camera_receive_wall":
+                stamp = float(data.get("observation_wall_timestamp", data.get("timestamp", 0.0)))
+                if not math.isfinite(stamp) or stamp <= 0.0:
+                    return
+                age = time.time() - stamp
+                if age < -0.1 or age > self.lane_info_timeout_s:
+                    return
+                previous = self.lane_observed_wall_at
+                if previous is not None and stamp < previous:
+                    return
+                observed_at = stamp
+                if previous is None or stamp > previous:
+                    observed_pose = pose_at(self.odom_pose_history, stamp)
+                else:
+                    observed_pose = self.lane_observed_pose
+
+            self.lane_info = data
+            self.lane_info_at = rospy.Time.now()
+            self.lane_observed_wall_at = observed_at
+            self.lane_observed_pose = observed_pose
         except Exception as exc:
             rospy.logwarn_throttle(2.0, "lane_info JSON parse failed: %s", exc)
 
@@ -3321,3 +3341,4 @@ if __name__ == "__main__":
         rospy.spin()
     except rospy.ROSInterruptException:
         pass
+
