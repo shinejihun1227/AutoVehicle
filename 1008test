@@ -50,9 +50,4 @@ roslaunch morai_bringup final_ws_integrated.launch \
   enable_control:=false max_speed_kph:=5.0
 
 
-cd ~/AutoVehicle/morai_ws/docker/final_ws
-set -o pipefail
-BUILDKIT_PROGRESS=plain bash run_highway.sh build 2>&1 | tee ~/morai-highway-build.log
-끝나면 다음 명령으로 오류 부분을 확인해 보내주세요.
-grep -n -E 'error:|ERROR:|FAILED|Traceback|No such|Could not find' ~/morai-highway-build.log | tail -40
-tail -n 100 ~/morai-highway-build.log
+grep -n -B 60 -A 80 -E 'REGRESSION_START turn|FAIL:|ERROR:|Traceback|REGRESSION_FAIL' ~/morai-highway-build.log
