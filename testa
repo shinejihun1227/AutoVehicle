@@ -1,8 +1,14 @@
+Ubuntu 호스트 터미널에서 실행하세요. 저장소 루트가 ~/AutoVehicle/morai_ws라면:
 cd ~/AutoVehicle/morai_ws
-pwd
-git rev-parse --show-toplevel
-ls -l docker/final_ws/run_highway.sh
-ls에 파일이 보이면 다음처럼 실행하세요.
-bash docker/final_ws/run_highway.sh build
-파일이 없다고 나오면 실제 위치를 찾습니다.
-find ~/AutoVehicle -type f -name run_highway.sh -print
+git rev-parse --short HEAD
+export CONTAINER_NAME=morai-highway-84153
+bash docker/final_ws/run_highway.sh start
+bash docker/final_ws/run_highway.sh shell
+git rev-parse 결과는 4083dea 또는 그 이후 커밋이어야 합니다. start에서 기존 컨테이너를 시작했다고 나오면 새 이미지가 적용되지 않은 것이니, docker/final_ws/highway.env에 지정된 CONTAINER_NAME도 morai-highway-84153으로 바꿔야 합니다.
+컨테이너 셸에 들어가면 먼저 버전을 확인하세요.
+python -c "import sys, ultralytics; print(sys.executable); print(ultralytics.__version__); print(ultralytics.__file__)"
+8.4.153인지 확인한 뒤, 신호등 모델을 로드합니다.
+python -c "import torch; from camera_perception.traffic_signal import register_cbam_model_layers; register_cbam_model_layers(torch); from ultralytics import YOLO; m=YOLO('/opt/AutoVehicle/morai_ws/src/detection/camera_perception/models/best0917.pt'); print('C2f_EMA_LOAD_OK', m.names)"
+C2f_EMA_LOAD_OK가 나오면 모델 로드는 통과한 것입니다. 이어 MORAI 시뮬레이터를 켜고, 같은 컨테이너 셸에서 제어 명령 전송을 끈 상태로 기능을 확인하세요.
+roslaunch morai_bringup final_ws_curvature_signal.launch enable_control:=false max_speed_kph:=10.0
+아직 enable_control:=true로 주행시키지는 마세요. 모델 로드 결과나 오류가 나오면 그 화면을 보내주세요.
