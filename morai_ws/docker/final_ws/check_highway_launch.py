@@ -21,7 +21,7 @@ def main():
         # named lane_camera (sometimes under an inherited namespace). The
         # dedicated highway_lane_camera node belongs to curvature_signal.
         assert any(name.endswith('/lane_camera') for name in names), ('ROI lane camera missing',output)
-        assert '/yolo_camera' in names, ('ROI YOLO camera missing',output)
+        assert ('/yolo_camera' in names) == (yolo == 'true'), (\n            'ROI YOLO camera configuration mismatch', yolo, output)
         assert '/purepursuit_mgeo' not in names and '/curvature_speed_purepursuit' not in names
     print('HIGHWAY_LAUNCH_OK: ROS resolved all includes; control was not started')
     for control in ('false', 'true'):

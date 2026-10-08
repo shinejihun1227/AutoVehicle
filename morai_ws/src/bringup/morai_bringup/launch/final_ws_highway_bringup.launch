@@ -11,6 +11,7 @@
   <arg name="control_remote_port" default="9093" />
   <arg name="control_source_port" default="9094" />
   <arg name="enable_control" default="false" />
+  <arg name="enable_yolo" default="true" />
   <arg name="enable_obstacle_avoidance" default="true" />
   <arg name="max_speed_kph" default="7.2" />
   <arg name="target_speed_mps" default="$(eval float(arg('max_speed_kph')) / 3.6)" />
@@ -43,6 +44,7 @@
     <arg name="control_remote_port" value="$(arg control_remote_port)" />
     <arg name="control_source_port" value="$(arg control_source_port)" />
     <arg name="enable_control" value="$(arg enable_control)" />
+    <arg name="roi_enable_yolo" value="$(arg enable_yolo)" />
     <arg name="max_speed_kph" value="$(arg max_speed_kph)" />
     <arg name="lateral_accel_limit_mps2" value="$(arg lateral_accel_limit_mps2)" />
     <arg name="roi_lane_port" value="$(arg roi_lane_port)" />
