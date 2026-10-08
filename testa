@@ -1,8 +1,6 @@
 cd ~/AutoVehicle
-git stash push -m "save-checker-before-pull" -- morai_ws/docker/final_ws/check_highway_launch.py
-git status -sb
-상태에서 해당 파일의 M 표시가 사라졌으면 pull합니다.
+git restore --source=HEAD --staged --worktree -- morai_ws/docker/final_ws/check_highway_launch.py
+git status --short -- morai_ws/docker/final_ws/check_highway_launch.py
+두 번째 명령에서 아무것도 출력되지 않으면 pull하세요.
 git pull --ff-only origin final_ws
-그다음 확인하세요.
-git rev-parse --short HEAD
 grep -n '^ultralytics' morai_ws/docker/final_ws/requirements.txt
