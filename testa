@@ -1,1 +1,28 @@
-bash run_highway.sh drive max_speed_kph:=25.0
+1. Ubuntu에서 최신 코드 받기
+cd ~/AutoVehicle/morai_ws
+git fetch origin
+git switch final_ws
+git pull --ff-only origin final_ws
+git rev-parse --short HEAD
+마지막 결과가 4083dea인지 확인합니다.
+2. 새 Docker 이미지 빌드 및 컨테이너 생성
+기존 컨테이너를 다시 시작하면 예전 이미지로 실행될 수 있으니, 새 컨테이너 이름을 지정하세요.
+cd ~/AutoVehicle/morai_ws/docker/final_ws
+bash run_highway.sh build
+export CONTAINER_NAME=morai-highway-84153
+bash run_highway.sh start
+bash run_highway.sh shell
+highway.env에서 CONTAINER_NAME을 지정하고 있다면 그 파일의 값도 morai-highway-84153으로 바꿔야 합니다. 새 이름을 쓰면 기존 컨테이너는 그대로 남습니다.
+3. 컨테이너 안에서 버전과 모델 로드 확인
+run_highway.sh shell로 들어간 컨테이너 안에서 버전과 Python 경로를 확인합니다.
+python -c "import sys, ultralytics; print('python=',sys.executable); print('ultralytics=',ultralytics.__version__); print('file=',ultralytics.__file__)"
+ultralytics=8.4.153, Python 경로가 /opt/morai-venv/ 아래인지 확인한 뒤, 신호등 모델을 직접 로드해 봅니다.
+python -c "import torch; from camera_perception.traffic_signal import register_cbam_model_layers; register_cbam_model_layers(torch); from ultralytics import YOLO; p='/opt/AutoVehicle/morai_ws/src/detection/camera_perception/models/best0917.pt'; m=YOLO(p); print('C2f_EMA_LOAD_OK', m.names)"
+C2f_EMA_LOAD_OK가 나오면 해당 가중치의 클래스 로드는 통과한 것입니다. 같은 Can't get attribute 'C2f_EMA' 오류가 계속 나면, 이전 컨테이너나 다른 Python 환경에서 실행 중일 가능성이 있으니 위 버전·경로 결과와 오류의 첫 traceback을 보내주세요.
+4. 주행 제어 없이 곡률 주행·신호등·정지선 확인
+모델 로드가 성공하면 컨테이너 안에서 실행합니다.
+roslaunch morai_bringup final_ws_curvature_signal.launch enable_control:=false max_speed_kph:=10.0
+enable_control:=false는 MORAI로 제어 명령을 보내지 않는 확인 모드입니다. 카메라 입력은 실제 MORAI 스트림이 필요하고, 테스트용 메시지를 rostopic pub으로 직접 만들 필요는 없습니다. 다른 컨테이너 셸에서 토픽을 확인하세요.
+rostopic echo -n 1 /detection/traffic_light
+rostopic echo -n 1 /perception/camera/stopline
+rostopic echo -n 1 /ctrl_cmd
