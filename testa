@@ -1,13 +1,10 @@
 cd ~/AutoVehicle/morai_ws
-git status -sb
+pwd
+git remote get-url origin
+git branch --show-current
 git fetch origin
-git pull --ff-only origin final_ws
-이후 아래 두 결과를 확인합니다.
 git rev-parse --short HEAD
-grep -n '^ultralytics' docker/final_ws/requirements.txt
-커밋이 4083dea 또는 그 이후이고 버전이 ultralytics==8.4.153이면 새 이미지로 다시 빌드하세요.
-bash docker/final_ws/run_highway.sh build
-빌드 후에는 기존 컨테이너 대신 새 이름을 사용해야 합니다.
-export CONTAINER_NAME=morai-highway-84153
-bash docker/final_ws/run_highway.sh start
-bash docker/final_ws/run_highway.sh shell
+git rev-parse --short origin/final_ws
+git ls-remote origin refs/heads/final_ws
+git show origin/final_ws:docker/final_ws/requirements.txt | grep '^ultralytics=='
+git status -sb
