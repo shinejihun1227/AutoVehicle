@@ -30,3 +30,9 @@ bash run_test.sh show
 roslaunch morai_bringup final_ws_integrated.launch \
   workspace_path:=/opt/AutoVehicle/morai_ws \
   enable_control:=false max_speed_kph:=25.0
+
+스피드 조절
+cd ~/AutoVehicle/morai_ws/docker/final_ws
+bash run_test.sh speed 5
+bash run_test.sh show
+bash run_test.sh monitor 5
