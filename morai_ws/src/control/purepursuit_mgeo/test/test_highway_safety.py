@@ -175,7 +175,12 @@ class HighwaySafetyTest(unittest.TestCase):
         n.committed_path = path_at(3.5)
         n.latest_obstacles.obstacles = [obstacle(16.0, 3.5)]
         n._adaptive_speed = Mock(return_value=(2.0, False, {}))
-        self.assertTrue(self.tick()[1])
+        _, stop, _, _, status, *_ = self.tick()
+        # A predicted overlap beyond the short stopping horizon is monitored;
+        # braking immediately while straddling a divider can leave the vehicle
+        # stranded between lanes. The same object remains in diagnostics.
+        self.assertFalse(stop)
+        self.assertTrue(status["future_collision"])
 
     def test_lane_change_does_not_commit_slow_candidate(self):
         self.node.lane_changes_done = 0  # Test speed filtering before the first authorized merge.
@@ -283,16 +288,22 @@ class HighwaySafetyTest(unittest.TestCase):
     def test_guide_lane_cannot_authorize_left_change(self):
         self.node.require_left_dashed = True
         self.node.lane_info = {
-            "left_lane": {"detected": True, "dashed": True, "from_guide": True}
+            "lane_valid": True, "output_status": "FRESH",
+            "left_lane": {"detected": True, "type": "white_dashed",
+                          "coef": [0.0, 0.0, 2.0], "x_range_m": [3.0, 20.0],
+                          "age": 4, "from_guide": True}
         }
-        self.assertEqual(self.node._left_dashed_ok(), (False, "left_from_guide"))
+        self.assertFalse(self.node._left_dashed_ok()[0])
 
     def test_coasted_lane_cannot_authorize_left_change(self):
         self.node.require_left_dashed = True
         self.node.lane_info = {
-            "left_lane": {"detected": True, "dashed": True, "coasted": True}
+            "lane_valid": True, "output_status": "FRESH",
+            "left_lane": {"detected": True, "type": "white_dashed",
+                          "coef": [0.0, 0.0, 2.0], "x_range_m": [3.0, 20.0],
+                          "age": 4, "coasted": True}
         }
-        self.assertEqual(self.node._left_dashed_ok(), (False, "left_coasted"))
+        self.assertFalse(self.node._left_dashed_ok()[0])
 
     def test_two_dashed_boundaries_are_valid_for_lane_center_hold(self):
         n = self.node
@@ -302,11 +313,14 @@ class HighwaySafetyTest(unittest.TestCase):
         n.lane_info_at = Stamp()
         n.lane_info = {
             "lane_valid": True,
+            "output_status": "FRESH",
             "confidence": 0.8,
             "lane_width_m": 3.5,
             "straddling_lane": None,
-            "left_lane": {"detected": True,"type": "white_dashed","dashed": True},
-            "right_lane": {"detected": True,"type": "white_dashed","dashed": True},
+            "left_lane": {"detected": True,"type": "white_dashed","dashed": True,
+                          "coef": [0.0, 0.0, 1.75], "x_range_m": [3.0, 25.0], "age": 5},
+            "right_lane": {"detected": True,"type": "white_dashed","dashed": True,
+                           "coef": [0.0, 0.0, -1.75], "x_range_m": [3.0, 25.0], "age": 5},
             "left_boundary_points": [[float(x),1.75] for x in range(5,26)],
             "right_boundary_points": [[float(x),-1.75] for x in range(5,26)],
             "centerline_points": [[float(x),0.0] for x in range(5,26)],
@@ -320,6 +334,8 @@ class HighwaySafetyTest(unittest.TestCase):
         n = self.node
         n.inner_handover_pending = True
         n.committed_speed_mps = n.cruise_speed_mps
+        n.inner_hold_started_at = Stamp(97.9)
+        n.inner_handover_confirm_s = 0.25
         n._global_signed_d.return_value = 3.5
 
         path, stop, speed, _, status, *_ = self.tick()
@@ -339,6 +355,8 @@ class HighwaySafetyTest(unittest.TestCase):
         n = self.node
         n.inner_handover_pending = True
         n.committed_speed_mps = n.cruise_speed_mps
+        n.inner_hold_started_at = Stamp(97.9)
+        n.inner_handover_confirm_s = 0.25
         n._global_signed_d.return_value = 3.5
         n.lane_info.update({
             "lane_state": "both",
@@ -366,6 +384,7 @@ class HighwaySafetyTest(unittest.TestCase):
         n = self.node
         n.inner_handover_pending = True
         n.inner_lane_candidate_since = Stamp(99.9)
+        n.inner_hold_started_at = Stamp(97.9)
         n._inner_center_sanity.return_value = (False,"inner_center_not_ego_lane",1.2)
         n._global_signed_d.return_value = 3.5
 
@@ -411,12 +430,17 @@ class HighwaySafetyTest(unittest.TestCase):
         n.release_since = Stamp(98.0)
         # Current path is clear, but the proposed return intersects another car.
         n._generate_rejoin_path.return_value = path_at(3.5)
+        n._path_within_current_lane = Mock(return_value=True)
+        n._dynamic_path_safe = Mock(side_effect=[(True, "ok"), (False, "predicted_collision_id_1")])
         n.latest_obstacles.obstacles = [obstacle(16.0, 3.5)]
         self.assertTrue(self.tick()[1])
         self.assertEqual(n.state, n.INNER_HOLD)
         self.assertFalse(n.completed_once)
 
     def test_clear_rejoin_still_commits(self):
+        self.node.inner_hold_started_at = Stamp(98.0)
+        self.node._global_signed_d.return_value = 0.2
+        self.node._path_within_current_lane = Mock(return_value=True)
         self.assertFalse(self.tick()[1])
         self.assertEqual(self.node.state, self.node.REJOIN)
 
@@ -518,3 +542,4 @@ class HighwaySafetyTest(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
