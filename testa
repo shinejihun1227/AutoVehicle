@@ -1,7 +1,2 @@
 cd ~/AutoVehicle/morai_ws/docker/final_ws
-sed -i '/^CONTAINER_NAME=/d' highway.env
-printf 'CONTAINER_NAME=morai-highway-153-7ef3e1f\n' >> highway.env
-bash run_highway.sh start
-bash run_test.sh models
-models 결과에 ultralytics 8.4.153, YOLO_OK best0917.pt, OFFLINE_SMOKE_PASS가 나오면 C2f_EMA 가중치 로딩까지 확인된 것입니다. 그다음 차량 제어 없이 교차로·곡률 기능을 띄워 보세요.
-bash run_test.sh monitor 2
+bash run_test.sh diagnose 2
