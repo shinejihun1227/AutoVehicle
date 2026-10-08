@@ -1,9 +1,9 @@
 cd ~/AutoVehicle
-cp morai_ws/docker/final_ws/check_highway_launch.py /tmp/check_highway_launch.before-sync-2.py
-git show HEAD:morai_ws/docker/final_ws/check_highway_launch.py > /tmp/check_highway_launch.from-head.py
-cp /tmp/check_highway_launch.from-head.py morai_ws/docker/final_ws/check_highway_launch.py
-git status --short -- morai_ws/docker/final_ws/check_highway_launch.py
-마지막 명령에서 출력이 없을 때만 이어서 실행하세요.
-git pull --ff-only origin final_ws
-git show HEAD:morai_ws/docker/final_ws/requirements.txt | grep '^ultralytics=='
+git -c core.autocrlf=false status --short -- morai_ws/docker/final_ws/check_highway_launch.py
+출력이 없으면 아래처럼 해당 pull에만 줄바꿈 변환을 끄고 진행하세요.
+git -c core.autocrlf=false pull --ff-only origin final_ws
 grep -n '^ultralytics' morai_ws/docker/final_ws/requirements.txt
+여기서도 M이 나오면 pull을 반복하지 말고 아래 세 명령의 결과를 보내주세요. 어떤 줄바꿈 설정이 적용되는지 확인해 정확히 고치겠습니다.
+git config --show-origin --get core.autocrlf
+git check-attr text eol filter -- morai_ws/docker/final_ws/check_highway_launch.py
+git hash-object --no-filters morai_ws/docker/final_ws/check_highway_launch.py
