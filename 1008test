@@ -55,13 +55,12 @@ grep -n -B 60 -A 80 -E 'REGRESSION_START turn|FAIL:|ERROR:|Traceback|REGRESSION_
 
 
 
-cd ~/AutoVehicle/morai_ws
-
-git diff --binary > ~/morai-ws-before-finalws-pull.patch
-git stash push -m "before-final_ws-update"
-git pull --ff-only origin final_ws
-git rev-parse --short HEAD
-마지막 명령이 94c301d로 시작하는지 확인하세요. 이후 빌드하면 됩니다.
+git -C ~/AutoVehicle/morai_ws rev-parse --short HEAD
+94c301d로 시작해야 업데이트된 버전입니다. 이전 값인 1215142가 나오면 pull이 아직 적용되지 않은 상태예요.
+그다음 빌드 로그에서 실제 오류를 뽑아주세요.
+grep -n -B 35 -A 70 -E 'FAIL:|ERROR:|Traceback|FAILED \(|Ran [0-9]+ tests|REGRESSION_(START|FAIL)|did not complete successfully' \
+  ~/morai-highway-build.log | tail -n 220
+로그 파일이 없다고 나오면 빌드를 로그에 저장해 다시 실행하세요.
 cd ~/AutoVehicle/morai_ws/docker/final_ws
 set -o pipefail
 BUILDKIT_PROGRESS=plain bash run_highway.sh build 2>&1 | tee ~/morai-highway-build.log
