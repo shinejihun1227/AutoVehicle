@@ -138,7 +138,8 @@ class PlanTransportTest(unittest.TestCase):
         with patch.object(NODE, 'load_mgeo_path', return_value=[]):
             n = NODE.HighwayLaneStrategyNode()
         n.base_trajectory_topic = '/avoidance_path_manager/trajectory'
-        n._base_trajectory_cb(NS(data=trajectory_payload(path_at(y=2.0), True, 0., 'STOP_NO_SAFE_PATH')))
+        with patch.object(NODE.rospy, 'get_time', return_value=100.0):
+            n._base_trajectory_cb(NS(data=trajectory_payload(path_at(y=2.0), True, 0., 'STOP_NO_SAFE_PATH')))
         n._base_stop_cb(NS(data=False))
         n._base_path_cb(path_at(y=0.0))
         self.assertTrue(n.base_stop)
@@ -173,3 +174,4 @@ class PlanTransportTest(unittest.TestCase):
 
 
 if __name__ == '__main__': unittest.main()
+
