@@ -71,3 +71,10 @@ git -C ~/AutoVehicle/morai_ws fetch origin
 git -C ~/AutoVehicle/morai_ws rev-parse --short HEAD
 git -C ~/AutoVehicle/morai_ws rev-parse --short origin/final_ws
 grep -n -B 25 -A 50 -E 'FAIL:|ERROR:|Traceback|FAILED \(|REGRESSION_(START|FAIL)' ~/morai-highway-build.log | tail -n 160
+
+
+cd ~/AutoVehicle/morai_ws
+git status -sb
+git pull --ff-only origin final_ws
+git rev-parse --short HEAD
+git rev-parse --short origin/final_ws
