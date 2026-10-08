@@ -25,3 +25,8 @@ bash run_highway.sh build
 bash run_highway.sh start
 bash run_highway.sh test
 bash run_test.sh show
+
+통합런치
+roslaunch morai_bringup final_ws_integrated.launch \
+  workspace_path:=/opt/AutoVehicle/morai_ws \
+  enable_control:=false max_speed_kph:=25.0
