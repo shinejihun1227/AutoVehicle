@@ -51,3 +51,21 @@ roslaunch morai_bringup final_ws_integrated.launch \
 
 
 grep -n -B 60 -A 80 -E 'REGRESSION_START turn|FAIL:|ERROR:|Traceback|REGRESSION_FAIL' ~/morai-highway-build.log
+
+
+
+
+cd ~/AutoVehicle/morai_ws
+git status -sb
+git branch --show-current
+git rev-parse HEAD
+git fetch origin
+git rev-parse origin/final_ws
+git status에 수정 사항이 없고 origin/final_ws가 a8c9cd2로 시작하면 다음처럼 업데이트하세요.
+git switch final_ws
+git pull --ff-only origin final_ws
+git rev-parse HEAD
+그다음 다시 빌드합니다.
+cd ~/AutoVehicle/morai_ws/docker/final_ws
+set -o pipefail
+BUILDKIT_PROGRESS=plain bash run_highway.sh build 2>&1 | tee ~/morai-highway-build.log
