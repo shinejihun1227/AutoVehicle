@@ -29,6 +29,7 @@ class AdaptiveTest(unittest.TestCase):
         params = {'~max_speed_kph': 30., '~use_target_speed_override': True, '~enable_merge_gate': True}
         ros = Mock()
         ros.get_param.side_effect = lambda key, default=None: params.get(key, default)
+        ros.get_time.side_effect = lambda: self.now
         ros.Time.now.side_effect = lambda: NS(to_sec=lambda: self.now)
         modules = {'rospy': ros, 'geometry_msgs.msg': NS(PointStamped=Message, PoseStamped=Message),
                    'morai_msgs.msg': NS(CtrlCmd=Message), 'nav_msgs.msg': NS(Odometry=Message, Path=Message),
@@ -44,6 +45,7 @@ class AdaptiveTest(unittest.TestCase):
 
     def path(self, start=0., y=0.):
         path = Message()
+        path.header.stamp = NS(to_sec=lambda: self.now)
         for x in range(21):
             p = Message()
             p.pose.position.x, p.pose.position.y = start + x, y
@@ -56,8 +58,14 @@ class AdaptiveTest(unittest.TestCase):
         self.node._stop_cb(Message(stop))
         self.node._merge_stop_cb(Message(merge))
         self.node._target_speed_cb(Message(speed_limit))
-        self.node._odom_cb(NS(pose=NS(pose=NS(position=NS(x=x, y=0.), orientation=NS(x=0., y=0., z=0., w=1.))),
-                              twist=NS(twist=NS(linear=NS(x=0., y=0.)))))
+        self.node._odom_cb(NS(
+            header=NS(frame_id='map', stamp=NS(to_sec=lambda: self.now)),
+            pose=NS(pose=NS(
+                position=NS(x=x, y=0.),
+                orientation=NS(x=0., y=0., z=0., w=1.),
+            )),
+            twist=NS(twist=NS(linear=NS(x=0., y=0.))),
+        ))
         self.node._control_cb(None)
         return self.node.command_pub.publish.call_args.args[0]
 
@@ -108,3 +116,4 @@ class AdaptiveTest(unittest.TestCase):
 
 if __name__ == '__main__':
     unittest.main()
+
