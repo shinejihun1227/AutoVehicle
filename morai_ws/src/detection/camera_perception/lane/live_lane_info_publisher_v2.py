@@ -549,6 +549,8 @@ class LaneOutputStabilizer:
             else:
                 out = {
                     "timestamp": now,
+                    "observation_time_source": "camera_receive_wall",
+                    "observation_wall_timestamp": now,
 
                     # 좌표계
                     "frame_id": FRAME_ID,
@@ -664,6 +666,8 @@ class LaneOutputStabilizer:
         # ==================================================================
         return {
             "timestamp": now,
+            "observation_time_source": "camera_receive_wall",
+            "observation_wall_timestamp": now,
 
             "frame_id": FRAME_ID,
             "coordinate_convention": {
@@ -827,3 +831,4 @@ def main(argv=None):
 
 if __name__ == "__main__":
     main()
+
