@@ -48,3 +48,14 @@ bash run_highway.sh shell
 roslaunch morai_bringup final_ws_integrated.launch \
   workspace_path:=/opt/AutoVehicle/morai_ws \
   enable_control:=false max_speed_kph:=5.0
+
+
+cd ~/AutoVehicle/morai_ws/docker/final_ws
+
+bash run_highway.sh build
+echo "build 종료 코드: $?"
+
+bash run_highway.sh start
+echo "start 종료 코드: $?"
+
+docker --context default ps -a --filter name=morai-highway
