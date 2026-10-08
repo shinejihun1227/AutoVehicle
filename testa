@@ -1,3 +1,3 @@
 cd ~/AutoVehicle/morai_ws/docker/final_ws
 bash run_highway.sh shell
-tail -n 80 "$(ls -t /root/.ros/log/*/highway_lane_camera-*.log | head -n 1)
+tail -n 80 /root/.ros/log/latest/highway_lane_camera-*.log
