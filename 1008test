@@ -78,3 +78,6 @@ git status -sb
 git pull --ff-only origin final_ws
 git rev-parse --short HEAD
 git rev-parse --short origin/final_ws
+
+git stash push -m "before-final_ws-update"
+git pull --ff-only origin final_ws
