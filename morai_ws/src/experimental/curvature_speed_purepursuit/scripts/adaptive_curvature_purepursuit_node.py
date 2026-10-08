@@ -274,11 +274,20 @@ class AdaptiveCurvaturePurePursuit:
         )
 
     def _odom_cb(self, msg: Odometry) -> None:
-        values = (msg.pose.pose.position.x, msg.pose.pose.position.y, msg.pose.pose.orientation.x,
-                  msg.pose.pose.orientation.y, msg.pose.pose.orientation.z, msg.pose.pose.orientation.w,
-                  msg.twist.twist.linear.x, msg.twist.twist.linear.y)
-        if (msg.header.frame_id != self.map_frame or not all(math.isfinite(float(v)) for v in values)
-                or not -0.05 <= rospy.get_time()-msg.header.stamp.to_sec() <= 0.5):
+        header = getattr(msg, "header", None)
+        stamp = getattr(header, "stamp", None)
+        try:
+            age = float(rospy.get_time()) - float(stamp.to_sec())
+            values = (msg.pose.pose.position.x, msg.pose.pose.position.y,
+                      msg.pose.pose.orientation.x, msg.pose.pose.orientation.y,
+                      msg.pose.pose.orientation.z, msg.pose.pose.orientation.w,
+                      msg.twist.twist.linear.x, msg.twist.twist.linear.y)
+        except (AttributeError, TypeError, ValueError, OverflowError):
+            self.latest_odom_wall_time = None
+            return
+        if (header.frame_id != self.map_frame
+                or not all(math.isfinite(float(v)) for v in values)
+                or not math.isfinite(age) or not -0.05 <= age <= 0.5):
             self.latest_odom_wall_time = None
             return
         self.latest_odom = msg
@@ -335,7 +344,17 @@ class AdaptiveCurvaturePurePursuit:
         self.trajectory_reason = reason
 
     def _accept_active_path(self, msg: Path) -> None:
-        if (msg.header.frame_id != self.map_frame or not -0.05 <= rospy.get_time()-msg.header.stamp.to_sec() <= self.active_path_timeout_sec):
+        header = getattr(msg, "header", None)
+        stamp = getattr(header, "stamp", None)
+        try:
+            age = float(rospy.get_time()) - float(stamp.to_sec())
+        except (AttributeError, TypeError, ValueError, OverflowError):
+            self.active_path_received = False
+            rospy.logwarn_throttle(2.0, "active path ignored: missing or invalid timestamp")
+            return
+        if (header.frame_id != self.map_frame or not math.isfinite(age)
+                or not -0.05 <= age <= self.active_path_timeout_sec):
+            self.active_path_received = False
             rospy.logwarn_throttle(
                 2.0,
                 "active path frame=%s ignored; expected %s",
@@ -652,3 +671,4 @@ if __name__ == "__main__":
         rospy.spin()
     except rospy.ROSInterruptException:
         pass
+
