@@ -21,11 +21,11 @@ class LaneInfoIntegrationTest(unittest.TestCase):
         with patch.dict(sys.modules, modules):
             spec.loader.exec_module(module)
 
-        def lane(y):
+        def lane(y, lane_id):
             return NS(coef=np.array([0., 0., y]), x_range=(3., 30.), age=5, n_points=100,
-                      name='white_dash', is_dashed=True, track_id=1)
+                      name='white_dash', is_dashed=True, track_id=1, lane_id=lane_id)
 
-        left, right = lane(1.65), lane(-1.65)
+        left, right = lane(1.65, -1), lane(-1.65, 1)
         res = NS(ego_left=left, ego_right=right, lanes=[left, right], infer_ms=20., post_ms=5.,
                  lateral_error=lambda: 0., heading_error=lambda: 0., stopline_dist=12.)
         stabilizer = module.LaneOutputStabilizer()
@@ -42,3 +42,4 @@ class LaneInfoIntegrationTest(unittest.TestCase):
         invalid = stabilizer.update(missing, now=110.)
         self.assertFalse(invalid['lane_valid'])
         self.assertEqual(invalid['centerline_points'], [])
+
