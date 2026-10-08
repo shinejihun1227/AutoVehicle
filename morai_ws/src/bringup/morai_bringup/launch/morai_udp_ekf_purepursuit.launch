@@ -121,8 +121,7 @@
     <include file="$(find purepursuit_mgeo)/launch/purepursuit_mgeo.launch">
       <arg name="workspace_path" value="$(arg workspace_path)" />
       <arg name="path_file" value="$(arg path_file)" />
-      <arg name="enable_purepursuit" default="true" />
-  <arg name="enable_control" value="$(arg enable_control)" />
+      <arg name="enable_control" value="$(arg enable_control)" />
       <arg name="wheelbase_m" value="$(arg wheelbase_m)" />
       <arg name="command_topic" value="$(arg command_topic)" />
       <arg name="longl_cmd_type" value="$(arg longl_cmd_type)" />
@@ -180,3 +179,4 @@
   </group>
   </group>
 </launch>
+
