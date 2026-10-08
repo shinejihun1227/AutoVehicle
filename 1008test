@@ -51,11 +51,8 @@ roslaunch morai_bringup final_ws_integrated.launch \
 
 
 cd ~/AutoVehicle/morai_ws/docker/final_ws
-
-bash run_highway.sh build
-echo "build 종료 코드: $?"
-
-bash run_highway.sh start
-echo "start 종료 코드: $?"
-
-docker --context default ps -a --filter name=morai-highway
+set -o pipefail
+BUILDKIT_PROGRESS=plain bash run_highway.sh build 2>&1 | tee ~/morai-highway-build.log
+끝나면 다음 명령으로 오류 부분을 확인해 보내주세요.
+grep -n -E 'error:|ERROR:|FAILED|Traceback|No such|Could not find' ~/morai-highway-build.log | tail -40
+tail -n 100 ~/morai-highway-build.log
