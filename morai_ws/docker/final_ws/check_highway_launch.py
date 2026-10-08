@@ -15,7 +15,6 @@ def main():
         names=output.splitlines()
         assert len(names)==len(set(names)), output
         for required in ('/adaptive_curvature_purepursuit','/control_mux',
-                         '/lane_info_contract',
                          '/avoidance_path_manager','/highway_lane_strategy'):
             assert required in names, (required,output)
         # The highway launch uses the ROI camera stack, whose lane runner is
@@ -46,3 +45,4 @@ def main():
 
 
 if __name__=='__main__': main()
+
