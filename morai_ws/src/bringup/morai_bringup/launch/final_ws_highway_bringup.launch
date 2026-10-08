@@ -11,6 +11,7 @@
   <arg name="control_remote_port" default="9093" />
   <arg name="control_source_port" default="9094" />
   <arg name="enable_control" default="false" />
+  <arg name="enable_obstacle_avoidance" default="true" />
   <arg name="max_speed_kph" default="7.2" />
   <arg name="target_speed_mps" default="$(eval float(arg('max_speed_kph')) / 3.6)" />
   <arg name="lateral_accel_limit_mps2" default="1.0" />
@@ -24,6 +25,8 @@
   <arg name="lane_info_topic" default="/perception/camera/lane_info" />
   <arg name="highway_environment_topic" default="/perception/camera/highway_environment" />
   <arg name="highway_request_topic" default="/planning/highway_lane_change_request" />
+  <!-- ROI camera publishes ObjectInfoArray here; the mux TrafficLight input is separate. -->
+  <arg name="traffic_light_mux_topic" default="/detection/roi_traffic_light_unused" />
   <arg name="enable_roundabout_merge_gate" default="true" />
   <arg name="merge_request_topic" default="/planning/merge_request" />
   <arg name="publish_lidar_tf" default="false" />
@@ -49,7 +52,9 @@
     <arg name="roi_lidar_host_port" value="$(arg roi_lidar_host_port)" />
     <arg name="roi_lidar_port" value="$(arg roi_lidar_port)" />
     <arg name="enable_nominal_purepursuit" value="false" />
-    <arg name="use_curvature_speed_planner" value="true" />
+    <!-- The adaptive managed controller below is the sole /control/ctrl_cmd
+         and /experimental/curvature_progress publisher in this launch. -->
+    <arg name="use_curvature_speed_planner" value="false" />
     <arg name="use_roi_sensor_stack" value="true" />
     <arg name="enable_roi_camera" value="true" />
     <arg name="enable_roi_lidar" value="true" />
@@ -59,6 +64,7 @@
     <arg name="enable_lane_fallback" value="false" />
     <arg name="enable_turn_signal" value="false" />
     <arg name="test_without_turn_signals" value="true" />
+    <arg name="traffic_light_mux_topic" value="$(arg traffic_light_mux_topic)" />
   </include>
   <include file="$(find purepursuit_mgeo)/launch/frenet_avoidance_debug.launch">
     <arg name="path_file" value="$(arg path_file)" />
@@ -128,6 +134,7 @@
     <param name="plan_status_topic" value="/bypass_lane_guard/plan_status" />
     <param name="use_atomic_plan_status" value="true" />
     <param name="require_atomic_plan_path" value="true" />
+    <param name="enable_obstacle_avoidance" value="$(arg enable_obstacle_avoidance)" />
     <param name="allow_lane_change_control" value="false" />
     <param name="rate_hz" value="10.0" />
     <param name="normal_back_m" value="3.0" />

@@ -1,0 +1,9 @@
+<launch>
+  <arg name="status_timeout_s" default="1.0" />
+  <arg name="report_rate_hz" default="2.0" />
+  <node pkg="morai_bringup" type="stop_cause_monitor.py"
+        name="final_ws_stop_cause_monitor" output="screen">
+    <param name="status_timeout_s" value="$(arg status_timeout_s)" />
+    <param name="report_rate_hz" value="$(arg report_rate_hz)" />
+  </node>
+</launch>

@@ -25,10 +25,11 @@ It never publishes /ctrl_cmd.
 
 from __future__ import annotations
 
+import copy
 import json
 import math
-import time
 import threading
+import time
 from collections import deque
 from dataclasses import dataclass
 from typing import List, Optional, Sequence, Tuple
@@ -222,6 +223,9 @@ class HighwayLaneStrategyNode:
         self.inner_lane_invalid_grace_s = float(
             rospy.get_param("~inner_lane_invalid_grace_s", 1.20)
         )
+        self.inner_lane_grace_speed_mps = max(
+            0.0, float(rospy.get_param("~inner_lane_grace_speed_mps", 1.50))
+        )
         self.wait_lane_hold_grace_s = float(
             rospy.get_param("~wait_lane_hold_grace_s", 2.0)
         )
@@ -384,6 +388,9 @@ class HighwayLaneStrategyNode:
         self.collision_lat_margin_m = float(rospy.get_param("~collision_lat_margin_m", 0.35))
         self.dynamic_prediction_horizon_s = float(
             rospy.get_param("~dynamic_prediction_horizon_s", 5.0)
+        )
+        self.dynamic_path_sample_spacing_m = max(
+            0.1, float(rospy.get_param("~dynamic_path_sample_spacing_m", 0.5))
         )
         self.committed_stop_horizon_s = float(
             rospy.get_param("~committed_stop_horizon_s", 2.0)
@@ -1744,7 +1751,47 @@ class HighwayLaneStrategyNode:
         return front, rear, considered
 
     def _gap_safe_for_speed(self, candidate_speed: float, lane_width: float, change_length: float) -> Tuple[bool, str, dict]:
-        t = (self.change_start_m + change_length) / max(candidate_speed, 0.5)
+        distance = max(0.0, self.change_start_m + change_length)
+        ego_speed = max(0.0, float(self._odom_pose()[3]))
+        target_speed = max(0.0, float(candidate_speed))
+        accel = max(0.05, self.speed_rise_mps2)
+        decel = max(0.05, self.speed_fall_mps2)
+
+        # Estimate maneuver completion using the controller's acceleration and
+        # braking limits. Assuming an instantaneous jump to candidate_speed
+        # makes a stopped/slow ego look safe to a fast rear vehicle.
+        remaining = distance
+        speed = ego_speed
+        t = 0.0
+        ego_displacement = 0.0
+        samples = [(0.0, 0.0)]
+        dt = 0.1
+        while remaining > 1e-6 and t < 120.0:
+            rate = accel if speed < target_speed else decel if speed > target_speed else 0.0
+            next_speed = speed
+            if rate > 0.0:
+                delta = rate * dt
+                next_speed = min(target_speed, speed + delta) if speed < target_speed else max(target_speed, speed - delta)
+            step_distance = 0.5 * (speed + next_speed) * dt
+            if step_distance <= 1e-6:
+                # A zero target speed cannot complete a positive-distance lane
+                # change; use a conservative crawl for the gap prediction.
+                next_speed = max(speed, 0.5)
+                step_distance = next_speed * dt
+            if step_distance > remaining:
+                dt_step = remaining / max(0.5 * (speed + next_speed), 0.5)
+                t += dt_step
+                ego_displacement += remaining
+                samples.append((t, ego_displacement))
+                remaining = 0.0
+            else:
+                t += dt
+                ego_displacement += step_distance
+                remaining -= step_distance
+                speed = next_speed
+                samples.append((t, ego_displacement))
+
+        t = max(t, 0.1)
         search_range = max(
             self.gap_search_range_m,
             self.change_start_m + change_length
@@ -1753,18 +1800,27 @@ class HighwayLaneStrategyNode:
         _, _, considered = self._target_lane_neighbors(
             lane_width, search_range
         )
-        diag = {"candidate_speed": round(candidate_speed, 2), "t_change": round(t, 2), "search_range_m": round(search_range, 2), "objects": [o.oid for o in considered]}
+        diag = {"candidate_speed": round(candidate_speed, 2), "ego_start_speed": round(ego_speed, 2), "ego_distance_m": round(distance, 2), "t_change": round(t, 2), "search_range_m": round(search_range, 2), "objects": [o.oid for o in considered]}
+
+        def minimum_relative_gap(initial_gap: float, other_speed: float, ego_is_rear: bool) -> float:
+            minimum = initial_gap
+            for sample_t, ego_x in samples[1:]:
+                other_x = other_speed * sample_t
+                gap = initial_gap + (ego_x - other_x if ego_is_rear else other_x - ego_x)
+                minimum = min(minimum, gap)
+            return minimum
 
         # Inspect every vehicle. The nearest rear may be slow while a farther,
         # faster vehicle catches us before the lateral shift is complete.
         for front in (o for o in considered if o.x >= 0.0):
             rel_now = front.x - (self.vehicle_center_from_base_m + 0.5*self.vehicle_length_m) - 0.5*front.length
             rel_future = rel_now + (front.vx - candidate_speed) * t
+            min_gap = minimum_relative_gap(rel_now, front.vx, False)
             required = max(self.front_min_gap_m, self.time_headway_s * candidate_speed)
             closing = candidate_speed - front.vx
             ttc = rel_now / closing if closing > 0.05 and rel_now > 0.0 else float("inf")
-            diag["front"] = {"id": front.oid, "gap": round(rel_now,2), "future_gap": round(rel_future,2), "v": round(front.vx,2), "ttc": None if not math.isfinite(ttc) else round(ttc,2)}
-            if rel_now < required or rel_future < required * 0.75:
+            diag["front"] = {"id": front.oid, "gap": round(rel_now,2), "future_gap": round(rel_future,2), "min_predicted_gap": round(min_gap,2), "v": round(front.vx,2), "ttc": None if not math.isfinite(ttc) else round(ttc,2)}
+            if rel_now < required or min_gap < required * 0.75:
                 return False, "front_gap", diag
             if ttc < self.min_ttc_s:
                 return False, "front_ttc", diag
@@ -1774,11 +1830,12 @@ class HighwayLaneStrategyNode:
             rel_now = -rear.x - 0.5*rear.length + ego_rear_from_base
             # Positive means separation behind ego; relative separation evolves by ego - rear speed.
             rel_future = rel_now + (candidate_speed - rear.vx) * t
+            min_gap = minimum_relative_gap(rel_now, rear.vx, True)
             required = max(self.rear_min_gap_m, self.time_headway_s * max(rear.vx, 0.0))
             closing = rear.vx - candidate_speed
             ttc = rel_now / closing if closing > 0.05 and rel_now > 0.0 else float("inf")
-            diag["rear"] = {"id": rear.oid, "gap": round(rel_now,2), "future_gap": round(rel_future,2), "v": round(rear.vx,2), "ttc": None if not math.isfinite(ttc) else round(ttc,2)}
-            if rel_now < required or rel_future < required * 0.75:
+            diag["rear"] = {"id": rear.oid, "gap": round(rel_now,2), "future_gap": round(rel_future,2), "min_predicted_gap": round(min_gap,2), "v": round(rear.vx,2), "ttc": None if not math.isfinite(ttc) else round(ttc,2)}
+            if rel_now < required or min_gap < required * 0.75:
                 return False, "rear_gap", diag
             if ttc < self.min_ttc_s:
                 return False, "rear_ttc", diag
@@ -1832,30 +1889,46 @@ class HighwayLaneStrategyNode:
             horizon_arc_m if max_arc_m is None else min(max_arc_m, horizon_arc_m)
         )
 
-        # A rear vehicle cannot be avoided by braking. Rear traffic is checked
-        # before commitment by the dedicated gap/TTC gate. Once a path is
-        # committed, ignore objects whose centers remain behind the current
-        # base_link even if an oversized tracked box reaches the rear bumper.
+        # Keep rear traffic in the committed-path prediction. A fast rear
+        # vehicle may catch the ego while the lateral transition is still in
+        # progress; objects already passed by the ego naturally remain clear
+        # because their predicted relative separation keeps increasing.
+        shifting_lanes = self.state in (self.LANE_CHANGE, self.REJOIN)
         ego_rear_x = self.vehicle_center_from_base_m - 0.5*self.vehicle_length_m
         obs = []
         for o in self.latest_obstacles.obstacles:
             dx0 = float(o.center_x_map) - ex
             dy0 = float(o.center_y_map) - ey
             lon0 = math.cos(ego_yaw)*dx0 + math.sin(ego_yaw)*dy0
-            if self.state in (self.LANE_CHANGE, self.INNER_HOLD, self.REJOIN) and lon0 < 0.0:
-                continue
             obstacle_front_x = lon0 + 0.5*max(0.5, float(o.length))
-            if obstacle_front_x <= ego_rear_x:
+            if not shifting_lanes and (lon0 < 0.0 or obstacle_front_x <= ego_rear_x):
                 continue
             obs.append(o)
-        for i, (px, py) in enumerate(points):
-            if arc[i] > effective_max_arc_m:
-                break
-            p0 = points[max(0, i-1)]
-            p1 = points[min(len(points)-1, i+1)]
-            yaw = ego_yaw if i == 0 else math.atan2(p1[1]-p0[1], p1[0]-p0[0])
+        # PathManager and test/replay inputs may contain sparse vertices. Check
+        # the swept path at a bounded spatial interval so an obstacle between
+        # two vertices cannot disappear from the collision prediction.
+        sample_end_m = min(arc[-1], effective_max_arc_m)
+        sample_arcs = []
+        sample_s = 0.0
+        while sample_s < sample_end_m:
+            sample_arcs.append(sample_s)
+            sample_s += self.dynamic_path_sample_spacing_m
+        sample_arcs.append(sample_end_m)
+        segment = 0
+        for sample_s in sample_arcs:
+            while segment + 1 < len(arc) - 1 and arc[segment + 1] < sample_s:
+                segment += 1
+            segment_length = arc[segment + 1] - arc[segment]
+            ratio = (
+                0.0 if segment_length <= 1e-6
+                else clamp((sample_s - arc[segment]) / segment_length, 0.0, 1.0)
+            )
+            start, end = points[segment], points[segment + 1]
+            px = start[0] + ratio * (end[0] - start[0])
+            py = start[1] + ratio * (end[1] - start[1])
+            yaw = ego_yaw if sample_s <= 1e-6 else math.atan2(end[1]-start[1], end[0]-start[0])
             c, s = math.cos(yaw), math.sin(yaw)
-            t = arc[i] / max(candidate_speed, 0.5)
+            t = sample_s / max(candidate_speed, 0.5)
             ego_cx = px + self.vehicle_center_from_base_m*c
             ego_cy = py + self.vehicle_center_from_base_m*s
             for o in obs:
@@ -2244,10 +2317,14 @@ class HighwayLaneStrategyNode:
             path = None
             stop = True
             status["reason"] = "trajectory_path_too_short"
+        # Never rewrite the upstream path's source timestamp. The stamped
+        # output is a new control decision; its freshness must not leak back
+        # into the cached input path.
+        output_path = copy.deepcopy(path) if path is not None else RosPath()
         if path is not None:
-            path.header.stamp = now
-            if not path.header.frame_id:
-                path.header.frame_id = self.map_frame
+            output_path.header.stamp = now
+            if not output_path.header.frame_id:
+                output_path.header.frame_id = self.map_frame
         else:
             stop = True
         if (
@@ -2275,7 +2352,6 @@ class HighwayLaneStrategyNode:
             speed_out = self._limit_speed_rate(
                 0.0 if stop else speed, dt, upper_speed_mps=follow_cap
             )
-        output_path = path if path is not None else RosPath()
         output_path.header.stamp = now
         output_path.header.frame_id = self.map_frame
         self.trajectory_seq = (self.trajectory_seq + 1) & 0xFFFFFFFF
@@ -2922,6 +2998,11 @@ class HighwayLaneStrategyNode:
                 )
             else:
                 adaptive, emergency, follow = 0.0, False, {}
+            if lane_fallback and not lane_grace and not emergency:
+                # Once the last verified lane-centre path is being carried
+                # through a camera dropout, keep following it at the configured
+                # crawl cap until fresh lane geometry returns.
+                adaptive = min(adaptive, self.inner_lane_grace_speed_mps)
 
             if emergency:
                 stop = True
