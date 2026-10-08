@@ -3,3 +3,7 @@ git fetch origin final_ws
 git switch final_ws
 git pull --ff-only origin final_ws
 git rev-parse --short HEAD
+
+
+cd ~/AutoVehicle/morai_ws/docker/final_ws
+bash run_highway.sh build
