@@ -55,18 +55,10 @@ grep -n -B 60 -A 80 -E 'REGRESSION_START turn|FAIL:|ERROR:|Traceback|REGRESSION_
 
 
 
-cd ~/AutoVehicle/morai_ws
-git fetch origin
-git switch final_ws
-git status -sb
-git status에 M으로 표시된 수정 파일이 있으면 먼저 보관하세요.
-git stash push -m "before-latest-final_ws-update"
-그다음 원격 최신 코드를 적용하고 버전을 확인합니다.
-git pull --ff-only origin final_ws
-git rev-parse --short HEAD
-git rev-parse --short origin/final_ws
-
-
-cd ~/AutoVehicle/morai_ws/docker/final_ws
-set -o pipefail
-BUILDKIT_PROGRESS=plain bash run_highway.sh build 2>&1 | tee ~/morai-highway-build-0671aec.log
+최신 코드 0671aec로 빌드한 것이 맞습니다. 다만 회귀검사 curvature의 32개 테스트 중 8개가 실패했고, 모두 경로 메시지의 header.stamp가 None인데 노드가 to_sec()를 호출해서 생긴 오류입니다. Docker나 pull 문제가 아니라 테스트 입력과 타임스탬프 검증 문제예요. 경로 타임스탬프를 검사하는 노드 코드
+테스트가 유효한 경로를 보내도록 fixture에 현재 시각을 넣어야 합니다. Ubuntu에서 파일을 여세요.
+nano ~/AutoVehicle/morai_ws/src/experimental/curvature_speed_purepursuit/test/test_adaptive_node.py
+path() 함수에서 path = Message() 바로 다음 줄에 추가하세요.
+path.header.stamp = NS(to_sec=lambda: self.now)
+그리고 setUp()에 ros = Mock()이 있다면, 그 아래에 이것도 추가하세요.
+ros.get_time.side_effect = lambda: self.now
