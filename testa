@@ -1,10 +1,8 @@
-cd ~/AutoVehicle/morai_ws
-pwd
-git remote get-url origin
-git branch --show-current
-git fetch origin
+cd ~/AutoVehicle
+git stash push -m "save-checker-before-pull" -- morai_ws/docker/final_ws/check_highway_launch.py
+git pull --ff-only origin final_ws
+보관한 수정은 stash에 남고, 다른 미추적 파일은 건드리지 않습니다. 이어서 확인하세요.
 git rev-parse --short HEAD
-git rev-parse --short origin/final_ws
-git ls-remote origin refs/heads/final_ws
-git show origin/final_ws:docker/final_ws/requirements.txt | grep '^ultralytics=='
-git status -sb
+grep -n '^ultralytics' morai_ws/docker/final_ws/requirements.txt
+버전이 ultralytics==8.4.153으로 바뀐 것을 확인한 다음 다시 빌드하면 됩니다.
+bash ~/AutoVehicle/morai_ws/docker/final_ws/run_highway.sh build
