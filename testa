@@ -12,3 +12,16 @@ python -c "import torch; from camera_perception.traffic_signal import register_c
 C2f_EMA_LOAD_OK가 나오면 모델 로드는 통과한 것입니다. 이어 MORAI 시뮬레이터를 켜고, 같은 컨테이너 셸에서 제어 명령 전송을 끈 상태로 기능을 확인하세요.
 roslaunch morai_bringup final_ws_curvature_signal.launch enable_control:=false max_speed_kph:=10.0
 아직 enable_control:=true로 주행시키지는 마세요. 모델 로드 결과나 오류가 나오면 그 화면을 보내주세요.
+
+
+exit
+cd ~/AutoVehicle/morai_ws
+git rev-parse --short HEAD
+grep -n '^ultralytics' docker/final_ws/requirements.txt
+정상이라면 커밋이 4083dea 또는 그 이후이고, 버전 줄이 ultralytics==8.4.153이어야 합니다.
+- 버전 줄이 8.4.138이면, Ubuntu 저장소에 아직 최신 코드가 없는 상태입니다. git status --short 결과를 먼저 확인한 다음 pull해야 합니다. 수정 중인 파일이 있으면 초기화하거나 삭제하지 마세요.
+- 저장소에는 8.4.153인데 컨테이너에서는 8.4.138이면, 기존 컨테이너가 예전 이미지로 실행 중일 가능성이 큽니다. 새 컨테이너 이름으로 다시 시작하세요.
+bash docker/final_ws/run_highway.sh build
+export CONTAINER_NAME=morai-highway-84153
+bash docker/final_ws/run_highway.sh start
+bash docker/final_ws/run_highway.sh shell
