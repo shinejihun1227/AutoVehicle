@@ -1,8 +1,8 @@
 # Python 3.8 / ROS Noetic compatibility baseline; not a full transitive lock.
-# best0902.pt records Ultralytics 8.4.138 in its checkpoint metadata.
+# The signal checkpoint best0917.pt was trained with Ultralytics 8.4.153.
 torch==2.4.1
 torchvision==0.19.1
-ultralytics==8.4.138
+ultralytics==8.4.153
 numpy==1.24.4
 scipy==1.10.1
 opencv-python==4.10.0.84
