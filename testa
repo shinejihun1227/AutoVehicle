@@ -1,16 +1,9 @@
 cd ~/AutoVehicle
 FILE=morai_ws/docker/final_ws/check_highway_launch.py
-cp "$FILE" "/tmp/check_highway_launch.py.before-sync.$(date +%Y%m%d-%H%M%S)"
-git update-index --no-assume-unchanged -- "$FILE"
-git update-index --no-skip-worktree -- "$FILE"
-git restore --source=HEAD --staged --worktree -- "$FILE"
+cp "$FILE" "/tmp/check_highway_launch.py.pre-pull.$(date +%s)"
+git show "HEAD:$FILE" > "$FILE"
 git status --short -- "$FILE"
-마지막 명령에서 아무것도 출력되지 않으면 pull을 진행하세요.
+마지막 명령에 아무것도 표시되지 않으면 pull을 실행하세요.
 git pull --ff-only origin final_ws
 git show HEAD:morai_ws/docker/final_ws/requirements.txt | grep '^ultralytics=='
 grep -n '^ultralytics' morai_ws/docker/final_ws/requirements.txt
-두 버전 확인 결과가 모두 8.4.153이어야 합니다. 파일 상태에 여전히 M이 표시되면 pull은 다시 하지 말고, 다음 결과를 보내주세요.
-git status --short -- morai_ws/docker/final_ws/check_highway_launch.py
-git diff -- morai_ws/docker/final_ws/check_highway_launch.py
-git diff --cached -- morai_ws/docker/final_ws/check_highway_launch.py
-git ls-files -v -- morai_ws/docker/final_ws/check_highway_launch.py
