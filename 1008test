@@ -40,6 +40,7 @@ bash run_test.sh monitor 5
 
 처음 실행할 때
 cd ~/AutoVehicle/morai_ws/docker/final_ws
+bash run_highway.sh build
 bash run_highway.sh start
 bash run_highway.sh shell
 
