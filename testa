@@ -1,21 +1,22 @@
-nano ~/AutoVehicle/morai_ws/src/experimental/curvature_speed_purepursuit/test/test_adaptive_node.py
-path() 함수에서 path = Message() 바로 다음 줄에 추가하세요.
-path.header.stamp = NS(to_sec=lambda: self.now)
-그리고 setUp()에 ros = Mock()이 있다면, 그 아래에 이것도 추가하세요.
-ros.get_time.side_effect = lambda: self.now
-저장한 뒤 다시 빌드하세요. 이 테스트 입력 수정은 정상적인 시각이 찍힌 경로를 시험하게 합니다. 별도로 노드도 타임스탬프가 없는 경로를 받으면 예외로 죽지 않고 거부하도록 보강하는 게 안전합니다. 현재 빌드는 실패했으므로 start는 아직 실행하지 마세요.
+TEST_FILE="$HOME/AutoVehicle/morai_ws/src/experimental/curvature_speed_purepursuit/test/test_adaptive_node.py"
+cp "$TEST_FILE" "$HOME/test_adaptive_node.py.before-indent-fix"
 
+python3 - "$TEST_FILE" <<'PY'
+from pathlib import Path
+import re
+import sys
 
-오후 2:44
+path = Path(sys.argv[1])
+lines = path.read_text().splitlines(keepends=True)
+path.write_text("".join(
+    re.sub(r"^[ \t]+", lambda match: match.group(0).expandtabs(4), line)
+    for line in lines
+))
+PY
 
+python3 -m tabnanny "$TEST_FILE"
+python3 -m py_compile "$TEST_FILE"
 
-타임스탬프 수정 내용을 저장한 다음, Ubuntu 터미널에서 아래처럼 다시 빌드하세요.
 cd ~/AutoVehicle/morai_ws/docker/final_ws
 set -o pipefail
 BUILDKIT_PROGRESS=plain bash run_highway.sh build 2>&1 | tee ~/morai-highway-build-0671aec.log
-빌드가 성공하면 같은 폴더에서 컨테이너를 시작하고 접속합니다.
-bash run_highway.sh start
-bash run_highway.sh shell
-빌드가 또 실패하면 로그에서 원인 부분을 뽑아 보내주세요.
-grep -n -B 25 -A 50 -E 'FAIL:|ERROR:|Traceback|FAILED \(|REGRESSION_(START|FAIL)' \
-  ~/morai-highway-build-0671aec.log | tail -n 200
