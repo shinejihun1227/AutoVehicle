@@ -1,9 +1,9 @@
 cd ~/AutoVehicle
-FILE=morai_ws/docker/final_ws/check_highway_launch.py
-cp "$FILE" "/tmp/check_highway_launch.py.pre-pull.$(date +%s)"
-git show "HEAD:$FILE" > "$FILE"
-git status --short -- "$FILE"
-마지막 명령에 아무것도 표시되지 않으면 pull을 실행하세요.
+cp morai_ws/docker/final_ws/check_highway_launch.py /tmp/check_highway_launch.before-sync-2.py
+git show HEAD:morai_ws/docker/final_ws/check_highway_launch.py > /tmp/check_highway_launch.from-head.py
+cp /tmp/check_highway_launch.from-head.py morai_ws/docker/final_ws/check_highway_launch.py
+git status --short -- morai_ws/docker/final_ws/check_highway_launch.py
+마지막 명령에서 출력이 없을 때만 이어서 실행하세요.
 git pull --ff-only origin final_ws
 git show HEAD:morai_ws/docker/final_ws/requirements.txt | grep '^ultralytics=='
 grep -n '^ultralytics' morai_ws/docker/final_ws/requirements.txt
