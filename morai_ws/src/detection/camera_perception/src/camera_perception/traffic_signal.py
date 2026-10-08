@@ -5,16 +5,45 @@ from collections import Counter, deque
 from types import SimpleNamespace
 
 
+# CAM4's original signal ROI ended at 65% of the image height.  Keep vertical
+# heads possible; cap area to reject gantry-sized false signal detections.
+SIGNAL_ROI_MAX_CENTER_Y = 0.65
+SIGNAL_MIN_ASPECT_RATIO = 0.2
+SIGNAL_MAX_ASPECT_RATIO = 8.0
+SIGNAL_MAX_AREA_FRACTION = 0.04
+
+
 def traffic_bbox_plausible(x, y, width, height, image_height):
     """Only reject invalid boxes; oblique/vertical heads need not be wide.
 
     Shape or screen centre is not evidence that a light belongs to our lane.
-    The final controller associates boxes with projected route-linked heads.
+    Route-linked control associates boxes with mapped heads; the sensor-only
+    launch uses an additional image-space guard below.
     """
     return (all(isinstance(v, (int, float)) and math.isfinite(v)
                 for v in (x, y, width, height, image_height))
             and image_height > 0 and width >= 2 and height >= 2
             and x >= 0 and 0 <= y <= image_height)
+
+
+def traffic_bbox_in_signal_roi(x, y, width, height, image_width, image_height):
+    """Reject implausible CAM4 signal boxes before publishing light evidence.
+
+    This is an image-space guard, not lane-to-signal association.  Keep narrow
+    vertical and oblique heads possible, but reject boxes on the road, poles,
+    and large gantries.  A rejected box must never authorize GREEN.
+    """
+    if not traffic_bbox_plausible(x, y, width, height, image_height):
+        return False
+    if not isinstance(image_width, (int, float)) or not math.isfinite(image_width):
+        return False
+    if image_width <= 0 or x > image_width:
+        return False
+    aspect_ratio = width / height
+    area_fraction = width * height / (image_width * image_height)
+    return (y / image_height <= SIGNAL_ROI_MAX_CENTER_Y
+            and SIGNAL_MIN_ASPECT_RATIO <= aspect_ratio <= SIGNAL_MAX_ASPECT_RATIO
+            and area_fraction <= SIGNAL_MAX_AREA_FRACTION)
 
 
 class TrackedSignalVotes:

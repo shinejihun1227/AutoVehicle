@@ -24,7 +24,7 @@ from camera_perception.camera_udp import LatestCameraReceiver
 from camera_perception.traffic_signal import (
     TrackedSignalVotes,
     register_cbam_model_layers,
-    traffic_bbox_plausible,
+    traffic_bbox_in_signal_roi,
 )
 from camera_perception.highway_vehicle import (
     HIGHWAY_VEHICLE_CLASSES,
@@ -267,7 +267,7 @@ def main(ip=IP, port=PORT, base_model_path=BASE_MODEL_PATH,
             detections.append((x1, y1, x2, y2, label, score, color))
         return detections
 
-    def collect_custom_detections(result, model, image_height):
+    def collect_custom_detections(result, model, image_width, image_height):
         """Apply the feature-camera traffic-light and obstacle filters."""
         detections = []
         traffic_objects = []
@@ -285,7 +285,15 @@ def main(ip=IP, port=PORT, base_model_path=BASE_MODEL_PATH,
             x1, y1, x2, y2 = box.xyxy[0].detach().cpu().tolist()
 
             if any(keyword in normalized for keyword in TRAFFIC_KEYWORDS):
-                if not traffic_bbox_plausible(xc, yc, width, height, image_height):
+                if not traffic_bbox_in_signal_roi(
+                    xc, yc, width, height, image_width, image_height
+                ):
+                    rospy.loginfo_throttle(
+                        5.0, "CAM4 rejected %s signal box outside ROI/shape/size "
+                        "(score=%.2f, center_y=%.2f, aspect=%.2f, area=%.3f)",
+                        label, score, relative_y, aspect_ratio,
+                        width * height / (image_width * image_height),
+                    )
                     continue
                 track_id_tensor = getattr(box, "id", None)
                 track_id = int(track_id_tensor[0]) if track_id_tensor is not None else None
@@ -452,7 +460,7 @@ def main(ip=IP, port=PORT, base_model_path=BASE_MODEL_PATH,
                         traffic_objects,
                         custom_obstacle_objects,
                     ) = collect_custom_detections(
-                        custom_results[0], custom_model, image.shape[0]
+                        custom_results[0], custom_model, image.shape[1], image.shape[0]
                     )
                     if custom_detections:
                         labels = ", ".join(sorted({d[4] for d in custom_detections}))
