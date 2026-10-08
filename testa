@@ -1,6 +1,6 @@
 cd ~/AutoVehicle/morai_ws
-git fetch origin final_ws
 git pull --ff-only origin final_ws
 git rev-parse --short HEAD
-cd docker/final_ws
+출력이 dd2fca3인지 확인한 다음 빌드하세요.
+cd ~/AutoVehicle/morai_ws/docker/final_ws
 bash run_highway.sh build
