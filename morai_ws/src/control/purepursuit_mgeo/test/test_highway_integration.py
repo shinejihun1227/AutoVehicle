@@ -12,14 +12,16 @@ class HighwayIntegrationTests(unittest.TestCase):
         self.n.latest_base_path=path_at()
 
     def test_highway_detection_alone_does_not_change_route(self):
-        n=self.n; n.require_mission_request=True; n.highway_environment=True
+        n=self.n; n.route_gate_required=True; n.highway_environment=True
         self.assertFalse(n._activation_present())
+        n._route_gate_cb(NS(data=True)); self.assertTrue(n._activation_present())
         n._highway_request_cb(NS(data=True)); self.assertTrue(n._activation_present())
-        n.request_at=Stamp(98.0); self.assertFalse(n._activation_present())
+        n.route_gate_at=Stamp(98.0); self.assertFalse(n._activation_present())
 
     def test_repeated_changes_are_bounded(self):
+        self.n.max_left_lane_changes=1
         self.n.lane_changes_done=1
-        self.assertEqual(self.n._choose_lane_change(Stamp())[3],'lane_change_count_limit')
+        self.assertEqual(self.n._choose_lane_change(Stamp())[3],'final_lane_no_more_changes')
 
     def test_slow_ego_cannot_assume_instant_merge_speed_for_rear_gap(self):
         n=self.n; n._odom_pose.return_value=(0.0,0.0,0.0,0.0)
@@ -57,3 +59,4 @@ class HighwayIntegrationTests(unittest.TestCase):
 
 
 if __name__=='__main__': unittest.main()
+
