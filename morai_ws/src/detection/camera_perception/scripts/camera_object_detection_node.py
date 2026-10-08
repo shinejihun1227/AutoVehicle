@@ -245,31 +245,10 @@ def main(ip=IP, port=PORT, base_model_path=BASE_MODEL_PATH,
     stop_worker = threading.Event()
     signal_votes = TrackedSignalVotes(window=5, green_votes=3)
 
-    def collect_detections(result, model, color, image_height, is_custom=False):
-        detections = []
-        boxes = result.boxes if result.boxes is not None else ()
-        for box in boxes:
-            cls_id = int(box.cls[0])
-            score = float(box.conf[0])
-            label = str(model.names[cls_id])
-            coords = box.xyxy[0].detach().cpu().tolist()
-            if len(coords) != 4:
-                continue
-            x1, y1, x2, y2 = coords
-
-            # Preserve the original soft ROI for custom traffic-light labels.
-            y_center = (y1 + y2) * 0.5
-            if is_custom and any(
-                name in label for name in ("Red", "Green", "Yellow")
-            ) and y_center > image_height * 0.6:
-                continue
-
-            detections.append((x1, y1, x2, y2, label, score, color))
-        return detections
-
     def collect_custom_detections(result, model, image_width, image_height):
         """Apply the feature-camera traffic-light and obstacle filters."""
         detections = []
+        signal_detections = []
         traffic_objects = []
         obstacle_objects = []
         visible_signal_ids = set()
@@ -304,9 +283,9 @@ def main(ip=IP, port=PORT, base_model_path=BASE_MODEL_PATH,
                 if class_name is None:
                     continue
                 traffic_objects.append(object_message(box, model, class_name))
-                detections.append(
-                    (x1, y1, x2, y2, display_text, score, color)
-                )
+                signal_detection = (x1, y1, x2, y2, display_text, score, color)
+                signal_detections.append(signal_detection)
+                detections.append(signal_detection)
                 continue
 
             ignored = (
@@ -322,7 +301,7 @@ def main(ip=IP, port=PORT, base_model_path=BASE_MODEL_PATH,
                 (x1, y1, x2, y2, label, score, (255, 0, 255))
             )
         signal_votes.retain(visible_signal_ids)
-        return detections, traffic_objects, obstacle_objects
+        return signal_detections, detections, traffic_objects, obstacle_objects
 
     def inference_worker():
         last_inferred_sequence = 0
@@ -364,18 +343,14 @@ def main(ip=IP, port=PORT, base_model_path=BASE_MODEL_PATH,
                     str(base_model.names[int(box.cls[0])]).strip().lower()
                     for box in base_boxes
                 }
-                base_detections = collect_detections(
-                    base_results[0], base_model, (0, 255, 0), image.shape[0]
-                )
                 base_objects = []
                 for box in base_boxes:
                     label = str(base_model.names[int(box.cls[0])]).lower()
                     class_name = "Car" if label == "car" else label.capitalize()
                     base_objects.append(object_message(box, base_model, class_name))
 
-                # Publish and display the COCO road-vehicle/person result immediately.
-                # When null.pt exists, waiting for its second inference here
-                # nearly doubles the age of the frame shown in the YOLO window.
+                # Publish the COCO road-vehicle/person result immediately.
+                # CAM4 displays only boxes also published to the signal topic.
                 base_completed_at = time.monotonic()
                 base_elapsed = max(base_completed_at - started_at, 1e-6)
                 base_interval = (
@@ -398,8 +373,8 @@ def main(ip=IP, port=PORT, base_model_path=BASE_MODEL_PATH,
                         # The receiver and GUI never mutate this decoded image.
                         # Avoid one full-frame copy on the latency-critical path.
                         source_image=image,
-                        detections=tuple(base_detections),
-                        stage="BASE",
+                        detections=(),
+                        stage="SIGNAL_PENDING" if custom_model is not None else "NO_SIGNAL_MODEL",
                         inference_ms=base_elapsed * 1000.0,
                         latency_ms=max(
                             base_completed_at - received_at, 0.0
@@ -434,6 +409,7 @@ def main(ip=IP, port=PORT, base_model_path=BASE_MODEL_PATH,
                         "YOLO person detected; pedestrian fusion camera condition is true",
                     )
 
+                signal_detections = []
                 if custom_model is not None:
                     try:
                         custom_results = custom_model.track(
@@ -456,6 +432,7 @@ def main(ip=IP, port=PORT, base_model_path=BASE_MODEL_PATH,
                             verbose=False,
                         )
                     (
+                        signal_detections,
                         custom_detections,
                         traffic_objects,
                         custom_obstacle_objects,
@@ -478,19 +455,16 @@ def main(ip=IP, port=PORT, base_model_path=BASE_MODEL_PATH,
                         )
                     )
 
-                    # Preserve the custom detector, but apply it as a second
-                    # revision of the exact same frame. The base result has
-                    # already reached the display and ROS topics above.
+                    # The CAM4 overlay matches only objects sent to the
+                    # traffic-light topic for this exact frame.
                     custom_completed_at = time.monotonic()
                     with result_lock:
                         latest_result.update(
                             revision=latest_result["revision"] + 1,
                             sequence=sequence,
                             source_image=image,
-                            detections=tuple(
-                                base_detections + custom_detections
-                            ),
-                            stage="BASE+CUSTOM",
+                            detections=tuple(signal_detections),
+                            stage="SIGNAL",
                             inference_ms=max(
                                 custom_completed_at - started_at, 0.0
                             ) * 1000.0,
@@ -506,7 +480,7 @@ def main(ip=IP, port=PORT, base_model_path=BASE_MODEL_PATH,
                     )
 
                 if preview is not None:
-                    drawn = tuple(base_detections + (custom_detections if custom_model is not None else []))
+                    drawn = tuple(signal_detections)
                     preview.submit(image, lambda f=image, d=drawn: render_objects(f, d),
                         received_stamp if received_stamp is not None else rospy.Time(), sequence,
                         dict(base_model=_resolve_model_path(base_model_path),
@@ -655,9 +629,8 @@ def main(ip=IP, port=PORT, base_model_path=BASE_MODEL_PATH,
                 )
                 cv2.imshow(live_window, display_frame)
 
-            # A BASE revision is displayed as soon as the primary detector
-            # finishes. If configured, BASE+CUSTOM follows on the same exact
-            # frame without delaying car/person output behind the second model.
+            # The initial revision has no boxes; the signal revision shows
+            # only objects published to the traffic-light topic.
             result_revision = int(shown_result["revision"])
             result_sequence = int(shown_result["sequence"])
             matched_source = shown_result["source_image"]
