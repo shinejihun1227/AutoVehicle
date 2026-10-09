@@ -47,7 +47,9 @@ def summarize(kind, msg, ros_now):
                     source_age_s=round(ros_now-msg.header.stamp.to_sec(), 3))
     if kind == 'lights':
         return dict(objects=len(msg.objects),
-                    detections=[dict(label=o.class_name, confidence=round(o.conf, 3))
+                    detections=[dict(label=o.class_name, confidence=round(o.conf, 3),
+                                     center=[round(o.x_center, 1), round(o.y_center, 1)],
+                                     size=[round(o.width, 1), round(o.height, 1)])
                                 for o in msg.objects[:5]],
                     source_age_s=round(ros_now-msg.header.stamp.to_sec(), 3))
     if kind == 'odom':

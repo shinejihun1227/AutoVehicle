@@ -21,7 +21,7 @@ from morai_perception_msgs.msg import TrafficLight, StopLineDetection, SafetySto
 from nav_msgs.msg import Odometry, Path as RosPath
 from std_msgs.msg import String
 from common.msg import ObjectInfoArray
-from camera_perception.traffic_signal import directional_observation
+from camera_perception.traffic_signal import directional_observation, _same_signal_housing
 
 from curvature_speed_purepursuit.planner import (
     load_path_file, clean_consecutive_duplicates, cumulative_arc_lengths, nearest_projection,
@@ -512,8 +512,11 @@ class ManeuverFusionNode:
                       and 0.5 <= item.conf <= 1.0]
         state, _ = directional_observation(candidates)
         # A spatially coherent RED + illuminated arrow describes one housing.
+        # Two RED_LEFT detections from separate heads remain ambiguous.
         if len(candidates) > 1 and state in ("RED_LEFT", "RED_RIGHT"):
-            return 1
+            anchor = candidates[0]
+            if all(_same_signal_housing(anchor, item) for item in candidates[1:]):
+                return 1
         # The detector can emit overlapping copies of the same green lamp.
         # Do not confuse those with separate intersection heads.
         if len(candidates) > 1 and state == "GREEN" and all(

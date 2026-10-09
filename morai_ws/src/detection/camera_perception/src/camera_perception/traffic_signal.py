@@ -198,7 +198,7 @@ def register_cbam_model_layers(torch_module=None):
 
 
 def _same_signal_housing(first, second):
-    """Require close, similarly sized boxes before combining a red lamp and arrow."""
+    """Require adjacent lamp boxes or a lamp box inside its combined head."""
     try:
         x1, y1, w1, h1 = (float(getattr(first, key)) for key in
                           ("x_center", "y_center", "width", "height"))
@@ -210,10 +210,22 @@ def _same_signal_housing(first, second):
         return False
     if not all(math.isfinite(v) for v in (x1, y1, x2, y2)):
         return False
-    return (min(w1, w2) / max(w1, w2) >= 0.4
-            and min(h1, h2) / max(h1, h2) >= 0.4
-            and abs(x1 - x2) <= 2.0 * max(w1, w2)
-            and abs(y1 - y2) <= 0.75 * max(h1, h2))
+    similarly_sized_neighbors = (
+        min(w1, w2) / max(w1, w2) >= 0.4
+        and min(h1, h2) / max(h1, h2) >= 0.4
+        and abs(x1 - x2) <= 2.0 * max(w1, w2)
+        and abs(y1 - y2) <= 0.75 * max(h1, h2)
+    )
+    if similarly_sized_neighbors:
+        return True
+    # The checkpoint can detect the whole RED_LEFT housing as well as its red
+    # bulb. Those boxes differ greatly in width but one nearly contains the
+    # other. Containment is stronger evidence than a loose distance threshold.
+    intersection = (max(0.0, min(x1 + w1 / 2, x2 + w2 / 2)
+                        - max(x1 - w1 / 2, x2 - w2 / 2))
+                    * max(0.0, min(y1 + h1 / 2, y2 + h2 / 2)
+                          - max(y1 - h1 / 2, y2 - h2 / 2)))
+    return intersection / min(w1 * h1, w2 * h2) >= 0.8
 
 
 def directional_observation(objects, min_confidence=0.5):
@@ -243,10 +255,14 @@ def directional_observation(objects, min_confidence=0.5):
         evidence[name] = max(evidence.get(name, 0.0), score)
         candidates.append((name, score, item))
     for arrow in ("LEFT", "RIGHT"):
-        compatible = {"RED", arrow, "RED_" + arrow}
+        # The detector may call an illuminated green arrow GREEN_LEFT while
+        # detecting the red straight lamp as a separate box.  When both boxes
+        # belong to one housing, red applies to straight and the arrow permits
+        # only the corresponding turn.
+        compatible = {"RED", arrow, "GREEN_" + arrow, "RED_" + arrow}
         if (len(candidates) >= 2
                 and {name for name, _, _ in candidates} <= compatible
-                and any(name in (arrow, "RED_" + arrow)
+                and any(name in (arrow, "GREEN_" + arrow, "RED_" + arrow)
                         for name, _, _ in candidates)
                 and any(name in ("RED", "RED_" + arrow)
                         for name, _, _ in candidates)):
@@ -254,7 +270,7 @@ def directional_observation(objects, min_confidence=0.5):
             # an overlapping combined-class box. Merge only one local housing;
             # a remote red from another head must not authorize this turn.
             anchor = next(item for name, _, item in candidates
-                          if name in (arrow, "RED_" + arrow))
+                          if name in (arrow, "GREEN_" + arrow, "RED_" + arrow))
             if all(item is anchor or _same_signal_housing(anchor, item)
                    for _, _, item in candidates):
                 return "RED_" + arrow, min(score for _, score, _ in candidates)
