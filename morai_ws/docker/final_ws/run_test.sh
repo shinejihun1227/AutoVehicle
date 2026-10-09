@@ -3,10 +3,10 @@
 set -euo pipefail
 SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 ACTION="${1:-show}"
-if [[ $# -gt 2 || ! "$ACTION" =~ ^(show|monitor|drive|diagnose|speed|lane|models|request-merge|view|rviz)$ ]] ||
+if [[ $# -gt 2 || ! "$ACTION" =~ ^(show|monitor|drive|diagnose|speed|lane|turn|models|request-merge|view|rviz)$ ]] ||
    [[ "$ACTION" =~ ^(models|request-merge|view|rviz)$ && $# -gt 1 ]] ||
    [[ "$ACTION" == diagnose && $# -gt 1 && "$2" != 2 ]]; then
-  echo 'Usage: bash run_test.sh {show|monitor|drive} [1-5]; or {speed KMH|lane on/off|models|request-merge|diagnose [2]|view|rviz}' >&2
+  echo 'Usage: bash run_test.sh {show|monitor|drive} [1-5]; or {speed KMH|lane on/off|turn safe|models|request-merge|diagnose [2]|view|rviz}' >&2
   exit 2
 fi
 if [[ ! -f "$SCRIPT_DIR/highway.env" || ! -f "$SCRIPT_DIR/highway-test.env" ]]; then
@@ -41,6 +41,26 @@ if [[ "$ACTION" == speed ]]; then
     printf '\nMAX_SPEED_KPH=%s\n' "$VALUE" >> "$SCRIPT_DIR/highway-test.env"
   fi
   echo "MAX_SPEED_KPH=$VALUE saved. Restart the driving launch to apply; no live parameter was changed."
+  exit 0
+fi
+if [[ "$ACTION" == turn ]]; then
+  [[ "${2:-}" == safe ]] || {
+    echo 'Usage: bash run_test.sh turn safe' >&2; exit 2;
+  }
+  cp -p "$SCRIPT_DIR/highway-test.env" "$SCRIPT_DIR/highway-test.env.bak"
+  # First field trial: lower the speed through tight bends and allow the
+  # front-wheel command to reach the required angle before the outside wall.
+  for entry in MAX_SPEED_KPH=8.0 LATERAL_ACCEL_LIMIT_MPS2=0.45 MAX_STEERING_RATE_RAD_S=1.2; do
+    name="${entry%%=*}"
+    value="${entry#*=}"
+    if grep -q "^${name}=" "$SCRIPT_DIR/highway-test.env"; then
+      sed -i "s/^${name}=.*/${name}=${value}/" "$SCRIPT_DIR/highway-test.env"
+    else
+      printf '\n%s=%s\n' "$name" "$value" >> "$SCRIPT_DIR/highway-test.env"
+    fi
+  done
+  echo 'First-turn safe settings saved: MAX_SPEED_KPH=8.0, LATERAL_ACCEL_LIMIT_MPS2=0.45, MAX_STEERING_RATE_RAD_S=1.2.'
+  echo 'Restart the driving launch to apply; no live parameter was changed. Previous settings: highway-test.env.bak'
   exit 0
 fi
 if [[ "$ACTION" == lane ]]; then

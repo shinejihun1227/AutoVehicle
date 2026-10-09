@@ -58,6 +58,25 @@ ROI `dev/merged_sensor`의 `a994022`까지 확인해 CAM4 기본 사물 모델�
 
 ## 커브에서 차선을 밟을 때
 
+첫 큰 좌회전에서 차가 커브 바깥쪽으로 밀려 벽에 닿으면 먼저 주행 launch를
+`Ctrl+C`로 종료한다. 현재 경로의 첫 급좌회전은 출발점에서 약 77~100 m이고,
+기본 곡률 속도 계획은 그 구간에서 약 10 km/h를 허용한다. 아래 명령은
+최고속도를 8 km/h, 횡가속도 제한을 0.45 m/s², 조향 명령 변화율 제한을
+1.2 rad/s로 낮은 속도의 첫 현장 시험에 맞춘다. 이 설정은
+`highway-test.env.bak`에 이전 값을 보관하며 다른 시험 프로필에도 적용된다.
+
+```bash
+cd "$HOME/AutoVehicle/morai_ws/docker/final_ws"
+bash run_test.sh turn safe
+bash run_test.sh show 2
+bash run_test.sh drive 2
+```
+
+첫 좌회전을 벽에 닿지 않고 통과하는지 관찰한 뒤 `speed 10`, `speed 12`처럼
+최고속도를 조금씩 올린다. 속도가 낮아도 같은 쪽으로 밀리면 속도 설정만의
+문제가 아닐 수 있으므로 경로와 실제 위치, 조향 부호·실제 앞바퀴 반응을
+확인한다. 이 설정은 차로 경계 안 주행을 보증하지 않는다.
+
 이 프로필의 기본 조향은 고정된 GPS 경로를 따르며 CAM1 차선 중심을 사용하지 않는다.
 커브마다 밟는 쪽이 달라지면 경로 전체를 한쪽으로 평행 이동시키지 않는다. 먼저
 `/experimental/curvature_path_lateral_error_m`를 확인한다. 양수는 차량 중심이 경로의
