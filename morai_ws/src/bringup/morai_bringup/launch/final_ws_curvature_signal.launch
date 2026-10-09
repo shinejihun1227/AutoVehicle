@@ -49,8 +49,10 @@
   <arg name="lane_info_checkpoint" default="$(find camera_perception)/models/highway_best.pt" />
   <arg name="lane_info_cam_set" default="$(find camera_perception)/lane/cam_set.json" />
   <arg name="stopline_front_reference_offset_m" default="3.845" />
-  <arg name="stopline_hold_distance_m" default="4.0" />
-  <arg name="stopline_planning_decel_mps2" default="1.0" />
+  <arg name="stopline_hold_distance_m" default="7.0" />
+  <arg name="stopline_planning_decel_mps2" default="0.7" />
+  <arg name="stopline_brake_ramp_distance_m" default="20.0" />
+  <arg name="stopline_settle_distance_m" default="0.8" />
   <arg name="stopline_approach_speed_kph" default="30.0" />
   <arg name="stopline_cap_release_after_m" default="5.0" />
   <arg name="stopline_cap_max_detection_range_m" default="60.0" />
@@ -173,5 +175,7 @@
     <param name="hold_distance_m" value="$(arg stopline_hold_distance_m)" />
     <param name="max_decel_mps2" value="$(arg max_decel_mps2)" />
     <param name="planning_decel_mps2" value="$(arg stopline_planning_decel_mps2)" />
+    <param name="brake_ramp_distance_m" value="$(arg stopline_brake_ramp_distance_m)" />
+    <param name="settle_distance_m" value="$(arg stopline_settle_distance_m)" />
   </node>
 </launch>

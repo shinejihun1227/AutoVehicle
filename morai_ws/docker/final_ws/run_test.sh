@@ -50,7 +50,7 @@ if [[ "$ACTION" == turn ]]; then
   cp -p "$SCRIPT_DIR/highway-test.env" "$SCRIPT_DIR/highway-test.env.bak"
   # Keep the requested straight-line ceiling while the curvature speed
   # planner slows tight bends. Allow faster steering and earlier path response.
-  for entry in MAX_SPEED_KPH=45.0 LATERAL_ACCEL_LIMIT_MPS2=0.45 MAX_STEERING_RATE_RAD_S=1.2 LOOKAHEAD_GAIN=0.25 STEERING_FEEDFORWARD_WEIGHT=0.50 STOPLINE_HOLD_DISTANCE_M=4.0; do
+  for entry in MAX_SPEED_KPH=45.0 LATERAL_ACCEL_LIMIT_MPS2=0.45 MAX_STEERING_RATE_RAD_S=1.2 LOOKAHEAD_GAIN=0.25 STEERING_FEEDFORWARD_WEIGHT=0.50 STOPLINE_HOLD_DISTANCE_M=7.0 STOPLINE_PLANNING_DECEL_MPS2=0.7 STOPLINE_BRAKE_RAMP_DISTANCE_M=20.0 STOPLINE_SETTLE_DISTANCE_M=0.8; do
     name="${entry%%=*}"
     value="${entry#*=}"
     if grep -q "^${name}=" "$SCRIPT_DIR/highway-test.env"; then
@@ -59,7 +59,7 @@ if [[ "$ACTION" == turn ]]; then
       printf '\n%s=%s\n' "$name" "$value" >> "$SCRIPT_DIR/highway-test.env"
     fi
   done
-  echo 'Turn/intersection settings saved: max 45 km/h, lateral acceleration 0.45 m/s2, steering rate 1.2 rad/s, lookahead gain 0.25, feedforward 0.50, stopline clearance 4.0 m.'
+  echo 'Turn/intersection settings saved: max 45 km/h, lateral acceleration 0.45 m/s2, steering rate 1.2 rad/s, lookahead gain 0.25, feedforward 0.50, stopline clearance 7.0 m, planning decel 0.7 m/s2, brake ramp 20 m, settle window 0.8 m.'
   echo 'Restart the driving launch to apply; no live parameter was changed. Previous settings: highway-test.env.bak'
   exit 0
 fi
@@ -152,6 +152,8 @@ case "$TEST_PROFILE" in
       "stopline_cap_min_confidence:=$STOPLINE_CAP_MIN_CONFIDENCE"
       "stopline_hold_distance_m:=$STOPLINE_HOLD_DISTANCE_M"
       "stopline_planning_decel_mps2:=$STOPLINE_PLANNING_DECEL_MPS2"
+      "stopline_brake_ramp_distance_m:=$STOPLINE_BRAKE_RAMP_DISTANCE_M"
+      "stopline_settle_distance_m:=$STOPLINE_SETTLE_DISTANCE_M"
       "right_on_green:=$SIGNAL_RIGHT_ON_GREEN"
     )
     ;;

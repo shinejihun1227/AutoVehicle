@@ -162,6 +162,8 @@ class ManeuverFusionNode:
             hold_distance_m=float(rospy.get_param("~hold_distance_m", 4.0)),
             max_decel_mps2=float(rospy.get_param("~max_decel_mps2", 1.5)),
             planning_decel_mps2=float(rospy.get_param("~planning_decel_mps2", 1.0)),
+            brake_ramp_distance_m=float(rospy.get_param("~brake_ramp_distance_m", 0.0)),
+            settle_distance_m=float(rospy.get_param("~settle_distance_m", 0.0)),
             stop_tolerance_m=float(rospy.get_param("~stop_tolerance_m", 0.03)),
             signal_timeout_sec=self.signal_timeout,
         )
@@ -1231,6 +1233,9 @@ class ManeuverFusionNode:
                 "entry_crossing_s_m": self.crossing_s(event) if event else None,
                 "front_bumper_distance_m": decision.distance_m,
                 "target_clearance_m": self.core.hold_distance_m,
+                "stopline_planning_decel_mps2": self.core.planning_decel_mps2,
+                "stopline_brake_ramp_distance_m": self.core.brake_ramp_distance_m,
+                "stopline_settle_distance_m": self.core.settle_distance_m,
                 "stopline_tracking_fault": self.core.tracking_fault,
                 "accel_rise_limited": output.accel < requested_accel,
                 "route_context_count": len(self.contexts if self.require_context else self.route_signal_contexts),

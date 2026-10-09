@@ -15,7 +15,7 @@ MGeo 지정 정지선 + CAM1 확인 + CAM4 방향별 신호 ─→ 교차로 제
 - 진행 방향은 해당 MGeo 연결의 직진·좌회전·우회전을 따른다. 기존 방향별 신호 판단을 적용하며, 빨강·노랑·불명 신호 또는 진행 방향과 맞지 않는 화살표에서는 멈춘다. 초록 통과는 서로 다른 프레임의 확인이 필요하다.
 - 지정 목록 밖의 정지선은 신호 제어와 독립적인 정지선 속도 제한을 만들지 않는다. 기본 조향은 계속 곡률 기준 경로가 담당한다.
 - CAM4 신호등의 화면 위치와 지도 신호등 ID를 연결할 보정값은 없다. 여러 후보가 동시에 보이면 통과 허가를 내지 않는다. 이 구성을 MORAI 모니터 모드에서 먼저 확인한다.
-- 정지 목표는 앞범퍼가 정지선에서 4 m 남았을 때다. CAM4 신호 프레임과 검출 객체 프레임의 도착 순서가 어긋난 순간에는 출발 허가를 보류하되, 이전에 쌓은 초록 확인 기록은 즉시 지우지 않는다. 두 프레임이 대조된 뒤에만 통과를 허가한다.
+- 정지 목표는 앞범퍼가 정지선에서 7 m 남았을 때다. 계산된 제동 시작 지점보다 20 m 일찍 브레이크 명령을 점진적으로 올리고, 거의 정지한 상태에서 목표까지 0.8 m 이내이면 완전 정차 상태를 유지한다. CAM4 신호 프레임과 검출 객체 프레임의 도착 순서가 어긋난 순간에는 출발 허가를 보류하되, 이전에 쌓은 초록 확인 기록은 즉시 지우지 않는다. 두 프레임이 대조된 뒤에만 통과를 허가한다.
 
 선택한 MGeo 정지선 ID와 예상 거리는 [교차로 매핑 표](ROUTE_SIGNAL_GATE_PROPOSAL_KO.md)에 정리했다. 위치가 실제 주행과 다르면 `config/curvature_signal.yaml`의 ID 목록을 수정하고 컨테이너에 다시 설치한다.
 
@@ -65,7 +65,8 @@ ROI `dev/merged_sensor`의 `a994022`까지 확인해 CAM4 기본 사물 모델�
 직선 최고속도를 45 km/h로 유지하면서 횡가속도 제한 0.45 m/s²로
 급커브의 목표속도를 낮춘다. 조향 명령 변화율 제한은 1.2 rad/s,
 lookahead gain은 0.25, 곡률 조향 피드포워드 비중은 0.50으로 설정한다.
-정지선 여유 거리는 4 m로 넓힌다. 이 설정은
+정지선 여유 거리는 7 m, 정지 접근 계획 감속은 0.7 m/s²,
+브레이크 사전 상승 구간은 20 m로 설정한다. 이 설정은
 `highway-test.env.bak`에 이전 값을 보관하며 다른 시험 프로필에도 적용된다.
 
 ```bash
@@ -133,7 +134,8 @@ bash run_test.sh monitor 2
 
 - 최고속도와 곡률 감속: `highway-test.env`의 `MAX_SPEED_KPH`, `LATERAL_ACCEL_LIMIT_MPS2`
 - 정지선 기준점 보정: `STOPLINE_FRONT_REFERENCE_OFFSET_M` — 앞 범퍼 위치 실측값을 사용한다.
-- 정지선 여유 거리: `STOPLINE_HOLD_DISTANCE_M`
+- 정지선 여유 거리: `STOPLINE_HOLD_DISTANCE_M` (앞범퍼 기준 7 m)
+- 정지 접근 제동: `STOPLINE_PLANNING_DECEL_MPS2`, `STOPLINE_BRAKE_RAMP_DISTANCE_M`, `STOPLINE_SETTLE_DISTANCE_M`
 - CAM1과 MGeo 정지선 허용 오차: `config/curvature_signal.yaml`의 `route_stopline_match_tolerance_m`. 신호 허가가 나지 않으면 `mapped_stopline_confirmed`, `event.stopline_match_error_m`, `route_cam4_candidate_count`, `signal_selection_reason`을 먼저 확인한다.
 - 신호 유효 시간: `config/curvature_signal.yaml`의 `signal_timeout_sec`. CAM1 정지선은 MGeo 위치와 대조해 확인한다.
 

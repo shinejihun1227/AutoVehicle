@@ -78,7 +78,8 @@ class StopLineControllerCore:
                  signal_timeout_sec=0.8, green_confirmation_sec=0.3,
                  max_dead_reckoning_sec=8.0, max_dead_reckoning_m=12.0,
                  max_update_gap_sec=0.5, stop_tolerance_m=0.03,
-                 history_extrapolation_sec=0.05):
+                 history_extrapolation_sec=0.05,
+                 brake_ramp_distance_m=0.0, settle_distance_m=0.0):
         values = locals().copy()
         values.pop("self")
         if not all(finite(v) and v >= 0 for v in values.values()):
@@ -337,23 +338,33 @@ class StopLineControllerCore:
             return self._stop("stopline_unavailable_or_prediction_expired")
 
         remaining = self.distance - self.hold_distance_m
-        if remaining <= self.stop_tolerance_m:
+        # A vehicle that is already almost motionless may hold a little before
+        # the exact target rather than repeatedly creeping toward centimetres.
+        if (remaining <= self.stop_tolerance_m
+                or (self.settle_distance_m > 0 and remaining <= self.settle_distance_m
+                    and speed_mps <= 0.15)):
             return self._stop("at_stop_target", hold=True)
         a = self.planning_decel_mps2
         tau = self.reaction_time_sec
         target = max(0.0, math.sqrt((a * tau)**2 + 2.0 * a * remaining) - a * tau)
         braking_distance = speed_mps * tau + speed_mps**2 / (2.0 * a)
         horizon = max(self.approach_distance_m,
-                      braking_distance + self.hold_distance_m + self.trigger_margin_m)
+                      braking_distance + self.hold_distance_m
+                      + self.trigger_margin_m + self.brake_ramp_distance_m)
         if self.distance > horizon:
             return Decision("NOMINAL", "stopline_far", distance_m=self.distance)
 
         brake = 0.0
         accel_limit = clamp((target - speed_mps) * 3.6 * 0.2, 0.0, 1.0)
-        if remaining <= braking_distance + self.trigger_margin_m and speed_mps > 0.15:
+        if (remaining <= braking_distance + self.trigger_margin_m
+                + self.brake_ramp_distance_m and speed_mps > 0.15):
             effective = max(remaining - speed_mps * tau, 0.05)
             required_decel = speed_mps**2 / (2.0 * effective)
-            brake = clamp(required_decel / self.max_decel_mps2, 0.0, 1.0)
+            ramp = (1.0 if self.brake_ramp_distance_m == 0 else clamp(
+                (braking_distance + self.trigger_margin_m
+                 + self.brake_ramp_distance_m - remaining)
+                / self.brake_ramp_distance_m, 0.0, 1.0))
+            brake = clamp(required_decel * ramp / self.max_decel_mps2, 0.0, 1.0)
             accel_limit = 0.0
         return Decision("APPROACH", "stopline_speed_envelope", accel_limit, brake,
                         target * 3.6, self.distance)
