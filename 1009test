@@ -1,12 +1,9 @@
-cd ~/AutoVehicle
-git pull --ff-only origin final_ws
-cd morai_ws/docker/final_ws
+cd ~/AutoVehicle/morai_ws/docker/final_ws
 bash run_highway.sh stop
-bash install_curvature_signal.sh
+bash install_curvature_signal.sh --config
 bash run_highway.sh start
 bash run_test.sh speed 20
 bash run_test.sh lane on
-bash run_test.sh show 2
 bash run_test.sh drive 2
 
 
