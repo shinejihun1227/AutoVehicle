@@ -60,9 +60,11 @@ class ManeuverFusionNode:
         self.preview_m = float(rospy.get_param("~route_preview_m", 30.0))
         self.turn_threshold = float(rospy.get_param("~turn_threshold_deg", 25.0))
         self.max_route_error = float(rospy.get_param("~max_route_error_m", 3.0))
+        self.route_stopline_match_tolerance = float(rospy.get_param(
+            "~route_stopline_match_tolerance_m", 4.0))
         if not all(math.isfinite(v) and v > 0 for v in
                    (self.timeout, self.signal_timeout, self.preview_m, self.turn_threshold,
-                    self.max_route_error)):
+                    self.max_route_error, self.route_stopline_match_tolerance)):
             raise ValueError("Fusion distances, thresholds and timeouts must be positive and finite")
         self.require_quality = bool(rospy.get_param("~require_sensor_quality", True))
         self.require_safety = bool(rospy.get_param("~require_fresh_safety", True))
@@ -157,7 +159,7 @@ class ManeuverFusionNode:
         self.lead = IndicatorLead(float(rospy.get_param("~lead_time_sec", 5.0)))
         self.core_params = dict(
             front_reference_offset_m=float(rospy.get_param("~front_reference_offset_m", 3.845)),
-            hold_distance_m=float(rospy.get_param("~hold_distance_m", 0.5)),
+            hold_distance_m=float(rospy.get_param("~hold_distance_m", 4.0)),
             max_decel_mps2=float(rospy.get_param("~max_decel_mps2", 1.5)),
             planning_decel_mps2=float(rospy.get_param("~planning_decel_mps2", 1.0)),
             stop_tolerance_m=float(rospy.get_param("~stop_tolerance_m", 0.03)),
@@ -407,6 +409,16 @@ class ManeuverFusionNode:
             self.entry_ticket = None
             self.core.revoke_permission()
 
+    def suspend_entry_permission(self):
+        """Withhold a crossing ticket while a CAM4 frame awaits its object pair.
+
+        The paired previous GREEN remains historical confirmation, but cannot
+        authorize movement until the newest source frame has been checked.
+        """
+        if self.event is not None and not self.event["committed"]:
+            self.enter_permission = False
+            self.entry_ticket = None
+
     def consume_legacy_signals(self, direction, ready, route_valid, now, ros_now):
         """Legacy mode also consumes every accepted callback, once and in order."""
         if self.event is not None and self.event["committed"]:
@@ -470,12 +482,15 @@ class ManeuverFusionNode:
         if (not self.valid_sensor_signal(signal) or objects is None
                 or abs(signal.stamp - objects.stamp) > 0.05):
             return False
-        candidates = []
-        for item in objects.value.objects:
-            confidence = getattr(item, "conf", None)
-            if finite(confidence) and 0.5 <= confidence <= 1.0:
-                candidates.append(item)
-        return len(candidates) == 1
+        return self.route_signal_candidate_count(objects) == 1
+
+    @staticmethod
+    def route_signal_candidate_count(objects):
+        if objects is None:
+            return 0
+        return sum(1 for item in objects.value.objects
+                   if finite(getattr(item, "conf", None))
+                   and 0.5 <= item.conf <= 1.0)
 
     def route_objects_at(self, stamp):
         return next((sample for sample in self.route_object_observations
@@ -496,7 +511,7 @@ class ManeuverFusionNode:
             sample = self.signal_observations[0]
             objects = self.route_objects_at(sample.stamp)
             if objects is None and sample.fresh(ros_now, now, self.signal_timeout):
-                self.revoke_entry_permission()
+                self.suspend_entry_permission()
                 return  # The matching ObjectInfoArray callback may arrive next.
             self.signal_observations.popleft()
             if (not sample.fresh(ros_now, now, self.signal_timeout)
@@ -988,9 +1003,11 @@ class ManeuverFusionNode:
                         # before any CAM4 color can permit entry.
                         if self.valid_sensor_stopline(line):
                             measured_s = self.line_route_s(line)
-                            if measured_s is not None and abs(measured_s - event["stop_s"]) <= 2.0:
-                                event["camera_line_confirmed"] = True
-                                event["start"] = min(event["start"], measured_s)
+                            if measured_s is not None:
+                                event["stopline_match_error_m"] = measured_s - event["stop_s"]
+                                if abs(event["stopline_match_error_m"]) <= self.route_stopline_match_tolerance:
+                                    event["camera_line_confirmed"] = True
+                                    event["start"] = min(event["start"], measured_s)
                         self.core.observe_line(max(0.0, event["start"] - self.progress),
                                                1.0, True, ros_now, now, ros_now,
                                                target_id=event["id"])
@@ -1002,7 +1019,10 @@ class ManeuverFusionNode:
                                      and self.core.signal.value == "GREEN"
                                      and self.core.signal.fresh(ros_now, now, self.signal_timeout))
                     if event and not committed and not permitted:
-                        self.revoke_entry_permission()
+                        if self.signal_observations:
+                            self.suspend_entry_permission()
+                        else:
+                            self.revoke_entry_permission()
                 elif self.require_context and event and route_valid and not committed:
                     # Map target survives camera loss. Unverified entry is only
                     # a conservative guard, NOT a measured stop-line location.
@@ -1109,6 +1129,12 @@ class ManeuverFusionNode:
                 reasons.append("maneuver_localization_unreliable")
             if event and direction == "UNKNOWN":
                 reasons.append("route_direction_unknown")
+            if (self.route_signal_contexts and event and not committed
+                    and self.signal_observations and self.core.distance is not None
+                    and now - self.signal_observations[0].received >= 0.15
+                    and self.core.distance - self.core.hold_distance_m
+                    <= max(5.0, (speed or 0.0))):
+                reasons.append("signal_frame_pair_pending")
             if event and event["kind"] == "lane_change" and not self.lane_change_clear(direction, now):
                 reasons.append("adjacent_lane_gap_unavailable_or_stale")
             safety = self.fresh("safety", now, ros_now)
@@ -1156,6 +1182,24 @@ class ManeuverFusionNode:
             permission_state = (self.selection.state if self.require_context
                                 else signal.value.state if signal else "UNKNOWN")
             allowed_directions = sorted(signal_allowed_directions(permission_state, self.right_on_green)) if signal_ok else []
+            route_objects = self.route_objects_at(signal.stamp) if signal and self.route_signal_contexts else None
+            if self.require_context:
+                signal_selection_reason = self.selection.reason
+            elif self.route_signal_contexts:
+                if event and not event["camera_line_confirmed"]:
+                    signal_selection_reason = "awaiting_cam1_stopline_match"
+                elif self.signal_observations:
+                    signal_selection_reason = "awaiting_cam4_object_pair"
+                elif not signal_ok:
+                    signal_selection_reason = "cam4_head_count_%d" % self.route_signal_candidate_count(route_objects)
+                elif not permitted:
+                    signal_selection_reason = "directional_signal_not_permitted"
+                else:
+                    signal_selection_reason = "unique_cam4_head_and_mapped_stopline"
+            elif self.stopline_requires_detected_signal:
+                signal_selection_reason = "awaiting_paired_signal_stopline"
+            else:
+                signal_selection_reason = "legacy_unassociated"
             self.state_pub.publish(String(data=json.dumps({
                 "mode": decision.mode, "reason": decision.reason, "event": event,
                 "direction": direction, "signal": signal.value.state if signal else "STALE",
@@ -1200,18 +1244,16 @@ class ManeuverFusionNode:
                 "require_route_signal_context": self.require_context,
                 "stopline_requires_detected_signal": self.stopline_requires_detected_signal,
                 "next_junction_guard_id": self.next_guard_id,
-                "signal_selection_reason": (
-                    self.selection.reason if self.require_context else
-                    "unique_cam4_head_and_mapped_stopline" if self.route_signal_contexts and permitted else
-                    "awaiting_unique_cam4_head_and_mapped_stopline" if self.route_signal_contexts else
-                    "awaiting_paired_signal_stopline" if self.stopline_requires_detected_signal
-                    else "legacy_unassociated"),
+                "signal_selection_reason": signal_selection_reason,
+                "route_cam4_candidate_count": self.route_signal_candidate_count(route_objects),
                 "signal_pending_frames": len(self.signal_observations),
+                "green_confirmation_samples": self.core.green_samples,
                 "signal_queue_overflows": self.signal_queue_overflows,
                 "signal_processed_stamp": self.selection_stamp if self.require_context else self.core.last_signal_stamp,
                 "selected_signal_id": self.selection.selected_id if self.require_context else None,
                 "selected_signal_state": self.selection.state if self.require_context else None,
                 "mapped_stopline_confirmed": bool(event and event.get("camera_line_confirmed")),
+                "stopline_match_tolerance_m": self.route_stopline_match_tolerance,
                 "mapped_signal_ids": event.get("expected_signal_ids", []) if event else [],
                 "route_signal_projection_px": route_signal_pixels,
                 "accel": output.accel, "brake": output.brake,

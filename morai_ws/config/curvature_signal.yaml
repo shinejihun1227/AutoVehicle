@@ -12,6 +12,7 @@ signalized_context_ids:
 input_timeout_sec: 0.5
 signal_timeout_sec: 0.8
 max_route_error_m: 3.0
+route_stopline_match_tolerance_m: 4.0
 stop_tolerance_m: 0.03
 accel_rise_rate_per_sec: 0.5
 turn_max_heading_error_deg: 60.0
