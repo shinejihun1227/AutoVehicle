@@ -260,6 +260,29 @@ def _match_link(identifier, geometry, route):
     return matches
 
 
+def _route_turn_geometry(route, entry, exit_s, threshold_deg=25.0):
+    """Integrate signed heading change only over the matched junction link.
+
+    This is the integral of planar curvature along the actual forward route.
+    Limiting it to the mapped entry/exit prevents a following road bend from
+    reclassifying a straight intersection. Mixed/reversing bends stay UNKNOWN.
+    """
+    headings = [math.atan2(tangent[1], tangent[0])
+                for _, _, tangent in route.samples(entry, exit_s)]
+    net = positive = negative = 0.0
+    for before, after in zip(headings, headings[1:]):
+        change = math.degrees(math.atan2(math.sin(after - before), math.cos(after - before)))
+        net += change
+        positive += max(change, 0.0)
+        negative += max(-change, 0.0)
+    mixed = min(positive, negative) >= threshold_deg
+    direction = ("UNKNOWN" if len(headings) < 2 or mixed or abs(net) > 150.0 else
+                 "LEFT" if net >= threshold_deg else
+                 "RIGHT" if net <= -threshold_deg else "STRAIGHT")
+    return dict(geometry_direction=direction, heading_change_deg=net,
+                positive_heading_change_deg=positive, negative_heading_change_deg=negative)
+
+
 def _competes(a, b):
     if a.link_id == b.link_id:
         return False
@@ -338,6 +361,7 @@ def _merge_overlaps(contexts):
         member_ids = sorted(c["id"] for c in members)
         reasons = sorted({reason for c in members for reason in c["ambiguity_reasons"]} | {"overlapping_contexts"})
         merged.update(id="mgeo:ambiguous:" + "|".join(member_ids), direction="UNKNOWN",
+                      geometry_direction="UNKNOWN", direction_geometry_verified=False,
                       start=min(c["start"] for c in members), end=end,
                       entry_s=min(c["entry_s"] for c in members), exit_s=end,
                       stop_s=None, signal_ids=sorted(signals),
@@ -373,6 +397,11 @@ def load_route_contexts(mgeo_dir, points, s_values):
     original guard and latest actual exit. For that merged context, start may
     precede entry_s even though stop_s is None: the guard is retained, but no
     single stopline or signal head is claimed. member_context_ids names its parts.
+
+    geometry_direction and heading_change_deg report the signed curvature
+    integral across the matched junction link; direction_geometry_verified
+    requires agreement with supported link semantics. These are diagnostic
+    fields; the default direction remains the supported static map semantic.
 
     No fallback turn geometry or default stopping distance is applied. Only
     traffic_light_set records explicitly typed 'car' bind links. Lamp 'value',
@@ -416,7 +445,9 @@ def load_route_contexts(mgeo_dir, points, s_values):
         for link_id in sorted({_id(i) for i in signal["link_id_list"]}):
             if link_id not in links:
                 raise ValueError("Car signal references an unknown link: " + link_id)
-            bindings[link_id].append(dict(id=identifier, x=point[0], y=point[1], z=point[2]))
+            bindings[link_id].append(dict(
+                id=identifier, x=point[0], y=point[1], z=point[2],
+                **({"facing_yaw_deg": signal["heading"]} if signal.get("heading") is not None else {})))
     matches = {identifier: _match_link(identifier, link["geometry"], route)
                for identifier, link in links.items()}
     all_matches = [match for group in matches.values() for match in group]
@@ -434,6 +465,10 @@ def load_route_contexts(mgeo_dir, points, s_values):
             signals = {signal["id"]: signal for link_id in candidate_ids for signal in bindings.get(link_id, ())}
             related = links[identifier].get("related_signal")
             direction = _SEMANTICS.get(related, "UNKNOWN") if isinstance(related, str) else "UNKNOWN"
+            geometry = _route_turn_geometry(route, match.entry, match.exit)
+            geometry["direction_geometry_verified"] = bool(
+                not reasons and direction != "UNKNOWN"
+                and direction == geometry["geometry_direction"])
             if reasons:
                 direction = "UNKNOWN"
                 stop_s, stop_node, predecessors, stop_status = None, None, [], "ambiguous_binding"
@@ -441,6 +476,7 @@ def load_route_contexts(mgeo_dir, points, s_values):
                 stop_s, stop_node, predecessors, stop_status = _stopline(
                     match, links, nodes, incoming, matches, bindings)
             contexts.append({
+                **geometry,
                 "id": "mgeo:{}:{}".format(identifier, occurrence),
                 "direction": direction,
                 "start": stop_s if stop_s is not None else match.entry,

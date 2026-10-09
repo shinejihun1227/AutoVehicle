@@ -374,6 +374,24 @@ def max_abs_curvature_ahead(
     return maximum
 
 
+def minimum_speed_ahead(
+    s_values: Sequence[float], speeds_mps: Sequence[float],
+    query_s: float, preview_distance_m: float,
+) -> float:
+    """Lowest planned speed within a bounded actuation-latency preview.
+
+    Include every vertex in the interval so a short curve is not skipped by
+    sampling only its far end. This shifts a restriction earlier; it never
+    increases the current profile's ceiling on a curve exit.
+    """
+    start = max(0.0, min(float(query_s), s_values[-1]))
+    finish = min(s_values[-1], start + max(0.0, float(preview_distance_m)))
+    values = [profile_value_at_s(s_values, speeds_mps, start),
+              profile_value_at_s(s_values, speeds_mps, finish)]
+    values.extend(speeds_mps[bisect_right(s_values, start):bisect_right(s_values, finish)])
+    return min(values)
+
+
 def adaptive_lookahead_m(
     speed_mps: float,
     base_lookahead_m: float,

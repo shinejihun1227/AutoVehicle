@@ -35,8 +35,8 @@ class StartupTest(unittest.TestCase):
         ros.Publisher.side_effect = lambda *args, **kwargs: Mock()
         modules = {"rospy": ros,
                    "geometry_msgs.msg": NS(PointStamped=Message, PoseStamped=Message),
-                   "morai_msgs.msg": NS(CtrlCmd=Message),
-                   "morai_perception_msgs.msg": NS(StopLineDetection=Message),
+                   "morai_msgs.msg": NS(CtrlCmd=Message, EgoVehicleStatus=Message),
+                   "morai_perception_msgs.msg": NS(StopLineDetection=Message, LaneDetection=Message),
                    "nav_msgs.msg": NS(Odometry=Message, Path=Message),
                    "std_msgs.msg": NS(Bool=Message, Float64=Message)}
         spec = importlib.util.spec_from_file_location("startup_node", PACKAGE / "scripts/curvature_speed_purepursuit_node.py")

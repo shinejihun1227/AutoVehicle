@@ -1,7 +1,7 @@
 <launch>
   <!-- Fixed route + curvature Pure Pursuit + route-scoped CAM1/CAM4 signal gate.
-       MGeo selects stop locations and maneuver directions. CAM4 map-head
-       projection is not used without calibrated camera extrinsics. -->
+       MGeo selects stop locations and verifies maneuver directions. CAM4
+       uses the simulator camera settings supplied on 2026-10-10. -->
   <arg name="workspace_path" default="$(env HOME)/morai_ws" />
   <arg name="path_file" default="$(arg workspace_path)/data/routes/2026_molit_comp_global_path.txt" />
   <arg name="signal_config_file" default="$(arg workspace_path)/config/curvature_signal.yaml" />
@@ -18,6 +18,10 @@
   <arg name="control_source_port" default="9094" />
 
   <arg name="max_speed_kph" default="35.0" />
+  <arg name="vehicle_speed_topic" default="/Ego_topic" />
+  <arg name="require_vehicle_speed" default="true" />
+  <arg name="vehicle_speed_timeout_sec" default="0.5" />
+  <arg name="speed_preview_time_sec" default="0.8" />
   <arg name="lateral_accel_limit_mps2" default="1.0" />
   <arg name="curve_lateral_accel_limit_mps2" default="0.45" />
   <arg name="max_accel_mps2" default="1.0" />
@@ -99,6 +103,10 @@
     <param name="longl_cmd_type" value="1" />
     <param name="pose_timeout_sec" value="0.5" />
     <param name="max_speed_kph" value="$(arg max_speed_kph)" />
+    <param name="vehicle_speed_topic" value="$(arg vehicle_speed_topic)" />
+    <param name="require_vehicle_speed" value="$(arg require_vehicle_speed)" />
+    <param name="vehicle_speed_timeout_sec" value="$(arg vehicle_speed_timeout_sec)" />
+    <param name="speed_preview_time_sec" value="$(arg speed_preview_time_sec)" />
     <param name="lateral_accel_limit_mps2" value="$(arg curve_lateral_accel_limit_mps2)" />
     <param name="max_accel_mps2" value="$(arg max_accel_mps2)" />
     <param name="max_decel_mps2" value="$(arg max_decel_mps2)" />
@@ -174,6 +182,7 @@
     <param name="reference_path_topic" value="/experimental/curvature_reference_path" />
     <param name="require_route_signal_context" value="false" />
     <param name="require_signalized_contexts" value="true" />
+    <param name="require_calibrated_route_camera" value="true" />
     <param name="stopline_requires_detected_signal" value="true" />
     <param name="require_reference_path_match" value="true" />
     <param name="require_fresh_camera_stream" value="false" />
@@ -186,6 +195,9 @@
     <param name="lamp_output_enabled" value="false" />
     <param name="right_on_green" value="$(arg right_on_green)" />
     <param name="max_speed_kph" value="$(arg max_speed_kph)" />
+    <param name="vehicle_speed_topic" value="$(arg vehicle_speed_topic)" />
+    <param name="require_vehicle_speed" value="$(arg require_vehicle_speed)" />
+    <param name="vehicle_speed_timeout_sec" value="$(arg vehicle_speed_timeout_sec)" />
     <param name="speed_governor_enabled" value="true" />
     <param name="mapped_stopline_approach_speed_kph" value="$(arg stopline_approach_speed_kph)" />
     <param name="mapped_stopline_approach_distance_m" value="$(arg mapped_stopline_approach_distance_m)" />

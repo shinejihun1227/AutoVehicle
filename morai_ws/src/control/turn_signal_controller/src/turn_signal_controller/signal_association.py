@@ -67,6 +67,8 @@ def project_signal(point, pose, camera):
     ``point`` is an MGeo map-frame dict with x/y/z in meters. ``pose`` is the
     ego origin in that same frame at the IMAGE timestamp: x/y/z and yaw in
     radians, plus optional roll/pitch in radians (both default to zero).
+    A mapped head may include facing_yaw_deg (MGeo heading, pointing out of
+    the lamp face). Back-facing heads are not visible signal candidates.
     Body axes are x forward, y left, z up. Pose uses right-handed ROS RPY:
     R_world_body = Rz(yaw) Ry(pitch) Rx(roll); positive pose pitch noses DOWN.
 
@@ -96,6 +98,16 @@ def project_signal(point, pose, camera):
         if (width <= 0 or height <= 0 or not width.is_integer()
                 or not height.is_integer() or not 0 < fov < 180):
             return None
+
+        if "facing_yaw_deg" in point:
+            face = math.radians(_number(point["facing_yaw_deg"]))
+            # Mount offsets are in body coordinates. The half-plane test only
+            # removes the back of a lamp; it never selects a permissive colour.
+            optical_x = ex + math.cos(yaw) * cx - math.sin(yaw) * cy
+            optical_y = ey + math.sin(yaw) * cx + math.cos(yaw) * cy
+            if ((optical_x - px) * math.cos(face)
+                    + (optical_y - py) * math.sin(face)) <= 0.0:
+                return None
 
         # Inverse ego RPY, followed by the body-frame camera translation.
         dx, dy, dz = px - ex, py - ey, pz - ez
@@ -156,7 +168,7 @@ def _contains(box, pixel):
     return x0 <= u <= x1 and y0 <= v <= y1
 
 
-def associate(objects, projected_targets, projected_others=None):
+def associate(objects, projected_targets, projected_others=None, allow_target_group=False):
     """Select exactly one geometrically unique route-head/detection pair.
 
     Objects expose ObjectInfo attributes x_center/y_center/width/height in
@@ -172,6 +184,12 @@ def associate(objects, projected_targets, projected_others=None):
     Multiple plausible pairs, even of the same color, or an other head in
     the selected box's gate return UNKNOWN. Unsupported matched classes also
     return UNKNOWN. An empty target set never falls back to another head.
+
+    ``allow_target_group`` is only for heads explicitly bound by MGeo to the
+    same route link. Each detection must match that group and no other head.
+    Duplicate bulb/housing boxes are resolved only for a unique mapped head.
+    When two repeated group heads are too close to distinguish, each full
+    indication contributes independently; only their shared permissions pass.
     """
     try:
         targets = _projections(projected_targets)
@@ -184,6 +202,73 @@ def associate(objects, projected_targets, projected_others=None):
         return _unknown("invalid_projection")
     if not targets:
         return _unknown("no_projected_targets")
+
+    if allow_target_group:
+        from camera_perception.traffic_signal import (
+            count_signal_housings, directional_observation,
+        )
+        grouped, unresolved = {}, []
+        try:
+            for obj in objects:
+                x, y, width, height, confidence = (
+                    _number(getattr(obj, key)) for key in
+                    ("x_center", "y_center", "width", "height", "conf"))
+                if x < 0 or y < 0 or width <= 0 or height <= 0 or not 0 <= confidence <= 1:
+                    return _unknown("invalid_object")
+                if confidence < _MIN_CONFIDENCE:
+                    continue
+                box = (x - width/2 - _GATE_PX, y - height/2 - _GATE_PX,
+                       x + width/2 + _GATE_PX, y + height/2 + _GATE_PX)
+                if not all(math.isfinite(edge) for edge in box):
+                    return _unknown("invalid_object")
+                matches = [identifier for identifier, pixel in targets.items()
+                           if _contains(box, pixel)]
+                if not matches:
+                    continue
+                if any(_contains(box, pixel) for pixel in others.values()):
+                    return _unknown("ambiguous_other_head")
+                if len(matches) > 1:
+                    # All possible identities are proven members of the same
+                    # route link. Do not merge a red bulb and a distant arrow
+                    # here: ambiguous boxes each retain their own indication.
+                    state = _state(obj.class_name)
+                    if state == "UNKNOWN":
+                        return _unknown("unsupported_class")
+                    unresolved.append((state, confidence))
+                    continue
+                grouped.setdefault(matches[0], []).append(obj)
+        except (AttributeError, TypeError, ValueError, OverflowError):
+            return _unknown("invalid_object")
+        if not grouped and not unresolved:
+            return _unknown("no_match")
+        indications = list(unresolved)
+        for detections in grouped.values():
+            if count_signal_housings(detections) != 1:
+                return _unknown("ambiguous_housing")
+            state, confidence = directional_observation(detections)
+            if state == "UNKNOWN":
+                return _unknown("conflicting_target_indication")
+            indications.append((state, confidence))
+        states = {state for state, _ in indications}
+        if len(states) == 1:
+            state = indications[0][0]
+        elif states <= {"GREEN", "GREEN_LEFT", "GREEN_RIGHT"}:
+            # Circle permission is common to these heads. Dropping any arrow
+            # prevents one target's arrow from authorizing a conflicting head.
+            state = "GREEN"
+        elif states <= {"LEFT", "RED_LEFT", "GREEN_LEFT"}:
+            state = "LEFT"
+        elif states <= {"RIGHT", "RED_RIGHT", "GREEN_RIGHT"}:
+            state = "RIGHT"
+        else:
+            return _unknown("conflicting_target_heads")
+        # The identity is the map-bound group, even when one of its repeated
+        # signal heads briefly leaves the image. This never hides a detected
+        # stop/conflict, which was handled above for every associated head.
+        identifiers = tuple(sorted(projected_targets, key=str))
+        selected_id = identifiers[0] if len(identifiers) == 1 else identifiers
+        return Selection(state, min(score for _, score in indications),
+                         True, selected_id, "matched_route_group")
 
     matches = []
     try:

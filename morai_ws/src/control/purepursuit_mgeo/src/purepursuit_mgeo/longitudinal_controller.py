@@ -4,9 +4,59 @@ from __future__ import annotations
 
 import math
 from dataclasses import dataclass
+from typing import Optional
 
 
 MPS_TO_KPH = 3.6
+
+
+class VehicleSpeedSource:
+    """Fresh vehicle speed, independent of the position estimator.
+
+    The UDP bridge publishes EgoVehicleStatus.velocity in m/s. Both source
+    time and receipt time are checked: a paused clock, repeated message, or
+    expired UDP stream must not look like a stationary vehicle indefinitely.
+    A sample is an immutable tuple so callbacks cannot expose partial state.
+    """
+
+    def __init__(self, timeout_sec: float = 0.5, max_speed_mps: float = 100.0):
+        if not all(math.isfinite(v) and v > 0.0 for v in
+                   (timeout_sec, max_speed_mps)):
+            raise ValueError("Vehicle speed limits must be finite and positive")
+        self.timeout_sec = float(timeout_sec)
+        self.max_speed_mps = float(max_speed_mps)
+        self._sample = None
+
+    def observe(self, speed_mps: float, stamp: float, ros_now: float,
+                wall_now: float) -> bool:
+        values = (speed_mps, stamp, ros_now, wall_now)
+        if (not all(math.isfinite(v) for v in values)
+                or not 0.0 <= speed_mps <= self.max_speed_mps
+                or stamp <= 0.0
+                or not -0.05 <= ros_now - stamp <= self.timeout_sec):
+            return False
+        previous = self._sample
+        if previous is not None and ros_now < previous[1] - 0.05:
+            # A simulator clock reset starts a new timestamp epoch. Keep the
+            # source unavailable until its first fresh sample, then recover;
+            # an ordinary out-of-order packet with a current clock cannot
+            # take this branch.
+            self._sample = None
+            previous = None
+        if previous is not None and stamp <= previous[1]:
+            return False
+        self._sample = (float(speed_mps), float(stamp), float(wall_now))
+        return True
+
+    def sample(self, ros_now: float, wall_now: float) -> Optional[float]:
+        sample = self._sample
+        if sample is None or not all(math.isfinite(v) for v in (ros_now, wall_now)):
+            return None
+        speed, stamp, received = sample
+        if (not -0.05 <= ros_now - stamp <= self.timeout_sec
+                or not 0.0 <= wall_now - received <= self.timeout_sec):
+            return None
+        return speed
 
 
 @dataclass(frozen=True)
@@ -100,6 +150,12 @@ class SpeedPIController:
         dt = max(0.0, min(float(dt), 1.0)) if math.isfinite(float(dt)) else 0.0
         error = target - measured
 
+        # A positive integral left over from acceleration must not keep the
+        # throttle open above a newly lowered curve/route speed limit. The
+        # reciprocal case matters after a prolonged signal stop as well.
+        if error * self.integral_error_mps_s < 0.0:
+            self.integral_error_mps_s = 0.0
+
         if abs(error) <= self.speed_error_deadband_mps:
             self.integral_error_mps_s *= max(0.0, 1.0 - 2.0 * dt)
             requested = 0.0
@@ -151,6 +207,11 @@ class SpeedPIController:
         else:
             accel = self._slew(self.last_accel, 0.0, 0.0,
                                self.pedal_release_rate_per_sec, dt)
+        if measured >= target:
+            # Releasing a pedal is immediate at the speed ceiling. Slewing a
+            # positive accelerator towards zero here would intentionally
+            # continue accelerating after the speed error has disappeared.
+            accel = 0.0
         self.last_accel, self.last_brake = accel, brake
 
         return LongitudinalCommand(requested, accel, brake)

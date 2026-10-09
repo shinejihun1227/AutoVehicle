@@ -18,7 +18,7 @@ from typing import Optional, Tuple
 
 import rospy
 from geometry_msgs.msg import PointStamped, PoseStamped
-from morai_msgs.msg import CtrlCmd
+from morai_msgs.msg import CtrlCmd, EgoVehicleStatus
 from morai_perception_msgs.msg import LaneDetection, StopLineDetection
 from nav_msgs.msg import Odometry, Path
 from std_msgs.msg import Bool, Float64
@@ -27,6 +27,7 @@ from purepursuit_mgeo.longitudinal_controller import (
     LongitudinalCommand,
     MPS_TO_KPH,
     SpeedPIController,
+    VehicleSpeedSource,
 )
 from curvature_speed_purepursuit.planner import (
     PathPoint,
@@ -40,6 +41,7 @@ from curvature_speed_purepursuit.planner import (
     adaptive_lookahead_m,
     interpolate_by_s,
     max_abs_curvature_ahead,
+    minimum_speed_ahead,
     load_path_file,
     nearest_projection,
     profile_value_at_s,
@@ -248,6 +250,15 @@ class CurvatureSpeedPurePursuitNode:
         self.pose_timeout_sec = max(
             0.0, float(rospy.get_param("~pose_timeout_sec", 0.5))
         )
+        self.vehicle_speed_topic = str(rospy.get_param("~vehicle_speed_topic", "")).strip()
+        self.require_vehicle_speed = bool(rospy.get_param("~require_vehicle_speed", False))
+        if self.require_vehicle_speed and not self.vehicle_speed_topic:
+            raise ValueError("require_vehicle_speed needs vehicle_speed_topic")
+        self.vehicle_speed_source = VehicleSpeedSource(
+            timeout_sec=float(rospy.get_param("~vehicle_speed_timeout_sec", 0.5)))
+        self.speed_preview_time_sec = float(rospy.get_param("~speed_preview_time_sec", 0.8))
+        if not math.isfinite(self.speed_preview_time_sec) or not 0.0 <= self.speed_preview_time_sec <= 2.0:
+            raise ValueError("speed_preview_time_sec must be between 0 and 2 seconds")
         self.command_topic = rospy.get_param(
             "~command_topic", "/experimental/curvature_ctrl_cmd"
         )
@@ -296,6 +307,15 @@ class CurvatureSpeedPurePursuitNode:
         self.speed_command_pub = rospy.Publisher(
             "/experimental/curvature_speed_command", Float64, queue_size=1
         )
+        self.measured_speed_pub = rospy.Publisher(
+            "/experimental/curvature_measured_speed_kph", Float64, queue_size=1
+        )
+        self.odom_speed_pub = rospy.Publisher(
+            "/experimental/curvature_odom_speed_kph", Float64, queue_size=1
+        )
+        self.vehicle_speed_fresh_pub = rospy.Publisher(
+            "/experimental/curvature_vehicle_speed_fresh", Bool, queue_size=1
+        )
         self.accel_command_pub = rospy.Publisher(
             "/experimental/curvature_accel_command", Float64, queue_size=1
         )
@@ -328,6 +348,9 @@ class CurvatureSpeedPurePursuitNode:
         )
 
         rospy.Subscriber(self.pose_topic, Odometry, self.odom_callback, queue_size=10)
+        if self.vehicle_speed_topic:
+            rospy.Subscriber(self.vehicle_speed_topic, EgoVehicleStatus,
+                             self.vehicle_speed_callback, queue_size=10)
         if self.enable_lane_centering:
             rospy.Subscriber(
                 rospy.get_param("~lane_topic", "/detection/lane"),
@@ -375,6 +398,11 @@ class CurvatureSpeedPurePursuitNode:
     def odom_callback(self, message: Odometry) -> None:
         self.latest_odom = message
         self.latest_odom_wall_time = time.monotonic()
+
+    def vehicle_speed_callback(self, message: EgoVehicleStatus) -> None:
+        self.vehicle_speed_source.observe(
+            math.hypot(float(message.velocity.x), float(message.velocity.y)),
+            message.header.stamp.to_sec(), rospy.Time.now().to_sec(), time.monotonic())
 
     def lane_callback(self, message: LaneDetection) -> None:
         """Accept only fresh, plausible CAM1 lane observations in body coordinates."""
@@ -483,12 +511,17 @@ class CurvatureSpeedPurePursuitNode:
         return projection
 
     def apply_speed_rate_limit(self, target_speed: float, dt: float) -> float:
-        target = max(0.0, float(target_speed))
+        target = max(0.0, min(float(target_speed), self.max_speed_kph / MPS_TO_KPH))
         delta = target - self.command_speed_mps
         if delta >= 0.0:
             allowed = self.max_accel_mps2 * max(dt, 1e-3)
         else:
-            allowed = self.max_decel_mps2 * max(dt, 1e-3)
+            # The spatial profile already includes a braking-distance pass.
+            # A second descending target ramp would command a speed ABOVE
+            # that ceiling precisely when entering the bend. Pedal slew below
+            # provides smooth actuation without delaying the speed constraint.
+            self.command_speed_mps = target
+            return target
         self.command_speed_mps += clamp(delta, -allowed, allowed)
         self.command_speed_mps = max(0.0, self.command_speed_mps)
         return self.command_speed_mps
@@ -561,11 +594,27 @@ class CurvatureSpeedPurePursuitNode:
             self.s_values, curvatures, feedforward_s
         )
         feedback_steering = math.atan(self.wheelbase_m * pp_curvature)
-        feedforward_steering = math.atan(self.wheelbase_m * path_curvature)
-        steering = (
-            (1.0 - feedforward_weight) * feedback_steering
-            + feedforward_weight * feedforward_steering
-        ) * self.steering_sign
+        # Preserve the full lateral/heading feedback. Averaging a curvature
+        # feedforward with PP scales all corrective steering by (1-weight),
+        # which weakens recovery on the outside of a corner. Instead add only
+        # the feedforward correction to the PP command for an on-path vehicle.
+        reference, reference_index = interpolate_by_s(self.points, self.s_values, progress_s)
+        reference_next = self.points[reference_index + 1]
+        reference_previous = self.points[reference_index]
+        reference_yaw = math.atan2(reference_next.y - reference_previous.y,
+                                   reference_next.x - reference_previous.x)
+        reference_dx, reference_dy = target.x - reference.x, target.y - reference.y
+        reference_distance_sq = max(reference_dx ** 2 + reference_dy ** 2, 1e-6)
+        reference_y = (-math.sin(reference_yaw) * reference_dx
+                       + math.cos(reference_yaw) * reference_dy)
+        reference_curvature = 2.0 * reference_y / reference_distance_sq
+        # At an S transition, do not inject the next bend's opposite steering
+        # while the current target chord still belongs to the previous bend.
+        if reference_curvature * path_curvature < 0.0:
+            feedforward_weight = 0.0
+        correction = (math.atan(self.wheelbase_m * path_curvature)
+                      - math.atan(self.wheelbase_m * reference_curvature))
+        steering = (feedback_steering + feedforward_weight * correction) * self.steering_sign
         # Pure Pursuit can cut across the centre line during a left-to-right
         # transition. Use the measured displacement from the route as bounded
         # near-field feedback; positive error is left of the route.
@@ -624,6 +673,11 @@ class CurvatureSpeedPurePursuitNode:
             -self.lane_centering_max_correction_rad,
             self.lane_centering_max_correction_rad,
         )
+        # The camera's 7/14-m chord can cut across a sharp curve or point at
+        # the next branch. Do not let this auxiliary correction unwind the
+        # route command during a tight bend.
+        if abs(nominal) > 0.15 and correction * nominal < 0.0:
+            return nominal, 0.0, False
         centered = clamp(nominal + correction, -self.max_steering_rad, self.max_steering_rad)
         return centered, centered - nominal, True
 
@@ -717,11 +771,33 @@ class CurvatureSpeedPurePursuitNode:
             pose.orientation.z,
             pose.orientation.w,
         )
-        measured_speed_mps = math.hypot(
+        odom_speed_mps = math.hypot(
             self.latest_odom.twist.twist.linear.x,
             self.latest_odom.twist.twist.linear.y,
         )
+        vehicle_speed = self.vehicle_speed_source.sample(now, time.monotonic())
+        self.vehicle_speed_fresh_pub.publish(Bool(vehicle_speed is not None))
+        self.odom_speed_pub.publish(Float64(odom_speed_mps * MPS_TO_KPH))
+        if ((self.require_vehicle_speed and vehicle_speed is None)
+                or (vehicle_speed is None and not math.isfinite(odom_speed_mps))):
+            self.command_speed_mps = 0.0
+            self.speed_controller.reset()
+            self.speed_command_pub.publish(Float64(0.0))
+            self.accel_command_pub.publish(Float64(0.0))
+            self.brake_command_pub.publish(Float64(1.0))
+            if self.publish_command:
+                self.command_pub.publish(self.make_command(
+                    self.last_steering_rad, 0.0, 0.0, stop=True, dt=dt))
+            rospy.logwarn_throttle(2.0, "Curvature PP stopped: fresh vehicle speed unavailable (%s)",
+                                   self.vehicle_speed_topic)
+            return
+        measured_speed_mps = vehicle_speed if vehicle_speed is not None else odom_speed_mps
         measured_speed_kph = measured_speed_mps * MPS_TO_KPH
+        self.measured_speed_pub.publish(Float64(measured_speed_kph))
+        if (vehicle_speed is not None and math.isfinite(odom_speed_mps)
+                and abs(vehicle_speed - odom_speed_mps) > 2.0):
+            rospy.logwarn_throttle(2.0, "Curvature PP speed disagreement: vehicle=%.2f EKF=%.2f km/h; using vehicle speed",
+                                   measured_speed_kph, odom_speed_mps * MPS_TO_KPH)
 
         projection = self.search_projection(x, y)
         path_start = self.points[projection.segment_index]
@@ -741,7 +817,9 @@ class CurvatureSpeedPurePursuitNode:
 
         remaining_m = max(0.0, self.total_length_m - progress_s)
         stop = remaining_m <= self.goal_tolerance_m
-        speed_limit = profile_value_at_s(self.s_values, self.speed_profile, progress_s)
+        speed_limit = minimum_speed_ahead(
+            self.s_values, self.speed_profile, progress_s,
+            measured_speed_mps * self.speed_preview_time_sec)
         stopline_cap_active = self.update_stopline_speed_cap(
             progress_s, self.latest_odom.header.stamp.to_sec(), now
         )

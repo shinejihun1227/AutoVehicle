@@ -248,7 +248,14 @@ class StopLineControllerCore:
         return Decision("HOLD" if self.holding else "SAFE_STOP", reason,
                         0.0, 1.0, 0.0, self.distance)
 
-    def update(self, now, ros_now, speed_mps):
+    def update(self, now, ros_now, speed_mps, permission_pending=False):
+        """Update braking; an unpaired source frame may suspend release.
+
+        Waiting briefly for that frame's pose/object partner is not a RED
+        observation. Keep ordered GREEN history, but do not release the stop
+        until the caller resolves every pending frame. A resolved invalid or
+        nonpermissive frame must still call revoke_permission/observe_signal.
+        """
         if not finite(now) or not finite(ros_now):
             self.revoke_permission()
             return self._stop("invalid_clock", hold=True)
@@ -310,7 +317,7 @@ class StopLineControllerCore:
                     self.consumed_line_stamp = self.line.stamp
 
         signal_fresh = self.signal is not None and self.signal.fresh(ros_now, now, self.signal_timeout_sec)
-        green_confirmed = self._green_confirmed(now, ros_now)
+        green_confirmed = not permission_pending and self._green_confirmed(now, ros_now)
         if not signal_fresh:
             self.green_since = None
             self.green_samples = 0

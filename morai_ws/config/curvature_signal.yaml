@@ -1,7 +1,17 @@
 # Four signalized areas on the fixed route. The last area has two successive
 # mapped stop lines (RIGHT and LEFT). The far-side LCS01 lane-control signal
 # is not treated as an ordinary intersection. The route remains the steering
-# reference; CAM4 pixel-to-map projection is not used.
+# reference. CAM4 projection uses the user's MORAI sensor settings below.
+signal_camera:
+  calibrated: true
+  width: 640
+  height: 480
+  horizontal_fov_deg: 90.0
+  x: 3.43
+  y: 0.01
+  z: 0.61
+  pitch_deg: 0.0
+  yaw_deg: 0.0
 signalized_context_ids:
   - "mgeo:A2256W000215:0"  # 208 m, STRAIGHT
   - "mgeo:A2256W000222:0"  # 316 m, STRAIGHT

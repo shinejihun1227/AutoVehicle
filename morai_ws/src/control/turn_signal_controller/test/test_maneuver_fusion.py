@@ -13,7 +13,8 @@ import xml.etree.ElementTree as ET
 PACKAGE = Path(__file__).resolve().parents[1]
 SOURCE = PACKAGE.parents[1]
 for relative in ("control/turn_signal_controller/src", "control/stopline_control/src",
-                 "experimental/curvature_speed_purepursuit/src", "detection/camera_perception/src"):
+                 "control/purepursuit_mgeo/src", "experimental/curvature_speed_purepursuit/src",
+                 "detection/camera_perception/src"):
     sys.path.insert(0, str(SOURCE / relative))
 from turn_signal_controller.fusion import IndicatorLead, build_lamp_packet, route_intent, signal_permits
 from camera_perception.traffic_signal import directional_observation
@@ -139,7 +140,7 @@ class FusionNodeTest(unittest.TestCase):
         self.ros.get_param.side_effect = lambda key, default=None: self.params.get(key, default)
         self.ros.get_time.side_effect = lambda: self.now
         self.ros.Publisher.side_effect = lambda *_a, **_k: Mock()
-        modules = {"rospy": self.ros, "morai_msgs.msg": NS(CtrlCmd=Command),
+        modules = {"rospy": self.ros, "morai_msgs.msg": NS(CtrlCmd=Command, EgoVehicleStatus=Message),
                    "common.msg": NS(ObjectInfoArray=Message),
                    "morai_perception_msgs.msg": NS(TrafficLight=Message, StopLineDetection=Message,
                                                     SafetyStop=Message, SensorQuality=Message),

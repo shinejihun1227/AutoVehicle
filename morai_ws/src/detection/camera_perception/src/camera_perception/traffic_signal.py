@@ -247,7 +247,7 @@ def directional_observation(objects, min_confidence=0.5):
             continue
         if not math.isfinite(score) or not min_confidence <= score <= 1.0:
             continue
-        name = str(getattr(item, "class_name", "UNKNOWN")).strip().upper().replace(" ", "_")
+        name = str(getattr(item, "class_name", "UNKNOWN")).strip().upper().replace(" ", "_").replace("-", "_")
         if "YELLOW" in name or "AMBER" in name:
             name = "YELLOW"
         if name not in supported:
@@ -274,9 +274,71 @@ def directional_observation(objects, min_confidence=0.5):
             if all(item is anchor or _same_signal_housing(anchor, item)
                    for _, _, item in candidates):
                 return "RED_" + arrow, min(score for _, score, _ in candidates)
+        # A green circle and its lit arrow can be separate detections too.
+        # Preserve both permissions only for one spatially coherent housing.
+        # A distant arrow, red, yellow, or unsupported label remains ambiguous.
+        compatible = {"GREEN", arrow, "GREEN_" + arrow}
+        if (len(candidates) >= 2
+                and {name for name, _, _ in candidates} <= compatible
+                and any(name in ("GREEN", "GREEN_" + arrow)
+                        for name, _, _ in candidates)
+                and any(name in (arrow, "GREEN_" + arrow)
+                        for name, _, _ in candidates)):
+            anchor = next(item for name, _, item in candidates
+                          if name in (arrow, "GREEN_" + arrow))
+            if all(item is anchor or _same_signal_housing(anchor, item)
+                   for _, _, item in candidates):
+                return "GREEN_" + arrow, min(score for _, score, _ in candidates)
     if len(evidence) != 1 or "UNKNOWN" in evidence:
         return "UNKNOWN", 0.0
     return next(iter(evidence.items()))
+
+
+def count_signal_housings(objects, min_confidence=0.5):
+    """Count plausible heads without treating duplicate bulb boxes as heads.
+
+    Only one coherent combined indication, or strongly overlapping copies of
+    one class, collapse to one head. Separate green heads still require map
+    association; unanimous colour alone does not identify our traffic light.
+    """
+    candidates = []
+    for item in objects:
+        try:
+            score = float(item.conf)
+        except (AttributeError, ValueError, TypeError, OverflowError):
+            continue
+        if math.isfinite(score) and min_confidence <= score <= 1.0:
+            candidates.append(item)
+    if len(candidates) <= 1:
+        return len(candidates)
+    state, _ = directional_observation(candidates, min_confidence)
+    if state in ("RED_LEFT", "RED_RIGHT", "GREEN_LEFT", "GREEN_RIGHT"):
+        if all(_same_signal_housing(a, b) for i, a in enumerate(candidates)
+               for b in candidates[i + 1:]):
+            return 1
+    if state == "UNKNOWN":
+        return len(candidates)
+    # Do not use adjacent-lamp tolerances for duplicate whole-head detections.
+    for i, first in enumerate(candidates):
+        for second in candidates[i + 1:]:
+            try:
+                boxes = [tuple(float(getattr(obj, key)) for key in
+                               ("x_center", "y_center", "width", "height"))
+                         for obj in (first, second)]
+                if any(not all(math.isfinite(v) for v in box)
+                       or box[2] <= 0 or box[3] <= 0 for box in boxes):
+                    return len(candidates)
+                (x1, y1, w1, h1), (x2, y2, w2, h2) = boxes
+                overlap = (max(0.0, min(x1 + w1/2, x2 + w2/2)
+                               - max(x1 - w1/2, x2 - w2/2))
+                           * max(0.0, min(y1 + h1/2, y2 + h2/2)
+                                 - max(y1 - h1/2, y2 - h2/2)))
+                union = w1*h1 + w2*h2 - overlap
+                if union <= 0 or overlap / union < 0.6:
+                    return len(candidates)
+            except (AttributeError, TypeError, ValueError, OverflowError):
+                return len(candidates)
+    return 1
 
 
 def straight_observation(objects, min_confidence=0.5):

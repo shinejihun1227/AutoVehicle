@@ -4,7 +4,9 @@
 The host supplies this script so diagnosis works before a container update.
 No parameter, publisher, vehicle command or existing process is modified.
 """
+import hashlib
 import json
+from collections import deque
 import math
 import os
 from pathlib import Path
@@ -23,18 +25,31 @@ def summarize(kind, msg, ros_now):
                 'mapped_stopline_confirmed', 'signal_pending_frames',
                 'green_confirmation_samples', 'front_bumper_distance_m',
                 'target_clearance_m', 'mapped_stopline_distance_m',
-                'speed_governor_target_kph',
+                'speed_governor_target_kph', 'max_speed_kph',
+                'measured_speed_kph', 'speed_source', 'vehicle_speed_kph', 'odometry_speed_kph',
+                'vehicle_speed_topic', 'vehicle_speed_required',
+                'speed_feedback_reason', 'speed_feedback_valid',
+                'permission', 'entry_fault', 'entry_crossing_s_m',
+                'signal_allowed_directions', 'route_signal_compatible',
+                'indicator_ready', 'reference_path_reason', 'stopline_tracking_fault',
+                'turn_phase', 'turn_speed_limit_kph', 'turn_curve_speed_kph',
+                'turn_curvature_abs_m_inv', 'turn_heading_error_deg',
+                'turn_lateral_error_m', 'next_junction_guard_id', 'mapped_signal_ids',
+                'selected_signal_id', 'selected_signal_state', 'route_signal_projection_px',
+                'camera_association_reason', 'signal_association_mode', 'route_camera_calibrated',
                 'accel', 'brake')
         result = {key: data[key] for key in keys if key in data}
         if isinstance(result.get('event'), dict):
             event = result['event']
             result['event'] = {key: event[key] for key in
                                ('id', 'start', 'stop_s', 'end', 'direction', 'committed',
-                                'camera_line_confirmed', 'stopline_match_error_m')
+                                'camera_line_confirmed', 'stopline_match_error_m',
+                                'direction_source', 'heading_change_deg', 'entry_fault')
                                if key in event}
         return result
     if kind in ('nominal', 'final'):
-        return dict(type=msg.longlCmdType, accel=round(msg.accel, 3), brake=round(msg.brake, 3))
+        return dict(type=msg.longlCmdType, accel=round(msg.accel, 3),
+                    brake=round(msg.brake, 3), steering_rad=round(msg.steering, 4))
     if kind == 'speed_cap_active':
         return dict(active=bool(msg.data))
     if kind == 'speed_cap_target':
@@ -51,6 +66,15 @@ def summarize(kind, msg, ros_now):
                                      center=[round(o.x_center, 1), round(o.y_center, 1)],
                                      size=[round(o.width, 1), round(o.height, 1)])
                                 for o in msg.objects[:5]],
+                    source_age_s=round(ros_now-msg.header.stamp.to_sec(), 3))
+    if kind == 'signal':
+        return dict(state=msg.state, valid=msg.valid, confidence=round(msg.confidence, 3),
+                    source_age_s=round(ros_now-msg.header.stamp.to_sec(), 3))
+    if kind == 'ego':
+        v = msg.velocity
+        return dict(speed_kph=round(math.hypot(v.x, v.y)*3.6, 2),
+                    velocity_mps=[round(v.x, 3), round(v.y, 3)],
+                    heading_deg=round(msg.heading, 2),
                     source_age_s=round(ros_now-msg.header.stamp.to_sec(), 3))
     if kind == 'odom':
         p, v = msg.pose.pose.position, msg.twist.twist.linear
@@ -86,22 +110,85 @@ def recent_errors(log_root):
             yield path.name + ': ' + line[-700:]
 
 
+def runtime_installation():
+    """Report installed bytes and the file paths resolved by this Python runtime."""
+    root = Path('/opt/AutoVehicle/morai_ws')
+    state = root/'docker/final_ws/curvature-runtime-install.txt'
+    if state.exists():
+        print('RUNTIME_INSTALL ' + state.read_text(encoding='utf-8').strip().replace('\n', ' '), flush=True)
+    else:
+        print('RUNTIME_INSTALL no hot-update manifest (possibly built image)', flush=True)
+    image_revision = Path('/opt/morai-build/code-revision.txt')
+    if image_revision.exists():
+        print('IMAGE_REVISION ' + image_revision.read_text().strip(), flush=True)
+    manifest = root/'docker/final_ws/curvature-runtime.sha256'
+    if manifest.exists():
+        mismatched, count = [], 0
+        for line in manifest.read_text(encoding='utf-8').splitlines():
+            expected, name = line.split(None, 1)
+            path = root/name.lstrip('* ')
+            digest = hashlib.sha256()
+            try:
+                with path.open('rb') as stream:
+                    for chunk in iter(lambda: stream.read(1048576), b''):
+                        digest.update(chunk)
+                if digest.hexdigest() != expected:
+                    mismatched.append(str(path.relative_to(root)))
+            except OSError:
+                mismatched.append(str(path.relative_to(root)) + ' (missing)')
+            count += 1
+        print('RUNTIME_CONTENT files=%d mismatches=%s' % (count, json.dumps(mismatched)), flush=True)
+    import importlib.util
+    for module in ('curvature_speed_purepursuit.planner',
+                   'purepursuit_mgeo.longitudinal_controller',
+                   'turn_signal_controller.turn_motion', 'turn_signal_controller.route_context',
+                   'stopline_control.core', 'camera_perception.traffic_signal'):
+        try:
+            spec = importlib.util.find_spec(module)
+            path = Path(spec.origin)
+            print('PYTHON_SOURCE %s file=%s sha256=%s' %
+                  (module, path, hashlib.sha256(path.read_bytes()).hexdigest()), flush=True)
+        except Exception as exc:
+            print('PYTHON_SOURCE_ERROR %s %s' % (module, exc), flush=True)
+
+
 def main():
     import rospy
     import rospkg
-    from morai_msgs.msg import CtrlCmd
-    from morai_perception_msgs.msg import StopLineDetection
+    from morai_msgs.msg import CtrlCmd, EgoVehicleStatus
+    from morai_perception_msgs.msg import StopLineDetection, TrafficLight
     from common.msg import ObjectInfoArray
     from nav_msgs.msg import Odometry, Path as RosPath
     from std_msgs.msg import String, Bool, Float64
 
     for name in ('ROS_IP', 'ROS_HOSTNAME', 'ROS_MASTER_URI'):
         print(name + '=' + os.environ.get(name, '(unset)'), flush=True)
+    runtime_installation()
     rospy.init_node('curvature_signal_read_only_diagnosis', anonymous=True, disable_signals=True)
     for name in ('/curvature_speed_purepursuit/publish_command',
                  '/curvature_speed_purepursuit/command_topic',
                  '/morai_udp_drive_bridge/control_output_enabled', '/use_sim_time',
-                 '/curvature_signal_controller/signal_camera/calibrated'):
+                 '/curvature_signal_controller/signal_camera',
+                 '/curvature_signal_controller/signalized_context_ids',
+                 '/curvature_signal_controller/require_route_signal_context',
+                 '/curvature_signal_controller/signal_camera/calibrated',
+                 '/curvature_speed_purepursuit/max_speed_kph',
+                 '/curvature_speed_purepursuit/max_accel_mps2',
+                 '/curvature_speed_purepursuit/max_decel_mps2',
+                 '/curvature_speed_purepursuit/speed_kp',
+                 '/curvature_speed_purepursuit/speed_ki',
+                 '/curvature_speed_purepursuit/lookahead_gain',
+                 '/curvature_speed_purepursuit/max_steering_rate_rad_s',
+                 '/curvature_speed_purepursuit/conservative_curve_speed_enabled',
+                 '/curvature_speed_purepursuit/vehicle_speed_topic',
+                 '/curvature_speed_purepursuit/require_vehicle_speed',
+                 '/curvature_signal_controller/vehicle_speed_topic',
+                 '/curvature_signal_controller/require_vehicle_speed',
+                 '/curvature_signal_controller/max_speed_kph',
+                 '/curvature_signal_controller/speed_governor_enabled',
+                 '/curvature_signal_controller/mapped_stopline_approach_speed_kph',
+                 '/curvature_signal_controller/hold_distance_m',
+                 '/curvature_signal_controller/right_on_green'):
         print(name + '=' + str(rospy.get_param(name, 'NOT_SET')), flush=True)
     try:
         path = Path(rospkg.RosPack().get_path('curvature_speed_purepursuit'))
@@ -115,6 +202,8 @@ def main():
         'gps': ('/localization/gps', rospy.AnyMsg),
         'imu': ('/Imu', rospy.AnyMsg),
         'odom': ('/localization/odometry', Odometry),
+        'ego': ('/Ego_topic', EgoVehicleStatus),
+        'signal': ('/perception/traffic_light/directional_state', TrafficLight),
         'reference': ('/experimental/curvature_reference_path', RosPath),
         'nominal': ('/control/ctrl_cmd', CtrlCmd),
         'final': ('/ctrl_cmd', CtrlCmd),
@@ -127,11 +216,24 @@ def main():
         'cam4_rviz': ('/debug/cameras/cam4/image', rospy.AnyMsg),
     }
     samples, lock = {}, threading.Lock()
+    status_changes = deque(maxlen=8)
+    previous_gate = [None]
 
     def receive(msg, kind):
         with lock:
             count = samples.get(kind, (0,))[0]
             samples[kind] = (count+1, time.monotonic(), msg)
+            if kind == 'status':
+                try:
+                    data = json.loads(msg.data)
+                    gate = {key: data.get(key) for key in
+                            ('reason', 'signal', 'route_direction', 'permission',
+                             'entry_fault', 'signal_selection_reason', 'route_signal_compatible')}
+                    if gate != previous_gate[0]:
+                        status_changes.append(gate)
+                        previous_gate[0] = gate
+                except (ValueError, TypeError):
+                    pass
 
     subscribers = [rospy.Subscriber(topic, cls, receive, callback_args=kind, queue_size=1)
                    for kind, (topic, cls) in topics.items()]
@@ -145,12 +247,19 @@ def main():
     publishers = dict(state[0])
     with lock:
         snapshot = dict(samples)
+        transitions = list(status_changes)
     for kind, (topic, _) in topics.items():
         count, received, msg = snapshot.get(kind, (0, 0, None))
         data = summarize(kind, msg, rospy.Time.now().to_sec()) if msg is not None else {}
         print('%s count=%d age=%s pub=%s %s' % (kind, count,
               round(time.monotonic()-received, 2) if count else 'NONE',
               ','.join(publishers.get(topic, [])) or 'NONE', json.dumps(data)), flush=True)
+    for topic in ('/ctrl_cmd', '/control/ctrl_cmd'):
+        nodes = publishers.get(topic, [])
+        if len(nodes) != 1:
+            print('COMMAND_PUBLISHER_COUNT topic=%s count=%d nodes=%s' %
+                  (topic, len(nodes), json.dumps(nodes)), flush=True)
+    print('SIGNAL_GATE_CHANGES ' + json.dumps(transitions), flush=True)
     # Distinguish a fresh pose outside the route from no localization at all.
     if 'odom' in snapshot:
         try:

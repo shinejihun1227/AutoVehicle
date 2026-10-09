@@ -235,7 +235,9 @@ class TurnNodeMotionTest(unittest.TestCase):
         source = fixtures.SOURCE
         sys.path.insert(0, str(source / "control/purepursuit_mgeo/src"))
         modules = {"rospy": Mock(), "geometry_msgs.msg": NS(PointStamped=fixtures.Message, PoseStamped=fixtures.Message),
-                   "morai_msgs.msg": NS(CtrlCmd=fixtures.Command),
+                   "morai_msgs.msg": NS(CtrlCmd=fixtures.Command, EgoVehicleStatus=fixtures.Message),
+                   "morai_perception_msgs.msg": NS(StopLineDetection=fixtures.Message,
+                                                    LaneDetection=fixtures.Message),
                    "nav_msgs.msg": NS(Odometry=fixtures.Message, Path=fixtures.Message),
                    "std_msgs.msg": NS(Bool=fixtures.Message, Float64=fixtures.Message)}
         path = source / "experimental/curvature_speed_purepursuit/scripts/curvature_speed_purepursuit_node.py"

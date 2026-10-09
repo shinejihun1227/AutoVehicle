@@ -2,6 +2,7 @@
 # Launch recipes only: all driving and safety calculations remain in ROS nodes.
 set -euo pipefail
 SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
+WS="$(cd -- "$SCRIPT_DIR/../.." && pwd)"
 ACTION="${1:-show}"
 if [[ $# -gt 2 || ! "$ACTION" =~ ^(show|monitor|drive|diagnose|speed|lane|turn|models|request-merge|view|rviz)$ ]] ||
    [[ "$ACTION" =~ ^(models|request-merge|view|rviz)$ && $# -gt 1 ]] ||
@@ -17,6 +18,7 @@ source "$SCRIPT_DIR/highway.env"
 # The versioned example supplies defaults for fields added by later updates.
 source "$SCRIPT_DIR/highway-test.env.example"
 source "$SCRIPT_DIR/highway-test.env"
+source "$SCRIPT_DIR/curvature_runtime_files.sh"
 if [[ "$ACTION" == view ]]; then
   exec bash "$SCRIPT_DIR/open_camera_dashboard.sh"
 fi
@@ -108,6 +110,12 @@ case "${2:-$TEST_PROFILE}" in
   obstacle|merge) TEST_PROFILE="${2:-$TEST_PROFILE}" ;;
   *) echo "Unknown test case: ${2:-$TEST_PROFILE}; use 1-5." >&2; exit 2 ;;
 esac
+if [[ "$TEST_PROFILE" == curvature_signal ]] &&
+   ! awk -v speed="$MAX_SPEED_KPH" 'BEGIN {exit !(speed > 0 && speed <= 35)}'; then
+  echo "ERROR: saved profile 2 speed is $MAX_SPEED_KPH km/h; this profile is limited to 35 km/h." >&2
+  echo 'Run bash run_test.sh speed 35, then restart the launch.' >&2
+  exit 2
+fi
 CONTROL=false
 [[ "$ACTION" != drive ]] || CONTROL=true
 
@@ -192,6 +200,8 @@ esac
 
 echo "Profile=$TEST_PROFILE  action=$ACTION  max_speed_kph=$MAX_SPEED_KPH"
 if [[ "$TEST_PROFILE" == curvature_signal ]]; then
+  echo "Settings=$SCRIPT_DIR/highway-test.env (saved values override launch defaults)"
+  echo "PI=$SPEED_KP/$SPEED_KI lookahead_gain=$LOOKAHEAD_GAIN steer_rate_rad_s=$MAX_STEERING_RATE_RAD_S approach_kph=$STOPLINE_APPROACH_SPEED_KPH stop_clearance_m=$STOPLINE_HOLD_DISTANCE_M"
   echo "Lane_centering=${LANE_CENTERING_ENABLED:-false} weight=${LANE_CENTERING_WEIGHT:-0.15} max_delta_rad=${LANE_CENTERING_MAX_CORRECTION_RAD:-0.06}"
 fi
 echo "Ubuntu=$UBUNTU_IP  MORAI=$MORAI_IP  container=$CONTAINER_NAME"
@@ -206,7 +216,7 @@ if [[ "$TEST_PROFILE" != curvature && "$TEST_PROFILE" != curvature_signal ]]; th
 fi
 DISPLAY_ARGS=()
 if [[ "$TEST_PROFILE" == curvature_signal ]]; then
-  echo 'Curvature route + selected MGeo stop lines + CAM1/CAM4 directional signal gate; no LiDAR, avoidance, merge, or lane steering.'
+  echo 'Curvature route + selected MGeo stop lines + calibrated CAM4 directional signal gate; CAM1 lane assist follows the setting above.'
   echo 'CAM1 + CAM4 and stop reasons: http://127.0.0.1:8765 (Ubuntu browser)'
   echo 'RViz alternative (new host terminal): bash run_test.sh rviz'
   if [[ "$OPEN_CAMERA_DASHBOARD" == true && -n "${DISPLAY:-}${WAYLAND_DISPLAY:-}" ]]; then
@@ -221,59 +231,52 @@ fi
 DOCKER=(docker --context default)
 if ! "${DOCKER[@]}" info >/dev/null 2>&1; then DOCKER=(sudo docker --context default); fi
 if [[ "$TEST_PROFILE" == curvature_signal ]]; then
-  INSTALLED_LAUNCH=/opt/AutoVehicle/morai_ws/src/bringup/morai_bringup/launch/final_ws_curvature_signal.launch
-  INSTALLED_FUSION=/opt/AutoVehicle/morai_ws/src/control/turn_signal_controller/scripts/maneuver_fusion_node.py
-  INSTALLED_CURVATURE=/opt/AutoVehicle/morai_ws/src/experimental/curvature_speed_purepursuit/scripts/curvature_speed_purepursuit_node.py
-  INSTALLED_PLANNER=/opt/AutoVehicle/morai_ws/src/experimental/curvature_speed_purepursuit/src/curvature_speed_purepursuit/planner.py
-  INSTALLED_LONGITUDINAL=/opt/AutoVehicle/morai_ws/src/control/purepursuit_mgeo/src/purepursuit_mgeo/longitudinal_controller.py
-  INSTALLED_TRAFFIC=/opt/AutoVehicle/morai_ws/src/detection/camera_perception/src/camera_perception/traffic_signal.py
-  INSTALLED_CAMERA_LAUNCH=/opt/AutoVehicle/morai_ws/src/detection/camera_perception/launch/camera_perception.launch
-  INSTALLED_CAMERA_NODE=/opt/AutoVehicle/morai_ws/src/detection/camera_perception/scripts/camera_object_detection_node.py
-  INSTALLED_CAMERA_MODELS=/opt/AutoVehicle/morai_ws/src/detection/camera_perception/models
-  INSTALLED_CONFIG=/opt/AutoVehicle/morai_ws/config/curvature_signal.yaml
-  INSTALLED_MGEO=/opt/AutoVehicle/morai_ws/src/detection/camera_perception/lane/mgeo/R_KR_PR_K-city_2025
-  if ! "${DOCKER[@]}" exec "$CONTAINER_NAME" grep -Fq \
-      '<param name="require_route_signal_context" value="false" />' "$INSTALLED_LAUNCH" ||
-     ! "${DOCKER[@]}" exec "$CONTAINER_NAME" grep -Fq \
-      '<param name="stopline_requires_detected_signal" value="true" />' "$INSTALLED_LAUNCH" ||
-     ! "${DOCKER[@]}" exec "$CONTAINER_NAME" grep -Fq \
-      '<param name="require_signalized_contexts" value="true" />' "$INSTALLED_LAUNCH" ||
-     ! "${DOCKER[@]}" exec "$CONTAINER_NAME" grep -Fq \
-       '<param name="stopline_speed_cap_enabled" value="false" />' "$INSTALLED_LAUNCH" ||
-     ! "${DOCKER[@]}" exec "$CONTAINER_NAME" grep -Fq \
-       '<param name="speed_governor_enabled" value="true" />' "$INSTALLED_LAUNCH" ||
-     ! "${DOCKER[@]}" exec "$CONTAINER_NAME" grep -Fq \
-       '<param name="conservative_curve_speed_enabled" value="true" />' "$INSTALLED_LAUNCH" ||
-      ! "${DOCKER[@]}" exec "$CONTAINER_NAME" grep -Fq \
-       'name="signal_mgeo_path"' "$INSTALLED_LAUNCH" ||
-      ! "${DOCKER[@]}" exec "$CONTAINER_NAME" grep -Fq \
-       'def consume_route_signals' "$INSTALLED_FUSION" ||
-      ! "${DOCKER[@]}" exec "$CONTAINER_NAME" grep -Fq \
-       'def constrain_route_speed' "$INSTALLED_FUSION" ||
-      ! "${DOCKER[@]}" exec "$CONTAINER_NAME" grep -Eq \
-       '^[[:space:]]*- "mgeo:' "$INSTALLED_CONFIG" ||
-      ! "${DOCKER[@]}" exec "$CONTAINER_NAME" test -s "$INSTALLED_MGEO/traffic_light_set.json" ||
-     ! "${DOCKER[@]}" exec "$CONTAINER_NAME" grep -Fq \
-      'def update_stopline_speed_cap' "$INSTALLED_CURVATURE" ||
-     ! "${DOCKER[@]}" exec "$CONTAINER_NAME" grep -Fq \
-      'def conservative_speed_curvatures' "$INSTALLED_PLANNER" ||
-     ! "${DOCKER[@]}" exec "$CONTAINER_NAME" grep -Fq \
-      'brake_rise_rate_per_sec' "$INSTALLED_LONGITUDINAL" ||
-     ! "${DOCKER[@]}" exec "$CONTAINER_NAME" grep -Fq \
-      'def _same_signal_housing' "$INSTALLED_TRAFFIC" ||
-     ! "${DOCKER[@]}" exec "$CONTAINER_NAME" grep -Fq \
-      'models/best0917.pt' "$INSTALLED_CAMERA_LAUNCH" ||
-     ! "${DOCKER[@]}" exec "$CONTAINER_NAME" grep -Fq \
-      'models/yolov8s.pt' "$INSTALLED_CAMERA_LAUNCH" ||
-     ! "${DOCKER[@]}" exec "$CONTAINER_NAME" grep -Fq \
-      'TrackedSignalVotes' "$INSTALLED_CAMERA_NODE" ||
-     ! "${DOCKER[@]}" exec "$CONTAINER_NAME" test -s "$INSTALLED_CAMERA_MODELS/best0917.pt" ||
-     ! "${DOCKER[@]}" exec "$CONTAINER_NAME" test -s "$INSTALLED_CAMERA_MODELS/yolov8s.pt"; then
-    echo 'ERROR: The container is missing the selected route signal profile or CAM4 models.' >&2
-    echo 'No driving launch was started. Stop the container, run install_curvature_signal.sh, then start it again.' >&2
+  HOST_MANIFEST="$(curvature_runtime_manifest "$WS")"
+  # Compare exact host/runtime content; merely finding a function name does not
+  # detect stale bodies or missing updates to imported helper modules.
+  if ! printf '%s\n' "$HOST_MANIFEST" | "${DOCKER[@]}" exec -i "$CONTAINER_NAME" \
+      bash -c 'cd /opt/AutoVehicle/morai_ws && sha256sum --check --quiet'; then
+    echo 'ERROR: profile 2 runtime differs from this checkout; mismatched files are listed above.' >&2
+    echo 'Stop the container, run bash install_curvature_signal.sh, then start it again.' >&2
     exit 2
   fi
-  echo 'Verified profile: measured-speed governor, mapped 30 km/h approaches, CAM1 + CAM4 directional gate.'
+  if "${DOCKER[@]}" exec "$CONTAINER_NAME" grep -q '^state=pending$' \
+      /opt/AutoVehicle/morai_ws/docker/final_ws/curvature-runtime-install.txt 2>/dev/null; then
+    echo 'ERROR: the previous runtime installation did not finish. Run the installer again while stopped.' >&2
+    exit 2
+  fi
+  echo "RUNTIME_MATCH revision=$(git -C "$WS" rev-parse --short HEAD) (all profile 2 source/model hashes match)"
+  "${DOCKER[@]}" exec "$CONTAINER_NAME" sh -c \
+    'cat /opt/AutoVehicle/morai_ws/docker/final_ws/curvature-runtime-install.txt 2>/dev/null || true'
+  CONFIG_HASH="$("${DOCKER[@]}" exec "$CONTAINER_NAME" sha256sum "$SIGNAL_CONFIG_FILE")"
+  HOST_CONFIG_HASH="$(sha256sum "$WS/config/curvature_signal.yaml")"
+  if [[ "${CONFIG_HASH%% *}" == "${HOST_CONFIG_HASH%% *}" ]]; then
+    echo "SIGNAL_CONFIG_MATCH file=$SIGNAL_CONFIG_FILE"
+  else
+    echo "SIGNAL_CONFIG_DIFF file=$SIGNAL_CONFIG_FILE container_sha256=${CONFIG_HASH%% *} repository_sha256=${HOST_CONFIG_HASH%% *}" >&2
+    echo 'Preserved/custom signal settings are active; install with --config to use the repository CAM4 calibration and junction list.' >&2
+  fi
+  # A second launch can keep sending commands even if this launch is stopped.
+  # Refuse an already occupied command topic instead of replacing node names.
+  "${DOCKER[@]}" exec -i "$CONTAINER_NAME" /usr/local/bin/morai-entrypoint python - <<'PY'
+import os
+import socket
+import sys
+from xmlrpc.client import ServerProxy
+socket.setdefaulttimeout(3.0)
+try:
+    master = ServerProxy(os.environ.get('ROS_MASTER_URI', 'http://127.0.0.1:11311'))
+    code, message, state = master.getSystemState('/profile2_launch_check')
+except (OSError, socket.timeout):
+    # roslaunch will start a master if none is running.
+    sys.exit(0)
+if code != 1:
+    sys.exit('Cannot inspect ROS master: ' + str(message))
+occupied = {topic: nodes for topic, nodes in state[0]
+            if topic in ('/ctrl_cmd', '/control/ctrl_cmd') and nodes}
+if occupied:
+    sys.exit('Existing command publishers: %s. Stop the previous launch before starting profile 2.' % occupied)
+PY
 fi
 exec "${DOCKER[@]}" exec -it "$CONTAINER_NAME" /usr/local/bin/morai-entrypoint \
   "${DISPLAY_ARGS[@]}" roslaunch morai_bringup "$LAUNCH" "enable_control:=$CONTROL" \
