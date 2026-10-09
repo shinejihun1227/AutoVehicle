@@ -512,7 +512,7 @@ class ManeuverFusionNode:
                       and 0.5 <= item.conf <= 1.0]
         state, _ = directional_observation(candidates)
         # A spatially coherent RED + illuminated arrow describes one housing.
-        if len(candidates) == 2 and state in ("RED_LEFT", "RED_RIGHT"):
+        if len(candidates) > 1 and state in ("RED_LEFT", "RED_RIGHT"):
             return 1
         # The detector can emit overlapping copies of the same green lamp.
         # Do not confuse those with separate intersection heads.
@@ -830,7 +830,14 @@ class ManeuverFusionNode:
                     self.event = candidate
             return
         if self.route_signal_contexts:
-            horizon = max(40.0, speed * 6.0 + speed**2 / 2.0)
+            # Arm the mapped target before its comfortable braking distance,
+            # including bumper clearance and the gradual brake ramp.
+            core = self.core
+            stop_horizon = (speed * core.reaction_time_sec
+                            + speed**2 / (2.0 * core.planning_decel_mps2)
+                            + core.front_reference_offset_m + core.hold_distance_m
+                            + core.trigger_margin_m + core.brake_ramp_distance_m)
+            horizon = max(40.0, speed * 6.0 + speed**2 / 2.0, stop_horizon)
             for context in self.route_signal_contexts:
                 if context["id"] in self.completed:
                     continue

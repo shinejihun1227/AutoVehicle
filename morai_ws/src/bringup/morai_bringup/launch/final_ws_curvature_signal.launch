@@ -19,6 +19,7 @@
 
   <arg name="max_speed_kph" default="35.0" />
   <arg name="lateral_accel_limit_mps2" default="1.0" />
+  <arg name="curve_lateral_accel_limit_mps2" default="0.45" />
   <arg name="max_accel_mps2" default="1.0" />
   <arg name="max_decel_mps2" default="1.5" />
   <arg name="curve_planning_decel_mps2" default="0.8" />
@@ -53,9 +54,9 @@
   <arg name="lane_info_checkpoint" default="$(find camera_perception)/models/highway_best.pt" />
   <arg name="lane_info_cam_set" default="$(find camera_perception)/lane/cam_set.json" />
   <arg name="stopline_front_reference_offset_m" default="3.845" />
-  <arg name="stopline_hold_distance_m" default="7.0" />
-  <arg name="stopline_planning_decel_mps2" default="0.7" />
-  <arg name="stopline_brake_ramp_distance_m" default="20.0" />
+  <arg name="stopline_hold_distance_m" default="12.0" />
+  <arg name="stopline_planning_decel_mps2" default="0.6" />
+  <arg name="stopline_brake_ramp_distance_m" default="30.0" />
   <arg name="stopline_settle_distance_m" default="0.8" />
   <arg name="stopline_approach_speed_kph" default="30.0" />
   <arg name="mapped_stopline_approach_distance_m" default="80.0" />
@@ -98,10 +99,14 @@
     <param name="longl_cmd_type" value="1" />
     <param name="pose_timeout_sec" value="0.5" />
     <param name="max_speed_kph" value="$(arg max_speed_kph)" />
-    <param name="lateral_accel_limit_mps2" value="$(arg lateral_accel_limit_mps2)" />
+    <param name="lateral_accel_limit_mps2" value="$(arg curve_lateral_accel_limit_mps2)" />
     <param name="max_accel_mps2" value="$(arg max_accel_mps2)" />
     <param name="max_decel_mps2" value="$(arg max_decel_mps2)" />
     <param name="conservative_curve_speed_enabled" value="true" />
+    <param name="metre_sampled_steering_curvature" value="true" />
+    <param name="bridge_reversing_curves" value="true" />
+    <param name="path_lateral_feedback_gain" value="0.4" />
+    <param name="path_lateral_feedback_max_rad" value="0.08" />
     <param name="curve_planning_decel_mps2" value="$(arg curve_planning_decel_mps2)" />
     <param name="speed_kp" value="$(arg speed_kp)" />
     <param name="speed_ki" value="$(arg speed_ki)" />

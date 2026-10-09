@@ -161,6 +161,59 @@ def curvature_profile(
     return median_smooth(raw, smoothing_window)
 
 
+def steering_curvature_profile(
+    points: Sequence[PathPoint], s_values: Sequence[float],
+    spacing_m: float = 1.0, half_window_m: float = 3.0,
+) -> List[float]:
+    """Signed steering curvature over metres, independent of vertex spacing.
+
+    The original adjacent-vertex median can become zero on an interpolated
+    corner even while the car is turning. Sample a wider chord in metres so
+    the feedforward term does not vanish in the middle of an S bend.
+    """
+    if len(points) != len(s_values) or len(points) < 3:
+        raise ValueError("Route geometry is too short for steering curvature")
+    if not all(math.isfinite(v) and v > 0 for v in (spacing_m, half_window_m)):
+        raise ValueError("Steering curvature windows must be positive and finite")
+    finish = s_values[-1]
+    count = max(1, int(math.ceil(finish / spacing_m)))
+    sampled_s = [min(finish, i * spacing_m) for i in range(count)] + [finish]
+    sampled_points = [interpolate_by_s(points, s_values, s)[0] for s in sampled_s]
+    half_window = max(1, int(round(half_window_m / spacing_m)))
+    raw = [three_point_curvature(sampled_points, i, half_window)
+           for i in range(len(sampled_points))]
+    smoothed = median_smooth(raw, 5)
+    return [profile_value_at_s(sampled_s, smoothed, s) for s in s_values]
+
+
+def bridge_reversing_curve_gaps(
+    s_values: Sequence[float], signed_curvatures: Sequence[float],
+    speed_curvatures: Sequence[float], max_gap_m: float = 45.0,
+    threshold_m_inv: float = 0.03,
+) -> List[float]:
+    """Keep a low speed between nearby left and right tight bends.
+
+    A short straight between bends is not enough distance to accelerate and
+    then brake again. The spatial speed planner applies its usual acceleration
+    and braking passes to this bridged curvature envelope.
+    """
+    if not (len(s_values) == len(signed_curvatures) == len(speed_curvatures)):
+        raise ValueError("Curve profiles must have matching lengths")
+    envelope = list(speed_curvatures)
+    last_index = None
+    for index, curvature in enumerate(signed_curvatures):
+        if abs(curvature) < threshold_m_inv:
+            continue
+        if last_index is not None:
+            gap = s_values[index] - s_values[last_index]
+            if (0 < gap <= max_gap_m
+                    and curvature * signed_curvatures[last_index] < 0):
+                for between in range(last_index, index + 1):
+                    envelope[between] = max(envelope[between], threshold_m_inv)
+        last_index = index
+    return envelope
+
+
 def conservative_speed_curvatures(
     points: Sequence[PathPoint], s_values: Sequence[float],
     spacing_m: float = 1.0, half_window_m: float = 3.0,

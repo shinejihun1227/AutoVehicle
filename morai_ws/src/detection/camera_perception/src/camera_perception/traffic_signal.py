@@ -242,11 +242,22 @@ def directional_observation(objects, min_confidence=0.5):
             name = "UNKNOWN"
         evidence[name] = max(evidence.get(name, 0.0), score)
         candidates.append((name, score, item))
-    if (len(candidates) == 2 and {item[0] for item in candidates} in
-            ({"RED", "LEFT"}, {"RED", "RIGHT"})
-            and _same_signal_housing(candidates[0][2], candidates[1][2])):
-        arrow = "LEFT" if "LEFT" in evidence else "RIGHT"
-        return "RED_" + arrow, min(item[1] for item in candidates)
+    for arrow in ("LEFT", "RIGHT"):
+        compatible = {"RED", arrow, "RED_" + arrow}
+        if (len(candidates) >= 2
+                and {name for name, _, _ in candidates} <= compatible
+                and any(name in (arrow, "RED_" + arrow)
+                        for name, _, _ in candidates)
+                and any(name in ("RED", "RED_" + arrow)
+                        for name, _, _ in candidates)):
+            # A single detector may report the red lamp, the lit arrow, and
+            # an overlapping combined-class box. Merge only one local housing;
+            # a remote red from another head must not authorize this turn.
+            anchor = next(item for name, _, item in candidates
+                          if name in (arrow, "RED_" + arrow))
+            if all(item is anchor or _same_signal_housing(anchor, item)
+                   for _, _, item in candidates):
+                return "RED_" + arrow, min(score for _, score, _ in candidates)
     if len(evidence) != 1 or "UNKNOWN" in evidence:
         return "UNKNOWN", 0.0
     return next(iter(evidence.items()))

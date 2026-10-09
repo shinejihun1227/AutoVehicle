@@ -35,6 +35,8 @@ from curvature_speed_purepursuit.planner import (
     cumulative_arc_lengths,
     curvature_profile,
     conservative_speed_curvatures,
+    steering_curvature_profile,
+    bridge_reversing_curve_gaps,
     adaptive_lookahead_m,
     interpolate_by_s,
     max_abs_curvature_ahead,
@@ -81,14 +83,21 @@ class CurvatureSpeedPurePursuitNode:
 
         half_window = int(rospy.get_param("~curvature_half_window_points", 1))
         smoothing_window = int(rospy.get_param("~curvature_smoothing_window", 5))
-        self.curvatures = curvature_profile(
-            self.points,
-            half_window_points=max(1, half_window),
-            smoothing_window=max(1, smoothing_window),
+        self.curvatures = (
+            steering_curvature_profile(self.points, self.s_values)
+            if bool(rospy.get_param("~metre_sampled_steering_curvature", False))
+            else curvature_profile(
+                self.points,
+                half_window_points=max(1, half_window),
+                smoothing_window=max(1, smoothing_window),
+            )
         )
         self.speed_curvatures = (conservative_speed_curvatures(self.points, self.s_values)
                                  if bool(rospy.get_param("~conservative_curve_speed_enabled", False))
                                  else self.curvatures)
+        if bool(rospy.get_param("~bridge_reversing_curves", False)):
+            self.speed_curvatures = bridge_reversing_curve_gaps(
+                self.s_values, self.curvatures, self.speed_curvatures)
         legacy_max_speed_mps = float(rospy.get_param("~max_speed_mps", 2.0))
         max_speed_kph = rospy.get_param("~max_speed_kph", None)
         if max_speed_kph is None:
@@ -154,6 +163,13 @@ class CurvatureSpeedPurePursuitNode:
             float(rospy.get_param("~steering_feedforward_weight", 0.35)),
             0.0,
             1.0,
+        )
+        self.path_lateral_feedback_gain = max(
+            0.0, float(rospy.get_param("~path_lateral_feedback_gain", 0.0))
+        )
+        self.path_lateral_feedback_max_rad = clamp(
+            float(rospy.get_param("~path_lateral_feedback_max_rad", 0.0)),
+            0.0, 0.12,
         )
         self.goal_tolerance_m = float(rospy.get_param("~goal_tolerance_m", 1.5))
         self.max_steering_rad = float(
@@ -478,7 +494,8 @@ class CurvatureSpeedPurePursuitNode:
         return self.command_speed_mps
 
     def compute_steering(
-        self, x: float, y: float, yaw: float, speed_mps: float, progress_s: float
+        self, x: float, y: float, yaw: float, speed_mps: float, progress_s: float,
+        path_lateral_error_m: float = 0.0,
     ) -> Tuple[float, PathPoint, float]:
         # Keep this method usable by lightweight offline turn tests and tools
         # that construct the controller with ``__new__`` and only provide the
@@ -549,6 +566,17 @@ class CurvatureSpeedPurePursuitNode:
             (1.0 - feedforward_weight) * feedback_steering
             + feedforward_weight * feedforward_steering
         ) * self.steering_sign
+        # Pure Pursuit can cut across the centre line during a left-to-right
+        # transition. Use the measured displacement from the route as bounded
+        # near-field feedback; positive error is left of the route.
+        lateral_gain = getattr(self, "path_lateral_feedback_gain", 0.0)
+        lateral_limit = getattr(self, "path_lateral_feedback_max_rad", 0.0)
+        if lateral_gain > 0.0 and lateral_limit > 0.0:
+            steering -= self.steering_sign * clamp(
+                math.atan2(lateral_gain * path_lateral_error_m,
+                           max(0.0, speed_mps) + 2.0),
+                -lateral_limit, lateral_limit,
+            )
         return clamp(steering, -self.max_steering_rad, self.max_steering_rad), target, actual_lookahead
 
     def limit_steering_rate(self, steering: float, dt: float) -> float:
@@ -731,7 +759,7 @@ class CurvatureSpeedPurePursuitNode:
             lane_correction_active = False
         else:
             steering, target, actual_lookahead = self.compute_steering(
-                x, y, yaw, measured_speed_mps, progress_s
+                x, y, yaw, measured_speed_mps, progress_s, path_lateral_error
             )
             steering, lane_correction, lane_correction_active = self.lane_centered_steering(
                 steering

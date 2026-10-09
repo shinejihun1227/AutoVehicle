@@ -19,11 +19,19 @@ def summarize(kind, msg, ros_now):
                 'event', 'route_context_count', 'route_context_error',
                 'controller_profile', 'require_route_signal_context',
                 'stopline_requires_detected_signal', 'signal_selection_reason',
+                'signal', 'route_direction', 'route_cam4_candidate_count',
+                'mapped_stopline_confirmed', 'signal_pending_frames',
+                'green_confirmation_samples', 'front_bumper_distance_m',
+                'target_clearance_m', 'mapped_stopline_distance_m',
+                'speed_governor_target_kph',
                 'accel', 'brake')
         result = {key: data[key] for key in keys if key in data}
         if isinstance(result.get('event'), dict):
             event = result['event']
-            result['event'] = {key: event[key] for key in ('id', 'start', 'end', 'direction', 'committed') if key in event}
+            result['event'] = {key: event[key] for key in
+                               ('id', 'start', 'stop_s', 'end', 'direction', 'committed',
+                                'camera_line_confirmed', 'stopline_match_error_m')
+                               if key in event}
         return result
     if kind in ('nominal', 'final'):
         return dict(type=msg.longlCmdType, accel=round(msg.accel, 3), brake=round(msg.brake, 3))

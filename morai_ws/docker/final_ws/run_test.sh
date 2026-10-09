@@ -50,7 +50,7 @@ if [[ "$ACTION" == turn ]]; then
   cp -p "$SCRIPT_DIR/highway-test.env" "$SCRIPT_DIR/highway-test.env.bak"
   # 35 km/h is a ceiling on straights. The metre-resampled curvature profile
   # slows bends further, and the fusion node guards measured overspeed.
-  for entry in MAX_SPEED_KPH=35.0 LATERAL_ACCEL_LIMIT_MPS2=0.45 MAX_ACCEL_MPS2=0.8 CURVE_PLANNING_DECEL_MPS2=0.8 SPEED_KP=0.35 SPEED_KI=0.03 SPEED_ERROR_DEADBAND_KPH=0.5 PEDAL_ACCEL_RISE_RATE_PER_SEC=0.7 PEDAL_BRAKE_RISE_RATE_PER_SEC=1.5 PEDAL_RELEASE_RATE_PER_SEC=2.0 MAX_STEERING_RATE_RAD_S=1.2 LOOKAHEAD_GAIN=0.25 STEERING_FEEDFORWARD_WEIGHT=0.50 STOPLINE_APPROACH_SPEED_KPH=30.0 STOPLINE_HOLD_DISTANCE_M=7.0 STOPLINE_PLANNING_DECEL_MPS2=0.7 STOPLINE_BRAKE_RAMP_DISTANCE_M=20.0 STOPLINE_SETTLE_DISTANCE_M=0.8; do
+  for entry in MAX_SPEED_KPH=35.0 LATERAL_ACCEL_LIMIT_MPS2=0.45 MAX_ACCEL_MPS2=0.8 CURVE_PLANNING_DECEL_MPS2=0.8 SPEED_KP=0.35 SPEED_KI=0.03 SPEED_ERROR_DEADBAND_KPH=0.5 PEDAL_ACCEL_RISE_RATE_PER_SEC=0.7 PEDAL_BRAKE_RISE_RATE_PER_SEC=1.5 PEDAL_RELEASE_RATE_PER_SEC=2.0 MAX_STEERING_RATE_RAD_S=1.2 LOOKAHEAD_GAIN=0.25 STEERING_FEEDFORWARD_WEIGHT=0.35 STOPLINE_APPROACH_SPEED_KPH=30.0 STOPLINE_HOLD_DISTANCE_M=12.0 STOPLINE_PLANNING_DECEL_MPS2=0.6 STOPLINE_BRAKE_RAMP_DISTANCE_M=30.0 STOPLINE_SETTLE_DISTANCE_M=0.8; do
     name="${entry%%=*}"
     value="${entry#*=}"
     if grep -q "^${name}=" "$SCRIPT_DIR/highway-test.env"; then
@@ -59,7 +59,7 @@ if [[ "$ACTION" == turn ]]; then
       printf '\n%s=%s\n' "$name" "$value" >> "$SCRIPT_DIR/highway-test.env"
     fi
   done
-  echo 'Turn/intersection settings saved: max 35 km/h, mapped stopline approach 30 km/h, curvature planning decel 0.8 m/s2, progressive pedals, stopline clearance 7.0 m.'
+  echo 'Turn/intersection settings saved: max 35 km/h, mapped stopline approach 30 km/h, continuous S-bend speed, progressive pedals, stopline clearance 12.0 m.'
   echo 'Restart the driving launch to apply; no live parameter was changed. Previous settings: highway-test.env.bak'
   exit 0
 fi
