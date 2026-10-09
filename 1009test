@@ -8,3 +8,7 @@ bash run_test.sh speed 20
 bash run_test.sh lane on
 bash run_test.sh show 2
 bash run_test.sh drive 2
+
+
+rostopic echo -n 1 /experimental/curvature_lane_correction_active
+rostopic echo -n 1 /experimental/curvature_path_lateral_error_m
