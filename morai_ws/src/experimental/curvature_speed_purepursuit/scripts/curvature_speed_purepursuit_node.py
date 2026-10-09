@@ -8,20 +8,21 @@ publish_command=true이면 command_topic으로 nominal CtrlCmd를 발행하며,
 
 from __future__ import annotations
 
+import json
 import math
 import os
-import statistics
 import threading
 import time
+from bisect import bisect_left, bisect_right
 from collections import deque
 from typing import Optional, Tuple
 
 import rospy
 from geometry_msgs.msg import PointStamped, PoseStamped
 from morai_msgs.msg import CtrlCmd, EgoVehicleStatus
-from morai_perception_msgs.msg import LaneDetection, StopLineDetection
+from morai_perception_msgs.msg import StopLineDetection
 from nav_msgs.msg import Odometry, Path
-from std_msgs.msg import Bool, Float64
+from std_msgs.msg import Bool, Float64, String
 
 from purepursuit_mgeo.longitudinal_controller import (
     LongitudinalCommand,
@@ -45,6 +46,9 @@ from curvature_speed_purepursuit.planner import (
     load_path_file,
     nearest_projection,
     profile_value_at_s,
+)
+from curvature_speed_purepursuit.lane_centering import (
+    LaneCenteringAssist, ideal_lane_reference, lane_quality, lane_measurement,
 )
 
 
@@ -183,15 +187,16 @@ class CurvatureSpeedPurePursuitNode:
             float(rospy.get_param("~max_steering_rate_rad_s", 2.5)),
         )
         self.enable_lane_centering = bool(rospy.get_param("~enable_lane_centering", False))
-        self.lane_centering_weight = float(rospy.get_param("~lane_centering_weight", 0.15))
+        self.lane_info_topic = str(rospy.get_param("~lane_info_topic", "/perception/camera/lane_info"))
+        self.lane_centering_weight = float(rospy.get_param("~lane_centering_weight", 0.25))
         self.lane_centering_max_correction_rad = float(
-            rospy.get_param("~lane_centering_max_correction_rad", 0.06)
+            rospy.get_param("~lane_centering_max_correction_rad", 0.045)
         )
         self.lane_centering_min_confidence = float(
             rospy.get_param("~lane_centering_min_confidence", 0.65)
         )
         self.lane_centering_timeout_sec = float(
-            rospy.get_param("~lane_centering_timeout_sec", 0.3)
+            rospy.get_param("~lane_centering_timeout_sec", 0.4)
         )
         if (not all(math.isfinite(value) for value in (
                 self.lane_centering_weight,
@@ -205,9 +210,18 @@ class CurvatureSpeedPurePursuitNode:
                 or not 0.0 < self.lane_centering_timeout_sec <= 1.0):
             raise ValueError("Lane centering settings must be finite and in range")
         self.lane_lock = threading.RLock()
-        self.lane_samples = deque(maxlen=3)
+        self.lane_assist = LaneCenteringAssist(
+            weight=self.lane_centering_weight,
+            max_correction_rad=self.lane_centering_max_correction_rad,
+            timeout_sec=self.lane_centering_timeout_sec,
+            min_frames=int(rospy.get_param("~lane_centering_min_frames", 4)),
+            filter_tau_sec=float(rospy.get_param("~lane_centering_filter_tau_sec", 0.35)),
+            correction_rate_rad_s=float(rospy.get_param("~lane_centering_correction_rate_rad_s", 0.06)),
+            release_rate_rad_s=float(rospy.get_param("~lane_centering_release_rate_rad_s", 0.10)),
+        )
+        self.lane_observations = deque(maxlen=10)
+        self.lane_pose_history = deque(maxlen=200)
         self.last_lane_stamp = 0.0
-        self.last_lane_wall_time = 0.0
         self.max_accel_mps2 = max(1e-6, float(rospy.get_param("~max_accel_mps2", 1.0)))
         self.max_decel_mps2 = max(1e-6, float(rospy.get_param("~max_decel_mps2", 1.5)))
         self.rate_hz = max(1.0, float(rospy.get_param("~control_rate_hz", 20.0)))
@@ -334,6 +348,9 @@ class CurvatureSpeedPurePursuitNode:
         self.lane_correction_active_pub = rospy.Publisher(
             "/experimental/curvature_lane_correction_active", Bool, queue_size=1
         )
+        self.lane_centering_status_pub = rospy.Publisher(
+            "/experimental/curvature_lane_centering_status", String, queue_size=1
+        )
         self.progress_pub = rospy.Publisher(
             "/experimental/curvature_progress", Float64, queue_size=1
         )
@@ -353,10 +370,8 @@ class CurvatureSpeedPurePursuitNode:
                              self.vehicle_speed_callback, queue_size=10)
         if self.enable_lane_centering:
             rospy.Subscriber(
-                rospy.get_param("~lane_topic", "/detection/lane"),
-                LaneDetection,
-                self.lane_callback,
-                queue_size=10,
+                self.lane_info_topic,
+                String, self.lane_info_callback, queue_size=10,
             )
         if self.stopline_speed_cap_enabled:
             rospy.Subscriber(
@@ -398,40 +413,63 @@ class CurvatureSpeedPurePursuitNode:
     def odom_callback(self, message: Odometry) -> None:
         self.latest_odom = message
         self.latest_odom_wall_time = time.monotonic()
+        if self.enable_lane_centering:
+            stamp = message.header.stamp.to_sec()
+            with self.lane_lock:
+                if (self.lane_pose_history
+                        and rospy.Time.now().to_sec() < self.lane_pose_history[-1][0] - 0.05):
+                    self.lane_pose_history.clear()
+                    self.lane_observations.clear()
+                    self.last_lane_stamp = 0.0
+                    self.lane_assist.invalidate("pose_unsynchronized")
+                if (math.isfinite(stamp) and stamp > 0
+                        and (not self.lane_pose_history or stamp > self.lane_pose_history[-1][0])):
+                    self.lane_pose_history.append((stamp, message))
 
     def vehicle_speed_callback(self, message: EgoVehicleStatus) -> None:
         self.vehicle_speed_source.observe(
             math.hypot(float(message.velocity.x), float(message.velocity.y)),
             message.header.stamp.to_sec(), rospy.Time.now().to_sec(), time.monotonic())
 
-    def lane_callback(self, message: LaneDetection) -> None:
-        """Accept only fresh, plausible CAM1 lane observations in body coordinates."""
-        stamp = message.header.stamp.to_sec()
-        age = rospy.Time.now().to_sec() - stamp
-        lateral = float(message.lateral_offset_m)
-        heading = float(message.heading_error_rad)
-        confidence = float(message.confidence)
-        valid = (
-            message.valid and message.header.frame_id == "base_link"
-            and all(math.isfinite(value) for value in (stamp, age, lateral, heading, confidence))
-            and -0.05 <= age <= self.lane_centering_timeout_sec
-            and self.lane_centering_min_confidence <= confidence <= 1.0
-            and abs(lateral) <= 1.5 and abs(heading) <= 0.35
-        )
+    def lane_info_callback(self, message: String) -> None:
+        """Use actual two-sided CAM1 geometry and its original observation time.
+
+        Legacy LaneDetection omits observed/coasted/guide flags and rejects
+        curve cross-section widths as though they were perpendicular widths.
+        This assist independently checks normal widths and measured boundaries.
+        """
         with self.lane_lock:
-            if not valid:
-                self.lane_samples.clear()
-                return
-            if stamp <= self.last_lane_stamp:
-                return
-            if self.lane_samples and (
-                abs(lateral - self.lane_samples[-1][0]) > 0.75
-                or abs(heading - self.lane_samples[-1][1]) > 0.25
-            ):
-                self.lane_samples.clear()
-            self.lane_samples.append((lateral, heading))
-            self.last_lane_stamp = stamp
-            self.last_lane_wall_time = time.monotonic()
+            try:
+                info = json.loads(message.data, parse_constant=lambda v: (_ for _ in ()).throw(ValueError(v)))
+                stamp = float(info["timestamp"])
+                now = rospy.Time.now().to_sec()
+                if now < self.last_lane_stamp - 0.05:
+                    self.last_lane_stamp = 0.0
+                    self.lane_observations.clear()
+                    self.lane_pose_history.clear()
+                    self.lane_assist.invalidate("pose_unsynchronized")
+                if (not math.isfinite(stamp) or stamp <= 0
+                        or not -0.05 <= now - stamp <= self.lane_centering_timeout_sec):
+                    self.lane_assist.invalidate("stale")
+                    self.lane_observations.clear()
+                    return
+                if stamp <= self.last_lane_stamp:
+                    return
+                self.last_lane_stamp = stamp
+                valid, quality, reason, confidence = lane_quality(info, self.lane_centering_min_confidence)
+                measurement = lane_measurement(info) if valid else None
+                if measurement is None:
+                    self.lane_assist.invalidate(reason if not valid else "plausibility_failed")
+                    self.lane_observations.clear()
+                    return
+                if len(self.lane_observations) == self.lane_observations.maxlen:
+                    self.lane_assist.invalidate("unstable")
+                    self.lane_observations.clear()
+                self.lane_observations.append((stamp, time.monotonic(), measurement[0],
+                                               measurement[1], confidence, quality))
+            except (TypeError, KeyError, ValueError, AttributeError, OverflowError):
+                self.lane_observations.clear()
+                self.lane_assist.invalidate("plausibility_failed")
 
     def stopline_callback(self, message: StopLineDetection) -> None:
         """Cache only the newest camera observation; the control timer matches its pose."""
@@ -644,42 +682,80 @@ class CurvatureSpeedPurePursuitNode:
         self.last_steering_rad = limited
         return limited
 
-    def lane_centered_steering(self, nominal: float) -> Tuple[float, float, bool]:
-        """Blend a small CAM1 correction into the path command when lane data is stable."""
-        if not self.enable_lane_centering:
-            return nominal, 0.0, False
+    def lane_centered_steering(self, nominal: float, speed_mps: float,
+                              dt: float) -> Tuple[float, float, bool]:
+        """Add bounded curve-compensated feedback from stable CAM1 frames."""
+        ros_now, wall_now = rospy.Time.now().to_sec(), time.monotonic()
         with self.lane_lock:
-            age = rospy.Time.now().to_sec() - self.last_lane_stamp
-            wall_age = time.monotonic() - self.last_lane_wall_time
-            if (len(self.lane_samples) < 3
-                    or not -0.05 <= age <= self.lane_centering_timeout_sec
-                    or not 0.0 <= wall_age <= self.lane_centering_timeout_sec):
-                return nominal, 0.0, False
-            lateral = statistics.median(item[0] for item in self.lane_samples)
-            heading = statistics.median(item[1] for item in self.lane_samples)
-        # LaneDetection is based on the centre at 7 m and its chord to 14 m.
-        # Positive lateral_offset means the lane centre is to the vehicle's
-        # right.  Recover the camera's near/far target in x-forward, y-left.
-        near_x, far_x = 7.0, 14.0
-        near_y = -lateral
-        far_y = near_y + (far_x - near_x) * math.tan(heading)
-        near_curvature = 2.0 * near_y / (near_x * near_x + near_y * near_y)
-        far_curvature = 2.0 * far_y / (far_x * far_x + far_y * far_y)
-        lane_steering = self.steering_sign * math.atan(
-            self.wheelbase_m * (near_curvature + far_curvature) / 2.0
-        )
-        correction = clamp(
-            self.lane_centering_weight * (lane_steering - nominal),
-            -self.lane_centering_max_correction_rad,
-            self.lane_centering_max_correction_rad,
-        )
-        # The camera's 7/14-m chord can cut across a sharp curve or point at
-        # the next branch. Do not let this auxiliary correction unwind the
-        # route command during a tight bend.
-        if abs(nominal) > 0.15 and correction * nominal < 0.0:
-            return nominal, 0.0, False
+            while self.enable_lane_centering and self.lane_observations:
+                stamp, received, lateral, heading, confidence, quality = self.lane_observations[0]
+                if (not -0.05 <= ros_now - stamp <= self.lane_centering_timeout_sec
+                        or not 0 <= wall_now - received <= self.lane_centering_timeout_sec):
+                    self.lane_observations.popleft()
+                    self.lane_assist.invalidate("stale")
+                    continue
+                pose_sample = min(self.lane_pose_history,
+                                  key=lambda item: abs(item[0] - stamp), default=None)
+                if pose_sample is None or abs(pose_sample[0] - stamp) > 0.05:
+                    # Defer a short callback-order delay, without counting an
+                    # old image again. Prolonged missing pairs fade the assist.
+                    if wall_now - received > 0.1:
+                        self.lane_assist.invalidate("pose_unsynchronized")
+                    break
+                self.lane_observations.popleft()
+                message = pose_sample[1]
+                pose = message.pose.pose
+                try:
+                    q = pose.orientation
+                    values = (pose.position.x, pose.position.y, q.x, q.y, q.z, q.w)
+                    if (message.header.frame_id != self.map_frame
+                            or not all(math.isfinite(v) for v in values)
+                            or abs(math.sqrt(q.x*q.x + q.y*q.y + q.z*q.z + q.w*q.w) - 1) > 0.01):
+                        raise ValueError("invalid lane pose")
+                    # Image-time route progress stays on the current route
+                    # branch; a nearby crossing road cannot become our lane.
+                    radius = max(5.0, speed_mps * self.lane_centering_timeout_sec + 2.0)
+                    center_s = self.last_progress_s if self.last_progress_s is not None else 0.0
+                    start = max(0, bisect_left(self.s_values, center_s - radius) - 1)
+                    end = min(len(self.points) - 2, bisect_right(self.s_values, center_s + radius))
+                    projection = nearest_projection(self.points, self.s_values,
+                                                    pose.position.x, pose.position.y, start, end)
+                    before, _ = interpolate_by_s(self.points, self.s_values, projection.progress_s - 0.75)
+                    after, _ = interpolate_by_s(self.points, self.s_values, projection.progress_s + 0.75)
+                    route_yaw = math.atan2(after.y - before.y, after.x - before.x)
+                    pose_yaw = quaternion_to_yaw(q.x, q.y, q.z, q.w)
+                    yaw_error = math.atan2(math.sin(route_yaw - pose_yaw), math.cos(route_yaw - pose_yaw))
+                    if projection.distance_m > 1.5 or abs(yaw_error) > 0.6:
+                        raise ValueError("off-route lane pose")
+                    reference = ideal_lane_reference(self.points, self.s_values, projection.progress_s)
+                    if reference is None:
+                        self.lane_assist.invalidate("route_reference_unavailable")
+                        continue
+                    self.lane_assist.observe(lateral, heading, reference, confidence, quality, stamp, received)
+                except (AttributeError, TypeError, ValueError, OverflowError):
+                    self.lane_assist.invalidate("route_reference_unavailable")
+            status = self.lane_assist.update(speed_mps, ros_now, wall_now, dt,
+                                             enabled=self.enable_lane_centering)
+        correction = self.steering_sign * status["correction_rad"]
         centered = clamp(nominal + correction, -self.max_steering_rad, self.max_steering_rad)
-        return centered, centered - nominal, True
+        status["correction_rad"] = centered - nominal
+        status["source_topic"] = self.lane_info_topic
+        self.lane_centering_status_pub.publish(String(data=json.dumps(status, allow_nan=False)))
+        return centered, centered - nominal, status["active"]
+
+    def stop_lane_assist(self, reason: str) -> None:
+        """Do not retain steering evidence across a control/pose interruption."""
+        with self.lane_lock:
+            self.lane_observations.clear()
+            self.lane_assist.invalidate(reason)
+            status = self.lane_assist.update(0.0, rospy.Time.now().to_sec(), time.monotonic(),
+                                             1.0 / self.rate_hz,
+                                             enabled=self.enable_lane_centering, stopped=True)
+        status.update(active=False, correction_rad=0.0, reason=reason,
+                      source_topic=self.lane_info_topic)
+        self.lane_centering_status_pub.publish(String(data=json.dumps(status, allow_nan=False)))
+        self.lane_correction_pub.publish(Float64(0.0))
+        self.lane_correction_active_pub.publish(Bool(False))
 
     def make_command(
         self,
@@ -730,6 +806,7 @@ class CurvatureSpeedPurePursuitNode:
 
     def control_callback(self, _event: rospy.timer.TimerEvent) -> None:
         if self.latest_odom is None:
+            self.stop_lane_assist("pose_unsynchronized")
             rospy.logwarn_throttle(
                 5.0,
                 "곡률 기반 Pure Pursuit가 %s를 기다리는 중이다.",
@@ -741,6 +818,7 @@ class CurvatureSpeedPurePursuitNode:
             self.latest_odom_wall_time is None
             or time.monotonic() - self.latest_odom_wall_time > self.pose_timeout_sec
         ):
+            self.stop_lane_assist("pose_unsynchronized")
             self.command_speed_mps = 0.0
             self.last_steering_rad = 0.0
             self.speed_controller.reset()
@@ -780,6 +858,7 @@ class CurvatureSpeedPurePursuitNode:
         self.odom_speed_pub.publish(Float64(odom_speed_mps * MPS_TO_KPH))
         if ((self.require_vehicle_speed and vehicle_speed is None)
                 or (vehicle_speed is None and not math.isfinite(odom_speed_mps))):
+            self.stop_lane_assist("stopped")
             self.command_speed_mps = 0.0
             self.speed_controller.reset()
             self.speed_command_pub.publish(Float64(0.0))
@@ -829,6 +908,7 @@ class CurvatureSpeedPurePursuitNode:
         curvature = profile_value_at_s(self.s_values, self.curvatures, progress_s)
 
         if stop:
+            self.stop_lane_assist("stopped")
             steering = 0.0
             self.last_steering_rad = 0.0
             target = self.points[-1]
@@ -840,7 +920,7 @@ class CurvatureSpeedPurePursuitNode:
                 x, y, yaw, measured_speed_mps, progress_s, path_lateral_error
             )
             steering, lane_correction, lane_correction_active = self.lane_centered_steering(
-                steering
+                steering, measured_speed_mps, dt
             )
             steering = self.limit_steering_rate(steering, dt)
 

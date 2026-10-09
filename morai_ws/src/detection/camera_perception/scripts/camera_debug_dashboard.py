@@ -40,7 +40,8 @@ def main():
         subscribe('/debug/cameras/' + camera + '/metadata', String,
                   lambda msg, c=camera: json_callback(c, msg))
     for key, topic in (('maneuver', '/control/maneuver_status'),
-                       ('lane', '/perception/camera/lane_info')):
+                       ('lane', '/perception/camera/lane_info'),
+                       ('lane_centering', '/experimental/curvature_lane_centering_status')):
         subscribe(topic, String, lambda msg, k=key: json_callback(k, msg))
     for key, topic in (('nominal', '/control/ctrl_cmd'), ('final', '/ctrl_cmd')):
         subscribe(topic, CtrlCmd, lambda msg, k=key: store.update(k,
@@ -62,6 +63,12 @@ def main():
     def settings(_event=None):
         store.update('config', dict(
             control_output_enabled=rospy.get_param('/morai_udp_drive_bridge/control_output_enabled', None),
+            lane_centering={name: rospy.get_param('/curvature_speed_purepursuit/' + name, None)
+                            for name in ('enable_lane_centering', 'lane_centering_weight',
+                                         'lane_centering_max_correction_rad', 'lane_centering_min_confidence',
+                                         'lane_centering_timeout_sec', 'lane_centering_min_frames',
+                                         'lane_centering_filter_tau_sec', 'lane_centering_correction_rate_rad_s',
+                                         'lane_centering_release_rate_rad_s')},
             require_route_signal_context=rospy.get_param(
                 '/curvature_signal_controller/require_route_signal_context', None),
             signalized_context_ids=rospy.get_param(

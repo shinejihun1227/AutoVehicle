@@ -38,7 +38,7 @@ class StartupTest(unittest.TestCase):
                    "morai_msgs.msg": NS(CtrlCmd=Message, EgoVehicleStatus=Message),
                    "morai_perception_msgs.msg": NS(StopLineDetection=Message, LaneDetection=Message),
                    "nav_msgs.msg": NS(Odometry=Message, Path=Message),
-                   "std_msgs.msg": NS(Bool=Message, Float64=Message)}
+                   "std_msgs.msg": NS(Bool=Message, Float64=Message, String=Message)}
         spec = importlib.util.spec_from_file_location("startup_node", PACKAGE / "scripts/curvature_speed_purepursuit_node.py")
         self.module = importlib.util.module_from_spec(spec)
         with patch.dict(sys.modules, modules):

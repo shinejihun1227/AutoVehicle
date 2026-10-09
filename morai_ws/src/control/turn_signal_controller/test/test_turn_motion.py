@@ -239,7 +239,7 @@ class TurnNodeMotionTest(unittest.TestCase):
                    "morai_perception_msgs.msg": NS(StopLineDetection=fixtures.Message,
                                                     LaneDetection=fixtures.Message),
                    "nav_msgs.msg": NS(Odometry=fixtures.Message, Path=fixtures.Message),
-                   "std_msgs.msg": NS(Bool=fixtures.Message, Float64=fixtures.Message)}
+                   "std_msgs.msg": NS(Bool=fixtures.Message, Float64=fixtures.Message, String=fixtures.Message)}
         path = source / "experimental/curvature_speed_purepursuit/scripts/curvature_speed_purepursuit_node.py"
         spec = importlib.util.spec_from_file_location("_turn_actual_pp", path)
         module = importlib.util.module_from_spec(spec)

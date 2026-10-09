@@ -9,7 +9,7 @@
 <header><div><h1>카메라 인식 · 주행 상태</h1><p class="muted">CAM1 차선·정지선 / CAM4 신호등 · 현재 주행 모델의 처리 결과</p></div><span id="connection" class="muted">연결 대기</span></header>
 <section id="banner" data-state="waiting"><div id="title">주행 상태 수신 대기</div><ul id="notes"></ul></section>
 <main>
-<article class="panel"><div class="panel-head"><h2>CAM1 · 차선 / 정지선</h2><label><input type="checkbox" id="raw-cam1"> 원본 보기</label></div><div id="box-cam1" class="image stale"><img id="image-cam1" alt="CAM1 추론 프레임"><div class="notice" id="notice-cam1">CAM1 영상 대기 · UDP 1101</div></div><div class="detail"><div id="age-cam1" class="muted">프레임 없음</div><div id="lane">차선 상태 대기</div><div id="stopline">정지선 상태 대기</div><div id="approach-speed">정지선 감속 제한 대기</div><div id="model-cam1" class="model"></div><div class="muted">마스크: 흰색 실선 · 청록 점선 · 노랑 황색선 · 빨강 정지선 · 보라 유도선<br>굵은 선: 후처리된 경계·정지선. 신뢰도는 모델 추정값입니다.</div></div></article>
+<article class="panel"><div class="panel-head"><h2>CAM1 · 차선 / 정지선</h2><label><input type="checkbox" id="raw-cam1"> 원본 보기</label></div><div id="box-cam1" class="image stale"><img id="image-cam1" alt="CAM1 추론 프레임"><div class="notice" id="notice-cam1">CAM1 영상 대기 · UDP 1101</div></div><div class="detail"><div id="age-cam1" class="muted">프레임 없음</div><div id="lane">차선 상태 대기</div><div id="lane-assist">차선 보정 상태 대기</div><div id="lane-assist-quality" class="muted"></div><div id="stopline">정지선 상태 대기</div><div id="approach-speed">정지선 감속 제한 대기</div><div id="model-cam1" class="model"></div><div class="muted">마스크: 흰색 실선 · 청록 점선 · 노랑 황색선 · 빨강 정지선 · 보라 유도선<br>굵은 선: 후처리된 경계·정지선. 신뢰도는 모델 추정값입니다.</div></div></article>
 <article class="panel"><div class="panel-head"><h2>CAM4 · 신호등</h2><label><input type="checkbox" id="raw-cam4"> 원본 보기</label></div><div id="box-cam4" class="image stale"><img id="image-cam4" alt="CAM4 추론 프레임"><div class="notice" id="notice-cam4">CAM4 영상 대기 · UDP 1131</div></div><div class="detail"><div id="age-cam4" class="muted">프레임 없음</div><div id="signal">신호 상태 대기</div><div id="selected">경로 연결 대기</div><div id="calibration"></div><div class="muted">MGeo 경로의 진행 방향과 해당 신호등을 연결하고, CAM1 정지선 확인 후 통과를 판단합니다.</div><div id="model-cam4" class="model"></div></div></article>
 </main>
 <section class="stats"><div class="stat">실제 속도<b id="speed">—</b></div><div class="stat">곡률 제어 목표속도<b id="target">—</b></div><div class="stat">최종 가속 / 브레이크<b id="command">—</b></div><div class="stat">주행 경로 / 도착 상태<b id="route">—</b></div></section>
@@ -19,6 +19,7 @@
 const el=id=>document.getElementById(id), number=(v,n=2)=>typeof v==='number'&&Number.isFinite(v)?v.toFixed(n):'—';
 const text=(id,v)=>el(id).textContent=v;
 let images={},lastData=null;
+const laneReasons={centering_active:'차선 보정 중',acquiring_lane:'연속 관측 안정화 대기',waiting_for_lane:'차선 관측 대기',lane_observation_stale:'차선 관측 지연',lane_route_disagreement:'경로와 차선 차이가 허용 범위를 벗어남',lane_residual_unstable:'경로 대비 차선 오차가 불안정함',two_observed_boundaries_required:'양측 차선의 실측 관측 필요',left_not_observed_paint:'좌측 실측 차선 대기',right_not_observed_paint:'우측 실측 차선 대기',left_low_confidence:'좌측 차선 신뢰도 부족',right_low_confidence:'우측 차선 신뢰도 부족',implausible_lane_width:'차로 폭이 허용 범위를 벗어남',straddling_lane:'차선 걸침 감지',lane_invalid:'차선 형상 관측 무효',lane_frame:'차선 좌표계 불일치',left_invalid_confidence:'좌측 차선 신뢰도 무효',right_invalid_confidence:'우측 차선 신뢰도 무효',left_short_observation:'좌측 차선 관측 길이 부족',right_short_observation:'우측 차선 관측 길이 부족',left_invalid_geometry:'좌측 차선 형상 무효',right_invalid_geometry:'우측 차선 형상 무효',invalid_center_geometry:'중심선 형상 무효',incomplete_center_support:'중심선 관측 구간 부족',center_boundary_mismatch:'중심선과 양측 경계 불일치',lane_width_changes_too_fast:'차로 폭 변화가 너무 큼',both_boundaries_observed:'양측 실측 차선 확인',ready:'안정된 관측으로 보정 중',fading:'보정량을 부드럽게 줄이는 중',no_lane_frames:'차선 관측 대기',low_confidence:'신뢰도 부족',unstable:'연속 관측 안정화 대기',route_reference_unavailable:'기준 경로 확인 대기',stale:'차선 관측 지연',disabled:'설정에서 꺼짐',pose_unsynchronized:'영상과 위치 시각 불일치',residual_out_of_range:'경로와 차선 차이가 허용 범위를 벗어남',plausibility_failed:'차선 형상 또는 값이 유효하지 않음',stopped:'정차 중'};
 function value(data,key,limit=1){const x=data.values[key];return x&&x.age_s>=0&&x.age_s<=limit&&(x.source_age_s==null||x.source_age_s>=-.05&&x.source_age_s<=limit)?x.value:null;}
 function paint(data){
  lastData=data;const status=value(data,'maneuver'),lane=value(data,'lane',.6),line=value(data,'stopline',.8),signal=value(data,'signal',.8),config=value(data,'config',3);
@@ -33,8 +34,12 @@ function paint(data){
   const key=m?[raw,m.sequence,m.stamp].join(':'):'';
   if(m&&images[c]!==key){images[c]=key;el('image-'+c).src='/image/'+c+'?raw='+(raw?1:0)+'&seq='+m.sequence;}
  }
- const boundary=x=>!x?.detected?'없음':(x.type||'검출')+' '+number(x.confidence)+(x.coasted?' (추적 예측)':'');
+ const boundary=x=>!x?.detected?'없음':(x.type||'검출')+' '+number(x.confidence)+(x.coasted?' (추적 예측)':x.from_guide?' (유도선 대체)':'');
  text('lane',lane?'좌측: '+boundary(lane.left_lane)+' / 우측: '+boundary(lane.right_lane):'차선 상태 미수신 / 지연');
+ const assist=value(data,'lane_centering',.6);
+ const assistAngle=assist&&typeof assist.correction_rad==='number'?assist.correction_rad*180/Math.PI:null;
+ text('lane-assist',assist?'CAM1 조향 보정: '+(!assist.enabled?'꺼짐':assist.reason==='fading'?'해제 중':assist.active?'활성':'대기')+' · '+number(assistAngle,2)+'° · '+(laneReasons[assist.reason]||assist.reason||'사유 미수신'):'차선 보정 상태 미수신 / 지연');
+ text('lane-assist-quality',assist?'신뢰도 '+number(assist.confidence)+' · 안정 프레임 '+number(assist.stable_frames,0)+' · 관측 후 '+number(assist.source_age_sec)+'초 · 횡오차 '+number(assist.offset_m)+' m · 품질 '+number(assist.quality):'');
  text('stopline',line?(line.valid?'정지선: '+number(line.distance_m)+' m · 신뢰도 '+number(line.confidence):'유효한 정지선 없음'):'정지선 관측 미수신 / 지연');
  const mappedCamera=status?.route_camera_calibrated===true;
  text('signal',mappedCamera?'경로에 선택된 신호: '+status.signal+' / 허용 방향: '+(status.signal_allowed_directions||[]).join(', '):signal?'관측 신호: '+signal.state+' · 신뢰도 '+number(signal.confidence)+(signal.valid?'':' · 무효'):'신호 관측 미수신 / 지연');
@@ -54,7 +59,7 @@ function paint(data){
 }
 for(const c of ['cam1','cam4'])el('raw-'+c).addEventListener('change',()=>{if(lastData)paint(lastData);});
 async function poll(){try{const response=await fetch('/api/status',{cache:'no-store',signal:AbortSignal.timeout(2500)});if(!response.ok)throw Error(response.status);paint(await response.json());}
-catch(e){text('connection','연결 끊김');text('title','진단 화면 연결 끊김 — 마지막 상태를 현재 상태로 판단하지 마세요.');el('banner').dataset.state='waiting';for(const c of ['cam1','cam4']){el('box-'+c).classList.add('stale');text('notice-'+c,'화면 연결 끊김 — 마지막 영상입니다.');}}
+catch(e){text('lane-assist','차선 보정 상태 미수신 / 지연');text('lane-assist-quality','');text('connection','연결 끊김');text('title','진단 화면 연결 끊김 — 마지막 상태를 현재 상태로 판단하지 마세요.');el('banner').dataset.state='waiting';for(const c of ['cam1','cam4']){el('box-'+c).classList.add('stale');text('notice-'+c,'화면 연결 끊김 — 마지막 영상입니다.');}}
 finally{setTimeout(poll,250);}}
 poll();
 </script></html>

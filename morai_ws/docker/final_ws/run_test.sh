@@ -77,6 +77,21 @@ if [[ "$ACTION" == lane ]]; then
   else
     printf '\nLANE_CENTERING_ENABLED=%s\n' "$VALUE" >> "$SCRIPT_DIR/highway-test.env"
   fi
+  if [[ "$VALUE" == true ]]; then
+    # Apply one explicit preset so saved values from older releases cannot
+    # silently keep the previous weight/limit after the implementation changes.
+    for entry in LANE_CENTERING_WEIGHT=0.25 LANE_CENTERING_MAX_CORRECTION_RAD=0.045 LANE_CENTERING_MIN_CONFIDENCE=0.65 LANE_CENTERING_TIMEOUT_SEC=0.4 LANE_CENTERING_MIN_FRAMES=4 LANE_CENTERING_FILTER_TAU_SEC=0.35 LANE_CENTERING_CORRECTION_RATE_RAD_S=0.06 LANE_CENTERING_RELEASE_RATE_RAD_S=0.10; do
+      name="${entry%%=*}"
+      value="${entry#*=}"
+      if grep -q "^${name}=" "$SCRIPT_DIR/highway-test.env"; then
+        sed -i "s/^${name}=.*/${name}=${value}/" "$SCRIPT_DIR/highway-test.env"
+      else
+        printf '\n%s=%s\n' "$name" "$value" >> "$SCRIPT_DIR/highway-test.env"
+      fi
+    done
+    echo 'CAM1 residual assist preset saved: weight 0.25, limit 0.045 rad, confidence 0.65, 4 stable frames, age <= 0.4 s, filter 0.35 s, slew 0.06/0.10 rad/s.'
+    echo 'Previous lane tuning is replaced by this preset; speed and stopline settings are unchanged.'
+  fi
   echo "LANE_CENTERING_ENABLED=$VALUE saved for case 2. Restart the launch to apply."
   exit 0
 fi
@@ -154,9 +169,14 @@ case "$TEST_PROFILE" in
       "lane_info_device:=$LANE_INFO_DEVICE" "lane_info_every:=$LANE_INFO_EVERY"
       "lane_min_confidence:=$LANE_MIN_CONFIDENCE" "lane_info_timeout_s:=$LANE_INFO_TIMEOUT_S"
       "enable_lane_centering:=${LANE_CENTERING_ENABLED:-false}"
-      "lane_centering_weight:=${LANE_CENTERING_WEIGHT:-0.15}"
-      "lane_centering_max_correction_rad:=${LANE_CENTERING_MAX_CORRECTION_RAD:-0.06}"
+      "lane_centering_weight:=${LANE_CENTERING_WEIGHT:-0.25}"
+      "lane_centering_max_correction_rad:=${LANE_CENTERING_MAX_CORRECTION_RAD:-0.045}"
       "lane_centering_min_confidence:=${LANE_CENTERING_MIN_CONFIDENCE:-0.65}"
+      "lane_centering_timeout_sec:=${LANE_CENTERING_TIMEOUT_SEC:-0.4}"
+      "lane_centering_min_frames:=${LANE_CENTERING_MIN_FRAMES:-4}"
+      "lane_centering_filter_tau_sec:=${LANE_CENTERING_FILTER_TAU_SEC:-0.35}"
+      "lane_centering_correction_rate_rad_s:=${LANE_CENTERING_CORRECTION_RATE_RAD_S:-0.06}"
+      "lane_centering_release_rate_rad_s:=${LANE_CENTERING_RELEASE_RATE_RAD_S:-0.10}"
       "stopline_front_reference_offset_m:=$STOPLINE_FRONT_REFERENCE_OFFSET_M"
       "stopline_approach_speed_kph:=$STOPLINE_APPROACH_SPEED_KPH"
       "stopline_cap_release_after_m:=$STOPLINE_CAP_RELEASE_AFTER_M"
@@ -202,7 +222,8 @@ echo "Profile=$TEST_PROFILE  action=$ACTION  max_speed_kph=$MAX_SPEED_KPH"
 if [[ "$TEST_PROFILE" == curvature_signal ]]; then
   echo "Settings=$SCRIPT_DIR/highway-test.env (saved values override launch defaults)"
   echo "PI=$SPEED_KP/$SPEED_KI lookahead_gain=$LOOKAHEAD_GAIN steer_rate_rad_s=$MAX_STEERING_RATE_RAD_S approach_kph=$STOPLINE_APPROACH_SPEED_KPH stop_clearance_m=$STOPLINE_HOLD_DISTANCE_M"
-  echo "Lane_centering=${LANE_CENTERING_ENABLED:-false} weight=${LANE_CENTERING_WEIGHT:-0.15} max_delta_rad=${LANE_CENTERING_MAX_CORRECTION_RAD:-0.06}"
+  echo "Lane_centering=${LANE_CENTERING_ENABLED:-false} weight=${LANE_CENTERING_WEIGHT:-0.25} max_delta_rad=${LANE_CENTERING_MAX_CORRECTION_RAD:-0.045} min_confidence=${LANE_CENTERING_MIN_CONFIDENCE:-0.65}"
+  echo "Lane_frames=${LANE_CENTERING_MIN_FRAMES:-4} max_age_s=${LANE_CENTERING_TIMEOUT_SEC:-0.4} filter_tau_s=${LANE_CENTERING_FILTER_TAU_SEC:-0.35} correction_rate_rad_s=${LANE_CENTERING_CORRECTION_RATE_RAD_S:-0.06} release_rate_rad_s=${LANE_CENTERING_RELEASE_RATE_RAD_S:-0.10}"
 fi
 echo "Ubuntu=$UBUNTU_IP  MORAI=$MORAI_IP  container=$CONTAINER_NAME"
 if [[ "$ACTION" == show ]]; then

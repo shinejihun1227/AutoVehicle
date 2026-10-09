@@ -47,6 +47,40 @@ def summarize(kind, msg, ros_now):
                                 'direction_source', 'heading_change_deg', 'entry_fault')
                                if key in event}
         return result
+    if kind == 'lane_centering':
+        data = json.loads(msg.data)
+        keys = ('enabled', 'active', 'reason', 'correction_rad', 'quality',
+                'confidence', 'stable_frames', 'offset_m', 'heading_error_rad',
+                'source_age_sec', 'source_topic')
+        return {key: data[key] for key in keys if key in data}
+    if kind == 'lane_info':
+        data = json.loads(msg.data)
+        if not isinstance(data, dict):
+            return dict(error='CAM1 lane_info must be a JSON object')
+        result = {key: data.get(key) for key in
+                  ('frame_id', 'coordinate_convention', 'output_status', 'lane_state',
+                   'center_source', 'confidence', 'lane_width_m', 'straddling_lane', 'reasons')}
+        result['upstream_lane_valid'] = data.get('lane_valid')
+        result['assist_input'] = True
+        result['source_topic'] = (getattr(msg, '_connection_header', None) or {}).get('topic')
+        stamp = data.get('timestamp')
+        result['source_age_s'] = round(ros_now-stamp, 3) if isinstance(stamp, (int, float)) else None
+        for side in ('left', 'right'):
+            meta = data.get(side + '_lane')
+            result[side + '_lane'] = ({key: meta.get(key) for key in
+                ('detected', 'type', 'confidence', 'from_guide', 'coasted', 'n_points', 'x_range_m')}
+                if isinstance(meta, dict) else meta)
+        for name in ('left_boundary_points', 'centerline_points', 'right_boundary_points'):
+            points = data.get(name)
+            result[name] = (dict(count=len(points), first=points[:2], last=points[-2:])
+                            if isinstance(points, list) else None)
+        return result
+    if kind == 'lane':
+        return dict(legacy_contract_valid=msg.valid, assist_input=False, confidence=round(msg.confidence, 3),
+                    offset_m=round(msg.lateral_offset_m, 3),
+                    heading_error_rad=round(msg.heading_error_rad, 4),
+                    frame=msg.header.frame_id,
+                    source_age_s=round(ros_now-msg.header.stamp.to_sec(), 3))
     if kind in ('nominal', 'final'):
         return dict(type=msg.longlCmdType, accel=round(msg.accel, 3),
                     brake=round(msg.brake, 3), steering_rad=round(msg.steering, 4))
@@ -156,7 +190,7 @@ def main():
     import rospy
     import rospkg
     from morai_msgs.msg import CtrlCmd, EgoVehicleStatus
-    from morai_perception_msgs.msg import StopLineDetection, TrafficLight
+    from morai_perception_msgs.msg import StopLineDetection, TrafficLight, LaneDetection
     from common.msg import ObjectInfoArray
     from nav_msgs.msg import Odometry, Path as RosPath
     from std_msgs.msg import String, Bool, Float64
@@ -179,6 +213,18 @@ def main():
                  '/curvature_speed_purepursuit/speed_ki',
                  '/curvature_speed_purepursuit/lookahead_gain',
                  '/curvature_speed_purepursuit/max_steering_rate_rad_s',
+                 '/curvature_speed_purepursuit/lane_info_topic',
+                 '/curvature_speed_purepursuit/enable_lane_centering',
+                 '/curvature_speed_purepursuit/lane_centering_weight',
+                 '/curvature_speed_purepursuit/lane_centering_max_correction_rad',
+                 '/curvature_speed_purepursuit/lane_centering_min_confidence',
+                 '/curvature_speed_purepursuit/lane_centering_timeout_sec',
+                 '/curvature_speed_purepursuit/lane_centering_min_frames',
+                 '/curvature_speed_purepursuit/lane_centering_filter_tau_sec',
+                 '/curvature_speed_purepursuit/lane_centering_correction_rate_rad_s',
+                 '/curvature_speed_purepursuit/lane_centering_release_rate_rad_s',
+                 '/lane_info_contract/timeout_sec',
+                 '/lane_info_contract/min_confidence',
                  '/curvature_speed_purepursuit/conservative_curve_speed_enabled',
                  '/curvature_speed_purepursuit/vehicle_speed_topic',
                  '/curvature_speed_purepursuit/require_vehicle_speed',
@@ -210,6 +256,9 @@ def main():
         'speed_cap_active': ('/experimental/stopline_speed_cap_active', Bool),
         'speed_cap_target': ('/experimental/stopline_speed_cap_target', Float64),
         'status': ('/control/maneuver_status', String),
+        'lane': ('/detection/lane', LaneDetection),
+        'lane_info': (rospy.get_param('/curvature_speed_purepursuit/lane_info_topic', '/perception/camera/lane_info'), String),
+        'lane_centering': ('/experimental/curvature_lane_centering_status', String),
         'stopline': ('/perception/camera/stopline', StopLineDetection),
         'lights': ('/detection/traffic_light', ObjectInfoArray),
         'cam1_rviz': ('/debug/cameras/cam1/image', rospy.AnyMsg),
@@ -218,11 +267,21 @@ def main():
     samples, lock = {}, threading.Lock()
     status_changes = deque(maxlen=8)
     previous_gate = [None]
+    lane_changes, previous_lane = deque(maxlen=8), [None]
 
     def receive(msg, kind):
         with lock:
             count = samples.get(kind, (0,))[0]
             samples[kind] = (count+1, time.monotonic(), msg)
+            if kind == 'lane_centering':
+                try:
+                    data = json.loads(msg.data)
+                    lane_state = {key: data.get(key) for key in ('enabled', 'active', 'reason')}
+                    if lane_state != previous_lane[0]:
+                        lane_changes.append(lane_state)
+                        previous_lane[0] = lane_state
+                except (ValueError, TypeError):
+                    pass
             if kind == 'status':
                 try:
                     data = json.loads(msg.data)
@@ -237,6 +296,7 @@ def main():
 
     subscribers = [rospy.Subscriber(topic, cls, receive, callback_args=kind, queue_size=1)
                    for kind, (topic, cls) in topics.items()]
+    print('LANE_INPUT lane_info JSON is the assist source; lane is the legacy LaneDetection contract and its validity does not enable or disable this assist.', flush=True)
     print('SAMPLING 6 seconds; no control is sent.', flush=True)
     started = time.monotonic()
     while not rospy.is_shutdown() and time.monotonic()-started < 6:
@@ -248,6 +308,7 @@ def main():
     with lock:
         snapshot = dict(samples)
         transitions = list(status_changes)
+        lane_transitions = list(lane_changes)
     for kind, (topic, _) in topics.items():
         count, received, msg = snapshot.get(kind, (0, 0, None))
         data = summarize(kind, msg, rospy.Time.now().to_sec()) if msg is not None else {}
@@ -260,6 +321,7 @@ def main():
             print('COMMAND_PUBLISHER_COUNT topic=%s count=%d nodes=%s' %
                   (topic, len(nodes), json.dumps(nodes)), flush=True)
     print('SIGNAL_GATE_CHANGES ' + json.dumps(transitions), flush=True)
+    print('LANE_ASSIST_CHANGES ' + json.dumps(lane_transitions), flush=True)
     # Distinguish a fresh pose outside the route from no localization at all.
     if 'odom' in snapshot:
         try:

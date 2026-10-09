@@ -19,6 +19,7 @@ curvature_runtime_files() (
       docker/final_ws/curvature_runtime_files.sh \
       docker/final_ws/install_curvature_signal.sh \
       docker/final_ws/run_test.sh \
+      docker/final_ws/highway-test.env.example \
       docker/final_ws/diagnose_curvature_signal.py \
       docker/final_ws/check_highway_launch.py \
       docker/final_ws/smoke_models.py
