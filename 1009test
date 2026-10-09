@@ -4,6 +4,7 @@ bash install_curvature_signal.sh --config
 bash run_highway.sh start
 bash run_test.sh speed 20
 bash run_test.sh lane on
+bash run_test.sh show 2
 bash run_test.sh drive 2
 
 
