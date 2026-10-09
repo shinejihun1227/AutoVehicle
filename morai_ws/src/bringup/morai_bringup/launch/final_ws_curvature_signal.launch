@@ -17,14 +17,18 @@
   <arg name="control_remote_port" default="9093" />
   <arg name="control_source_port" default="9094" />
 
-  <arg name="max_speed_kph" default="30.0" />
+  <arg name="max_speed_kph" default="35.0" />
   <arg name="lateral_accel_limit_mps2" default="1.0" />
   <arg name="max_accel_mps2" default="1.0" />
   <arg name="max_decel_mps2" default="1.5" />
-  <arg name="speed_kp" default="0.8" />
-  <arg name="speed_ki" default="0.05" />
+  <arg name="curve_planning_decel_mps2" default="0.8" />
+  <arg name="speed_kp" default="0.35" />
+  <arg name="speed_ki" default="0.03" />
+  <arg name="pedal_accel_rise_rate_per_sec" default="0.7" />
+  <arg name="pedal_brake_rise_rate_per_sec" default="1.5" />
+  <arg name="pedal_release_rate_per_sec" default="2.0" />
   <arg name="speed_integral_limit_kph_s" default="10.8" />
-  <arg name="speed_error_deadband_kph" default="0.1" />
+  <arg name="speed_error_deadband_kph" default="0.5" />
   <arg name="lookahead_min_m" default="4.0" />
   <arg name="lookahead_gain" default="0.35" />
   <arg name="lookahead_max_m" default="12.0" />
@@ -54,6 +58,8 @@
   <arg name="stopline_brake_ramp_distance_m" default="20.0" />
   <arg name="stopline_settle_distance_m" default="0.8" />
   <arg name="stopline_approach_speed_kph" default="30.0" />
+  <arg name="mapped_stopline_approach_distance_m" default="80.0" />
+  <arg name="stopline_match_tolerance_m" default="8.0" />
   <arg name="stopline_cap_release_after_m" default="5.0" />
   <arg name="stopline_cap_max_detection_range_m" default="60.0" />
   <arg name="stopline_cap_min_confidence" default="0.55" />
@@ -95,8 +101,13 @@
     <param name="lateral_accel_limit_mps2" value="$(arg lateral_accel_limit_mps2)" />
     <param name="max_accel_mps2" value="$(arg max_accel_mps2)" />
     <param name="max_decel_mps2" value="$(arg max_decel_mps2)" />
+    <param name="conservative_curve_speed_enabled" value="true" />
+    <param name="curve_planning_decel_mps2" value="$(arg curve_planning_decel_mps2)" />
     <param name="speed_kp" value="$(arg speed_kp)" />
     <param name="speed_ki" value="$(arg speed_ki)" />
+    <param name="pedal_accel_rise_rate_per_sec" value="$(arg pedal_accel_rise_rate_per_sec)" />
+    <param name="pedal_brake_rise_rate_per_sec" value="$(arg pedal_brake_rise_rate_per_sec)" />
+    <param name="pedal_release_rate_per_sec" value="$(arg pedal_release_rate_per_sec)" />
     <param name="speed_integral_limit_kph_s" value="$(arg speed_integral_limit_kph_s)" />
     <param name="speed_error_deadband_kph" value="$(arg speed_error_deadband_kph)" />
     <param name="lookahead_min_m" value="$(arg lookahead_min_m)" />
@@ -148,6 +159,7 @@
     <rosparam param="maneuvers">[]</rosparam>
     <param name="path_file" value="$(arg path_file)" />
     <param name="signal_mgeo_path" value="$(arg signal_mgeo_path)" />
+    <param name="route_stopline_match_tolerance_m" value="$(arg stopline_match_tolerance_m)" />
     <param name="nominal_command_topic" value="/control/ctrl_cmd" />
     <param name="output_command_topic" value="/ctrl_cmd" />
     <param name="signal_topic" value="/perception/traffic_light/directional_state" />
@@ -169,6 +181,10 @@
     <param name="lamp_output_enabled" value="false" />
     <param name="right_on_green" value="$(arg right_on_green)" />
     <param name="max_speed_kph" value="$(arg max_speed_kph)" />
+    <param name="speed_governor_enabled" value="true" />
+    <param name="mapped_stopline_approach_speed_kph" value="$(arg stopline_approach_speed_kph)" />
+    <param name="mapped_stopline_approach_distance_m" value="$(arg mapped_stopline_approach_distance_m)" />
+    <param name="mapped_stopline_cap_release_after_m" value="$(arg stopline_cap_release_after_m)" />
     <param name="lateral_accel_limit_mps2" value="$(arg lateral_accel_limit_mps2)" />
     <param name="front_reference_offset_m" value="$(arg stopline_front_reference_offset_m)" />
     <param name="front_axle_offset_m" value="$(arg wheelbase_m)" />

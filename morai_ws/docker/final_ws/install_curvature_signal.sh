@@ -30,6 +30,7 @@ FILES=(
   "$CURVE/test/test_node_startup.py"
   src/control/purepursuit_mgeo/src/purepursuit_mgeo/longitudinal_controller.py
   src/control/turn_signal_controller/scripts/maneuver_fusion_node.py
+  src/control/turn_signal_controller/package.xml
   src/control/turn_signal_controller/src/turn_signal_controller/route_context.py
   src/control/turn_signal_controller/src/turn_signal_controller/fusion.py
   src/control/stopline_control/src/stopline_control/core.py

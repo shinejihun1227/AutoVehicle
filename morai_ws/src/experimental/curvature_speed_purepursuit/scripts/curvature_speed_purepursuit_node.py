@@ -34,6 +34,7 @@ from curvature_speed_purepursuit.planner import (
     clean_consecutive_duplicates,
     cumulative_arc_lengths,
     curvature_profile,
+    conservative_speed_curvatures,
     adaptive_lookahead_m,
     interpolate_by_s,
     max_abs_curvature_ahead,
@@ -85,6 +86,9 @@ class CurvatureSpeedPurePursuitNode:
             half_window_points=max(1, half_window),
             smoothing_window=max(1, smoothing_window),
         )
+        self.speed_curvatures = (conservative_speed_curvatures(self.points, self.s_values)
+                                 if bool(rospy.get_param("~conservative_curve_speed_enabled", False))
+                                 else self.curvatures)
         legacy_max_speed_mps = float(rospy.get_param("~max_speed_mps", 2.0))
         max_speed_kph = rospy.get_param("~max_speed_kph", None)
         if max_speed_kph is None:
@@ -106,15 +110,17 @@ class CurvatureSpeedPurePursuitNode:
         if final_speed_kph is None:
             final_speed_kph = legacy_final_speed_mps * MPS_TO_KPH
 
+        max_decel_mps2 = float(rospy.get_param("~max_decel_mps2", 1.5))
         self.speed_profile = build_speed_profile(
             self.s_values,
-            self.curvatures,
+            self.speed_curvatures,
             max_speed_mps=self.max_speed_kph / MPS_TO_KPH,
             lateral_accel_limit_mps2=float(
                 rospy.get_param("~lateral_accel_limit_mps2", 1.0)
             ),
             max_accel_mps2=float(rospy.get_param("~max_accel_mps2", 1.0)),
-            max_decel_mps2=float(rospy.get_param("~max_decel_mps2", 1.5)),
+            max_decel_mps2=min(max_decel_mps2, float(rospy.get_param(
+                "~curve_planning_decel_mps2", max_decel_mps2))),
             # At rest, a fixed v(s=0)=0 ceiling prevents any departure from s=0.
             # The command starts at zero and apply_speed_rate_limit handles
             # acceleration in time. Keep curve/goal limits in the spatial
@@ -245,6 +251,9 @@ class CurvatureSpeedPurePursuitNode:
             speed_error_deadband_kph=max(
                 0.0, float(rospy.get_param("~speed_error_deadband_kph", 0.1))
             ),
+            accel_rise_rate_per_sec=float(rospy.get_param("~pedal_accel_rise_rate_per_sec", 0.0)),
+            brake_rise_rate_per_sec=float(rospy.get_param("~pedal_brake_rise_rate_per_sec", 0.0)),
+            pedal_release_rate_per_sec=float(rospy.get_param("~pedal_release_rate_per_sec", 0.0)),
         )
 
         self.latest_odom: Optional[Odometry] = None

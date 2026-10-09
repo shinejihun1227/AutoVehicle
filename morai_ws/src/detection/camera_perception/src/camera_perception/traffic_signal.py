@@ -197,6 +197,25 @@ def register_cbam_model_layers(torch_module=None):
     block.C2f_EMA = C2f_EMA
 
 
+def _same_signal_housing(first, second):
+    """Require close, similarly sized boxes before combining a red lamp and arrow."""
+    try:
+        x1, y1, w1, h1 = (float(getattr(first, key)) for key in
+                          ("x_center", "y_center", "width", "height"))
+        x2, y2, w2, h2 = (float(getattr(second, key)) for key in
+                          ("x_center", "y_center", "width", "height"))
+    except (AttributeError, TypeError, ValueError, OverflowError):
+        return False
+    if not all(math.isfinite(v) and v > 0 for v in (w1, h1, w2, h2)):
+        return False
+    if not all(math.isfinite(v) for v in (x1, y1, x2, y2)):
+        return False
+    return (min(w1, w2) / max(w1, w2) >= 0.4
+            and min(h1, h2) / max(h1, h2) >= 0.4
+            and abs(x1 - x2) <= 2.0 * max(w1, w2)
+            and abs(y1 - y2) <= 0.75 * max(h1, h2))
+
+
 def directional_observation(objects, min_confidence=0.5):
     """Preserve one directional class; conflicting signal heads are UNKNOWN.
 
@@ -208,6 +227,7 @@ def directional_observation(objects, min_confidence=0.5):
     supported = {"RED", "YELLOW", "GREEN", "LEFT", "RIGHT", "GREEN_LEFT",
                  "GREEN_RIGHT", "RED_LEFT", "RED_RIGHT"}
     evidence = {}
+    candidates = []
     for item in objects:
         try:
             score = float(item.conf)
@@ -221,6 +241,12 @@ def directional_observation(objects, min_confidence=0.5):
         if name not in supported:
             name = "UNKNOWN"
         evidence[name] = max(evidence.get(name, 0.0), score)
+        candidates.append((name, score, item))
+    if (len(candidates) == 2 and {item[0] for item in candidates} in
+            ({"RED", "LEFT"}, {"RED", "RIGHT"})
+            and _same_signal_housing(candidates[0][2], candidates[1][2])):
+        arrow = "LEFT" if "LEFT" in evidence else "RIGHT"
+        return "RED_" + arrow, min(item[1] for item in candidates)
     if len(evidence) != 1 or "UNKNOWN" in evidence:
         return "UNKNOWN", 0.0
     return next(iter(evidence.items()))

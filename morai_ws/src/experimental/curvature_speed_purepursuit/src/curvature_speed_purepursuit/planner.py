@@ -161,6 +161,35 @@ def curvature_profile(
     return median_smooth(raw, smoothing_window)
 
 
+def conservative_speed_curvatures(
+    points: Sequence[PathPoint], s_values: Sequence[float],
+    spacing_m: float = 1.0, half_window_m: float = 3.0,
+    neighborhood_m: float = 3.0,
+) -> List[float]:
+    """Measure bends in metres, independent of the route file's point spacing.
+
+    A local maximum keeps a sharp upcoming bend from disappearing in a median
+    of unevenly spaced vertices. This profile is only for speed; signed
+    curvature for steering is calculated separately.
+    """
+    if len(points) != len(s_values) or len(points) < 3:
+        raise ValueError("Route geometry is too short for a speed curvature profile")
+    if not all(math.isfinite(v) and v > 0 for v in
+               (spacing_m, half_window_m, neighborhood_m)):
+        raise ValueError("Speed curvature windows must be positive and finite")
+    start, finish = s_values[0], s_values[-1]
+    count = max(1, int(math.ceil((finish - start) / spacing_m)))
+    sampled_s = [min(finish, start + i * spacing_m) for i in range(count)] + [finish]
+    sampled_points = [interpolate_by_s(points, s_values, s)[0] for s in sampled_s]
+    half_window_points = max(1, int(round(half_window_m / spacing_m)))
+    raw = [abs(three_point_curvature(sampled_points, i, half_window_points))
+           for i in range(len(sampled_points))]
+    radius = max(1, int(math.ceil(neighborhood_m / spacing_m)))
+    return [max(raw[max(0, int((s - start) / spacing_m) - radius):
+                    min(len(raw), int((s - start) / spacing_m) + radius + 2)],
+                default=0.0) for s in s_values]
+
+
 def interpolate_by_s(
     points: Sequence[PathPoint], s_values: Sequence[float], query_s: float
 ) -> Tuple[PathPoint, int]:

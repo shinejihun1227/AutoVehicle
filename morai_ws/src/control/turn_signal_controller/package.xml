@@ -15,5 +15,6 @@
   <depend>common</depend>
   <exec_depend>stopline_control</exec_depend>
   <exec_depend>curvature_speed_purepursuit</exec_depend>
+  <exec_depend>camera_perception</exec_depend>
   <test_depend>python3-nose</test_depend>
 </package>

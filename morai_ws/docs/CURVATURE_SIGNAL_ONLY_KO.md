@@ -11,10 +11,11 @@ MGeo 지정 정지선 + CAM1 확인 + CAM4 방향별 신호 ─→ 교차로 제
 판단 규칙은 다음과 같다.
 
 - 지정된 정지선에 접근하면 해당 MGeo 위치를 이용해 신호가 없거나 불명이어도 정지 준비를 한다. 정지선이 보이지 않으면 허용 신호만으로 통과하지 않는다.
-- CAM1 정지선 위치가 현재 지정 정지선과 4 m 이내로 맞고, CAM4 한 프레임에 유효 신호 후보가 하나여야 신호를 적용한다. 실제 지도 위치와의 차이는 상태의 `event.stopline_match_error_m`에서 확인한다.
+- CAM1 정지선 위치가 현재 지정 정지선과 8 m 이내로 맞고, CAM4 한 프레임에 유효 신호 후보가 한 신호등으로 확인되어야 신호를 적용한다. 실제 지도 위치와의 차이는 상태의 `event.stopline_match_error_m`에서 확인한다.
 - 진행 방향은 해당 MGeo 연결의 직진·좌회전·우회전을 따른다. 기존 방향별 신호 판단을 적용하며, 빨강·노랑·불명 신호 또는 진행 방향과 맞지 않는 화살표에서는 멈춘다. 초록 통과는 서로 다른 프레임의 확인이 필요하다.
 - 지정 목록 밖의 정지선은 신호 제어와 독립적인 정지선 속도 제한을 만들지 않는다. 기본 조향은 계속 곡률 기준 경로가 담당한다.
-- CAM4 신호등의 화면 위치와 지도 신호등 ID를 연결할 보정값은 없다. 여러 후보가 동시에 보이면 통과 허가를 내지 않는다. 이 구성을 MORAI 모니터 모드에서 먼저 확인한다.
+- CAM4 신호등의 화면 위치와 지도 신호등 ID를 연결할 보정값은 없다. 빨강과 좌회전 화살표가 각각 검출되더라도 크기와 위치가 가까워 한 신호등으로 볼 수 있을 때만 `RED_LEFT`로 묶어 좌회전만 허가한다. 겹친 동일 초록 검출은 한 후보로 처리하지만, 서로 떨어진 신호등 등 다른 복수 후보는 통과 허가를 내지 않는다. 직진은 `GREEN`을 연속된 새 프레임으로 확인한 뒤에만 재출발한다.
+- 다른 구간의 목표 최고속도는 35 km/h이고, 지정 MGeo 정지선 80 m 전부터 최대 30 km/h까지 연속적으로 낮춘다. 경로를 1 m 간격으로 다시 읽어 앞쪽 급커브의 목표 속도를 계산하며, 측정 속도가 제한을 초과하면 최종 명령에서 제동한다. 페달 상승률을 제한해 평상시 가감속을 부드럽게 한다.
 - 정지 목표는 앞범퍼가 정지선에서 7 m 남았을 때다. 계산된 제동 시작 지점보다 20 m 일찍 브레이크 명령을 점진적으로 올리고, 거의 정지한 상태에서 목표까지 0.8 m 이내이면 완전 정차 상태를 유지한다. CAM4 신호 프레임과 검출 객체 프레임의 도착 순서가 어긋난 순간에는 출발 허가를 보류하되, 이전에 쌓은 초록 확인 기록은 즉시 지우지 않는다. 두 프레임이 대조된 뒤에만 통과를 허가한다.
 
 선택한 MGeo 정지선 ID와 예상 거리는 [교차로 매핑 표](ROUTE_SIGNAL_GATE_PROPOSAL_KO.md)에 정리했다. 위치가 실제 주행과 다르면 `config/curvature_signal.yaml`의 ID 목록을 수정하고 컨테이너에 다시 설치한다.
@@ -28,8 +29,9 @@ cd "$HOME/AutoVehicle"
 git pull --ff-only origin final_ws
 cd "$HOME/AutoVehicle/morai_ws/docker/final_ws"
 bash run_highway.sh stop
-bash install_curvature_signal.sh --config
+bash install_curvature_signal.sh
 bash run_highway.sh start
+bash run_test.sh turn safe
 bash run_test.sh models
 ```
 
@@ -61,9 +63,9 @@ ROI `dev/merged_sensor`의 `a994022`까지 확인해 CAM4 기본 사물 모델�
 
 첫 큰 좌회전에서 차가 커브 바깥쪽으로 밀려 벽에 닿으면 먼저 주행 launch를
 `Ctrl+C`로 종료한다. 현재 경로의 첫 급좌회전은 출발점에서 약 77~100 m이고,
-기본 곡률 속도 계획은 그 구간에서 약 10 km/h를 허용한다. 아래 명령은
-직선 최고속도를 45 km/h로 유지하면서 횡가속도 제한 0.45 m/s²로
-급커브의 목표속도를 낮춘다. 조향 명령 변화율 제한은 1.2 rad/s,
+기존 주행에서는 첫 좌회전 진입 속도가 약 60 km/h까지 올라간 사례가 있었다.
+아래 명령은 전체 목표 최고속도를 35 km/h로 설정하고, 전방 곡률을
+1 m 간격으로 계산해 급커브 진입 전에 감속하도록 한다. 조향 명령 변화율 제한은 1.2 rad/s,
 lookahead gain은 0.25, 곡률 조향 피드포워드 비중은 0.50으로 설정한다.
 정지선 여유 거리는 7 m, 정지 접근 계획 감속은 0.7 m/s²,
 브레이크 사전 상승 구간은 20 m로 설정한다. 이 설정은
@@ -72,11 +74,10 @@ lookahead gain은 0.25, 곡률 조향 피드포워드 비중은 0.50으로 설�
 ```bash
 cd "$HOME/AutoVehicle/morai_ws/docker/final_ws"
 bash run_test.sh turn safe
-bash run_test.sh show 2
-bash run_test.sh drive 2
+bash run_test.sh monitor 2
 ```
 
-45 km/h는 전체 최고속도이며 첫 급좌회전의 목표속도는 곡률에 따라 훨씬 낮아진다.
+모니터 확인 후 `Ctrl+C`로 종료하고 `bash run_test.sh drive 2`를 실행한다. 35 km/h는 전체 최고속도이며 첫 급좌회전의 목표속도는 곡률에 따라 훨씬 낮아진다.
 벽에 닿거나 차선을 밟으면 해당 구간의 실제 속도, 경로 횡오차, 조향 명령과
 앞바퀴 반응을 확인한다. 현장 실측 없이 최적 주행을 보증할 수는 없다.
 
@@ -132,7 +133,9 @@ bash run_test.sh monitor 2
 
 ## 주요 설정
 
-- 최고속도와 곡률 감속: `highway-test.env`의 `MAX_SPEED_KPH`, `LATERAL_ACCEL_LIMIT_MPS2`
+- 최고속도와 곡률 감속: `highway-test.env`의 `MAX_SPEED_KPH`, `LATERAL_ACCEL_LIMIT_MPS2`, `CURVE_PLANNING_DECEL_MPS2`
+- 평상시 페달 변화율: `PEDAL_ACCEL_RISE_RATE_PER_SEC`, `PEDAL_BRAKE_RISE_RATE_PER_SEC`, `PEDAL_RELEASE_RATE_PER_SEC`
+- 지정 MGeo 정지선 접근 속도: `STOPLINE_APPROACH_SPEED_KPH` (기본 30 km/h), 런치 인자 `mapped_stopline_approach_distance_m` (기본 80 m)
 - 정지선 기준점 보정: `STOPLINE_FRONT_REFERENCE_OFFSET_M` — 앞 범퍼 위치 실측값을 사용한다.
 - 정지선 여유 거리: `STOPLINE_HOLD_DISTANCE_M` (앞범퍼 기준 7 m)
 - 정지 접근 제동: `STOPLINE_PLANNING_DECEL_MPS2`, `STOPLINE_BRAKE_RAMP_DISTANCE_M`, `STOPLINE_SETTLE_DISTANCE_M`

@@ -33,11 +33,18 @@ class SpeedPIController:
         max_decel_mps2: float = 1.5,
         integral_limit_kph_s: float = 10.8,
         speed_error_deadband_kph: float = 0.1,
+        accel_rise_rate_per_sec: float = 0.0,
+        brake_rise_rate_per_sec: float = 0.0,
+        pedal_release_rate_per_sec: float = 0.0,
     ) -> None:
         if kp < 0.0 or ki < 0.0:
             raise ValueError("PI gain은 음수가 될 수 없다.")
         if max_accel_mps2 <= 0.0 or max_decel_mps2 <= 0.0:
             raise ValueError("max_accel_mps2와 max_decel_mps2는 0보다 커야 한다.")
+        if not all(math.isfinite(value) and value >= 0.0 for value in
+                   (accel_rise_rate_per_sec, brake_rise_rate_per_sec,
+                    pedal_release_rate_per_sec)):
+            raise ValueError("Pedal slew rates must be finite and nonnegative")
 
         self.kp = float(kp)
         self.ki = float(ki)
@@ -52,9 +59,23 @@ class SpeedPIController:
             0.0, float(speed_error_deadband_kph) / MPS_TO_KPH
         )
         self.integral_error_mps_s = 0.0
+        self.accel_rise_rate_per_sec = float(accel_rise_rate_per_sec)
+        self.brake_rise_rate_per_sec = float(brake_rise_rate_per_sec)
+        self.pedal_release_rate_per_sec = float(pedal_release_rate_per_sec)
+        self.last_accel = 0.0
+        self.last_brake = 0.0
 
     def reset(self) -> None:
         self.integral_error_mps_s = 0.0
+        self.last_accel = self.last_brake = 0.0
+
+    @staticmethod
+    def _slew(previous: float, target: float, rise: float, release: float, dt: float) -> float:
+        rate = rise if target > previous else release
+        if rate <= 0.0:
+            return target
+        step = rate * dt
+        return max(previous - step, min(previous + step, target))
 
     @staticmethod
     def _finite_nonnegative(value: float) -> float:
@@ -80,24 +101,25 @@ class SpeedPIController:
         error = target - measured
 
         if abs(error) <= self.speed_error_deadband_mps:
-            return LongitudinalCommand(0.0, 0.0, 0.0)
-
-        previous_integral = self.integral_error_mps_s
-        candidate_integral = previous_integral + error * dt
-        candidate_integral = max(
-            -self.integral_limit_mps_s,
-            min(self.integral_limit_mps_s, candidate_integral),
-        )
-        requested = self.kp * error + self.ki * candidate_integral
-
-        saturating_high = requested > self.max_accel_mps2 and error > 0.0
-        saturating_low = requested < -self.max_decel_mps2 and error < 0.0
-        if saturating_high or saturating_low:
-            # 현재 오차가 포화 방향인 동안에는 적분항을 더 쌓지 않는다.
-            candidate_integral = previous_integral
+            self.integral_error_mps_s *= max(0.0, 1.0 - 2.0 * dt)
+            requested = 0.0
+        else:
+            previous_integral = self.integral_error_mps_s
+            candidate_integral = previous_integral + error * dt
+            candidate_integral = max(
+                -self.integral_limit_mps_s,
+                min(self.integral_limit_mps_s, candidate_integral),
+            )
             requested = self.kp * error + self.ki * candidate_integral
 
-        self.integral_error_mps_s = candidate_integral
+            saturating_high = requested > self.max_accel_mps2 and error > 0.0
+            saturating_low = requested < -self.max_decel_mps2 and error < 0.0
+            if saturating_high or saturating_low:
+                candidate_integral = previous_integral
+                requested = self.kp * error + self.ki * candidate_integral
+
+            self.integral_error_mps_s = candidate_integral
+
         requested = max(
             -self.max_decel_mps2,
             min(self.max_accel_mps2, requested),
@@ -109,5 +131,26 @@ class SpeedPIController:
         else:
             accel = 0.0
             brake = -requested / self.max_decel_mps2
+
+        # Brake always releases a prior accelerator immediately; never issue
+        # both pedals together. Only ordinary driving is slewed. stop=True
+        # above still applies full brake without delay.
+        if brake > 0.0:
+            self.last_accel = 0.0
+            brake = self._slew(self.last_brake, brake,
+                               self.brake_rise_rate_per_sec,
+                               self.pedal_release_rate_per_sec, dt)
+        elif accel > 0.0:
+            self.last_brake = 0.0
+            accel = self._slew(self.last_accel, accel,
+                               self.accel_rise_rate_per_sec,
+                               self.pedal_release_rate_per_sec, dt)
+        elif self.last_brake > 0.0:
+            brake = self._slew(self.last_brake, 0.0, 0.0,
+                               self.pedal_release_rate_per_sec, dt)
+        else:
+            accel = self._slew(self.last_accel, 0.0, 0.0,
+                               self.pedal_release_rate_per_sec, dt)
+        self.last_accel, self.last_brake = accel, brake
 
         return LongitudinalCommand(requested, accel, brake)

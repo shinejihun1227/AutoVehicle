@@ -21,6 +21,7 @@ from morai_perception_msgs.msg import TrafficLight, StopLineDetection, SafetySto
 from nav_msgs.msg import Odometry, Path as RosPath
 from std_msgs.msg import String
 from common.msg import ObjectInfoArray
+from camera_perception.traffic_signal import directional_observation
 
 from curvature_speed_purepursuit.planner import (
     load_path_file, clean_consecutive_duplicates, cumulative_arc_lengths, nearest_projection,
@@ -182,6 +183,20 @@ class ManeuverFusionNode:
             planning_decel_mps2=self.core.planning_decel_mps2,
             max_decel_mps2=self.core.max_decel_mps2,
             reaction_time_sec=self.core.reaction_time_sec)
+        self.speed_governor_enabled = bool(rospy.get_param("~speed_governor_enabled", False))
+        self.mapped_approach_speed_kph = float(rospy.get_param(
+            "~mapped_stopline_approach_speed_kph", 30.0))
+        self.mapped_approach_distance_m = float(rospy.get_param(
+            "~mapped_stopline_approach_distance_m", 80.0))
+        self.mapped_cap_release_after_m = float(rospy.get_param(
+            "~mapped_stopline_cap_release_after_m", 5.0))
+        if (not all(finite(value) and value > 0 for value in
+                    (self.mapped_approach_speed_kph, self.mapped_approach_distance_m))
+                or not finite(self.mapped_cap_release_after_m)
+                or self.mapped_cap_release_after_m < 0):
+            raise ValueError("Invalid mapped stopline speed governor settings")
+        self.governor_target_kph = None
+        self.governor_stopline_distance_m = None
         # Stopping clearance uses the bumper; signal entry uses the front axle.
         # Both offsets are measured from the same rear-axle base_link origin.
         self.front_axle_offset_m = float(rospy.get_param("~front_axle_offset_m", 3.0))
@@ -484,19 +499,85 @@ class ManeuverFusionNode:
         if (not self.valid_sensor_signal(signal) or objects is None
                 or abs(signal.stamp - objects.stamp) > 0.05):
             return False
-        return self.route_signal_candidate_count(objects) == 1
+        state, _ = directional_observation(objects.value.objects)
+        return (self.route_signal_candidate_count(objects) == 1
+                and state == str(signal.value.state).upper())
 
     @staticmethod
     def route_signal_candidate_count(objects):
         if objects is None:
             return 0
-        return sum(1 for item in objects.value.objects
-                   if finite(getattr(item, "conf", None))
-                   and 0.5 <= item.conf <= 1.0)
+        candidates = [item for item in objects.value.objects
+                      if finite(getattr(item, "conf", None))
+                      and 0.5 <= item.conf <= 1.0]
+        state, _ = directional_observation(candidates)
+        # A spatially coherent RED + illuminated arrow describes one housing.
+        if len(candidates) == 2 and state in ("RED_LEFT", "RED_RIGHT"):
+            return 1
+        # The detector can emit overlapping copies of the same green lamp.
+        # Do not confuse those with separate intersection heads.
+        if len(candidates) > 1 and state == "GREEN" and all(
+                str(item.class_name).strip().upper() == "GREEN" for item in candidates):
+            first = candidates[0]
+            try:
+                left1 = first.x_center - first.width / 2.0
+                top1 = first.y_center - first.height / 2.0
+                right1 = left1 + first.width
+                bottom1 = top1 + first.height
+                overlap = []
+                for item in candidates[1:]:
+                    left2 = item.x_center - item.width / 2.0
+                    top2 = item.y_center - item.height / 2.0
+                    right2 = left2 + item.width
+                    bottom2 = top2 + item.height
+                    intersection = max(0.0, min(right1, right2) - max(left1, left2)) * max(
+                        0.0, min(bottom1, bottom2) - max(top1, top2))
+                    union = first.width * first.height + item.width * item.height - intersection
+                    overlap.append(union > 0 and intersection / union >= 0.6)
+                if all(overlap):
+                    return 1
+            except (AttributeError, TypeError, ValueError, ZeroDivisionError):
+                pass
+        return len(candidates)
 
     def route_objects_at(self, stamp):
         return next((sample for sample in self.route_object_observations
                      if abs(sample.stamp - stamp) <= 1e-6), None)
+
+    def constrain_route_speed(self, decision, speed):
+        """Bound measured speed even if the nominal PI pedal or path profile lags."""
+        self.governor_target_kph = self.governor_stopline_distance_m = None
+        if not self.speed_governor_enabled or speed is None or self.progress is None:
+            return decision
+        target_kph = self.turn_motion.max_speed_kph
+        for context in self.route_signal_contexts:
+            distance = context["stop_s"] - self.progress
+            if distance < -self.mapped_cap_release_after_m:
+                continue
+            if distance <= self.mapped_approach_distance_m:
+                self.governor_stopline_distance_m = distance
+                # Reach 30 km/h well before the mapped stop line. The 50 m
+                # transition makes a green approach continuous too.
+                fraction = clamp((distance - 20.0) /
+                                 max(self.mapped_approach_distance_m - 20.0, 1.0),
+                                 0.0, 1.0)
+                target_kph = min(target_kph,
+                                 self.mapped_approach_speed_kph +
+                                 max(0.0, target_kph - self.mapped_approach_speed_kph) * fraction)
+            break
+        self.governor_target_kph = target_kph
+        target_mps = target_kph / 3.6
+        error = target_mps - speed
+        accel_limit = min(decision.accel_limit, clamp(error * 0.45, 0.0, 1.0))
+        # The nominal controller is a request, not a guarantee. Overspeed
+        # therefore adds a measured-speed brake, including outside junctions.
+        brake = max(decision.brake, clamp((-error - 0.25) * 0.30, 0.0, 1.0))
+        target = target_kph if decision.target_speed_kph is None else min(
+            target_kph, decision.target_speed_kph)
+        reason = "speed_governor" if decision.mode == "NOMINAL" and (
+            accel_limit < decision.accel_limit or brake > decision.brake) else decision.reason
+        return Decision(decision.mode, reason, accel_limit, brake,
+                        target, decision.distance_m)
 
     def consume_route_signals(self, event, ready, route_valid, now, ros_now):
         """Consume every CAM4 frame in order; unmatched frames never grant green."""
@@ -1102,6 +1183,7 @@ class ManeuverFusionNode:
             # An allowed arrow controls entry, not cornering speed. Retain the
             # original core mode so a speed limit cannot erase an entry ticket.
             decision = motion.constrain(decision)
+            decision = self.constrain_route_speed(decision, speed)
             reasons = [motion.fault] if motion.fault else []
             # UNKNOWN/no line is a valid new image observation. No new stamped
             # observations is a dead camera/inference stream, including mid-turn.
@@ -1221,6 +1303,8 @@ class ManeuverFusionNode:
                 "turn_curve_speed_kph": motion.curve_speed_kph,
                 "turn_curvature_abs_m_inv": motion.curvature_abs_m_inv,
                 "max_speed_kph": self.turn_motion.max_speed_kph,
+                "speed_governor_target_kph": self.governor_target_kph,
+                "mapped_stopline_distance_m": self.governor_stopline_distance_m,
                 "lateral_accel_limit_mps2": self.turn_motion.lateral_accel_limit_mps2,
                 "turn_heading_error_deg": motion.heading_error_deg,
                 "turn_lateral_error_m": motion.lateral_error_m,

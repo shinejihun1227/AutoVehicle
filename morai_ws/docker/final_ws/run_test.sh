@@ -48,9 +48,9 @@ if [[ "$ACTION" == turn ]]; then
     echo 'Usage: bash run_test.sh turn safe' >&2; exit 2;
   }
   cp -p "$SCRIPT_DIR/highway-test.env" "$SCRIPT_DIR/highway-test.env.bak"
-  # Keep the requested straight-line ceiling while the curvature speed
-  # planner slows tight bends. Allow faster steering and earlier path response.
-  for entry in MAX_SPEED_KPH=45.0 LATERAL_ACCEL_LIMIT_MPS2=0.45 MAX_STEERING_RATE_RAD_S=1.2 LOOKAHEAD_GAIN=0.25 STEERING_FEEDFORWARD_WEIGHT=0.50 STOPLINE_HOLD_DISTANCE_M=7.0 STOPLINE_PLANNING_DECEL_MPS2=0.7 STOPLINE_BRAKE_RAMP_DISTANCE_M=20.0 STOPLINE_SETTLE_DISTANCE_M=0.8; do
+  # 35 km/h is a ceiling on straights. The metre-resampled curvature profile
+  # slows bends further, and the fusion node guards measured overspeed.
+  for entry in MAX_SPEED_KPH=35.0 LATERAL_ACCEL_LIMIT_MPS2=0.45 MAX_ACCEL_MPS2=0.8 CURVE_PLANNING_DECEL_MPS2=0.8 SPEED_KP=0.35 SPEED_KI=0.03 SPEED_ERROR_DEADBAND_KPH=0.5 PEDAL_ACCEL_RISE_RATE_PER_SEC=0.7 PEDAL_BRAKE_RISE_RATE_PER_SEC=1.5 PEDAL_RELEASE_RATE_PER_SEC=2.0 MAX_STEERING_RATE_RAD_S=1.2 LOOKAHEAD_GAIN=0.25 STEERING_FEEDFORWARD_WEIGHT=0.50 STOPLINE_APPROACH_SPEED_KPH=30.0 STOPLINE_HOLD_DISTANCE_M=7.0 STOPLINE_PLANNING_DECEL_MPS2=0.7 STOPLINE_BRAKE_RAMP_DISTANCE_M=20.0 STOPLINE_SETTLE_DISTANCE_M=0.8; do
     name="${entry%%=*}"
     value="${entry#*=}"
     if grep -q "^${name}=" "$SCRIPT_DIR/highway-test.env"; then
@@ -59,7 +59,7 @@ if [[ "$ACTION" == turn ]]; then
       printf '\n%s=%s\n' "$name" "$value" >> "$SCRIPT_DIR/highway-test.env"
     fi
   done
-  echo 'Turn/intersection settings saved: max 45 km/h, lateral acceleration 0.45 m/s2, steering rate 1.2 rad/s, lookahead gain 0.25, feedforward 0.50, stopline clearance 7.0 m, planning decel 0.7 m/s2, brake ramp 20 m, settle window 0.8 m.'
+  echo 'Turn/intersection settings saved: max 35 km/h, mapped stopline approach 30 km/h, curvature planning decel 0.8 m/s2, progressive pedals, stopline clearance 7.0 m.'
   echo 'Restart the driving launch to apply; no live parameter was changed. Previous settings: highway-test.env.bak'
   exit 0
 fi
@@ -137,6 +137,10 @@ case "$TEST_PROFILE" in
   curvature_signal)
     LAUNCH=final_ws_curvature_signal.launch
     PROFILE_ARGS=(
+      "curve_planning_decel_mps2:=$CURVE_PLANNING_DECEL_MPS2"
+      "pedal_accel_rise_rate_per_sec:=$PEDAL_ACCEL_RISE_RATE_PER_SEC"
+      "pedal_brake_rise_rate_per_sec:=$PEDAL_BRAKE_RISE_RATE_PER_SEC"
+      "pedal_release_rate_per_sec:=$PEDAL_RELEASE_RATE_PER_SEC"
       "signal_config_file:=$SIGNAL_CONFIG_FILE"
       "lane_info_port:=$LANE_INFO_PORT" "yolo_port:=$YOLO_PORT"
       "lane_info_device:=$LANE_INFO_DEVICE" "lane_info_every:=$LANE_INFO_EVERY"
@@ -220,6 +224,9 @@ if [[ "$TEST_PROFILE" == curvature_signal ]]; then
   INSTALLED_LAUNCH=/opt/AutoVehicle/morai_ws/src/bringup/morai_bringup/launch/final_ws_curvature_signal.launch
   INSTALLED_FUSION=/opt/AutoVehicle/morai_ws/src/control/turn_signal_controller/scripts/maneuver_fusion_node.py
   INSTALLED_CURVATURE=/opt/AutoVehicle/morai_ws/src/experimental/curvature_speed_purepursuit/scripts/curvature_speed_purepursuit_node.py
+  INSTALLED_PLANNER=/opt/AutoVehicle/morai_ws/src/experimental/curvature_speed_purepursuit/src/curvature_speed_purepursuit/planner.py
+  INSTALLED_LONGITUDINAL=/opt/AutoVehicle/morai_ws/src/control/purepursuit_mgeo/src/purepursuit_mgeo/longitudinal_controller.py
+  INSTALLED_TRAFFIC=/opt/AutoVehicle/morai_ws/src/detection/camera_perception/src/camera_perception/traffic_signal.py
   INSTALLED_CAMERA_LAUNCH=/opt/AutoVehicle/morai_ws/src/detection/camera_perception/launch/camera_perception.launch
   INSTALLED_CAMERA_NODE=/opt/AutoVehicle/morai_ws/src/detection/camera_perception/scripts/camera_object_detection_node.py
   INSTALLED_CAMERA_MODELS=/opt/AutoVehicle/morai_ws/src/detection/camera_perception/models
@@ -233,15 +240,27 @@ if [[ "$TEST_PROFILE" == curvature_signal ]]; then
       '<param name="require_signalized_contexts" value="true" />' "$INSTALLED_LAUNCH" ||
      ! "${DOCKER[@]}" exec "$CONTAINER_NAME" grep -Fq \
        '<param name="stopline_speed_cap_enabled" value="false" />' "$INSTALLED_LAUNCH" ||
+     ! "${DOCKER[@]}" exec "$CONTAINER_NAME" grep -Fq \
+       '<param name="speed_governor_enabled" value="true" />' "$INSTALLED_LAUNCH" ||
+     ! "${DOCKER[@]}" exec "$CONTAINER_NAME" grep -Fq \
+       '<param name="conservative_curve_speed_enabled" value="true" />' "$INSTALLED_LAUNCH" ||
       ! "${DOCKER[@]}" exec "$CONTAINER_NAME" grep -Fq \
        'name="signal_mgeo_path"' "$INSTALLED_LAUNCH" ||
       ! "${DOCKER[@]}" exec "$CONTAINER_NAME" grep -Fq \
        'def consume_route_signals' "$INSTALLED_FUSION" ||
+      ! "${DOCKER[@]}" exec "$CONTAINER_NAME" grep -Fq \
+       'def constrain_route_speed' "$INSTALLED_FUSION" ||
       ! "${DOCKER[@]}" exec "$CONTAINER_NAME" grep -Eq \
        '^[[:space:]]*- "mgeo:' "$INSTALLED_CONFIG" ||
       ! "${DOCKER[@]}" exec "$CONTAINER_NAME" test -s "$INSTALLED_MGEO/traffic_light_set.json" ||
      ! "${DOCKER[@]}" exec "$CONTAINER_NAME" grep -Fq \
       'def update_stopline_speed_cap' "$INSTALLED_CURVATURE" ||
+     ! "${DOCKER[@]}" exec "$CONTAINER_NAME" grep -Fq \
+      'def conservative_speed_curvatures' "$INSTALLED_PLANNER" ||
+     ! "${DOCKER[@]}" exec "$CONTAINER_NAME" grep -Fq \
+      'brake_rise_rate_per_sec' "$INSTALLED_LONGITUDINAL" ||
+     ! "${DOCKER[@]}" exec "$CONTAINER_NAME" grep -Fq \
+      'def _same_signal_housing' "$INSTALLED_TRAFFIC" ||
      ! "${DOCKER[@]}" exec "$CONTAINER_NAME" grep -Fq \
       'models/best0917.pt' "$INSTALLED_CAMERA_LAUNCH" ||
      ! "${DOCKER[@]}" exec "$CONTAINER_NAME" grep -Fq \
@@ -251,10 +270,10 @@ if [[ "$TEST_PROFILE" == curvature_signal ]]; then
      ! "${DOCKER[@]}" exec "$CONTAINER_NAME" test -s "$INSTALLED_CAMERA_MODELS/best0917.pt" ||
      ! "${DOCKER[@]}" exec "$CONTAINER_NAME" test -s "$INSTALLED_CAMERA_MODELS/yolov8s.pt"; then
     echo 'ERROR: The container is missing the selected route signal profile or CAM4 models.' >&2
-    echo 'No driving launch was started. Stop the container, run install_curvature_signal.sh --config, then start it again.' >&2
+    echo 'No driving launch was started. Stop the container, run install_curvature_signal.sh, then start it again.' >&2
     exit 2
   fi
-  echo 'Verified profile: selected MGeo stop lines; unmapped stop lines do not cap speed; CAM1 + CAM4 gate entry.'
+  echo 'Verified profile: measured-speed governor, mapped 30 km/h approaches, CAM1 + CAM4 directional gate.'
 fi
 exec "${DOCKER[@]}" exec -it "$CONTAINER_NAME" /usr/local/bin/morai-entrypoint \
   "${DISPLAY_ARGS[@]}" roslaunch morai_bringup "$LAUNCH" "enable_control:=$CONTROL" \
