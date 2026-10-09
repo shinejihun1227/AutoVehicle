@@ -1,10 +1,15 @@
 cd ~/AutoVehicle
 git pull --ff-only origin final_ws
-git rev-parse --short HEAD
+
 cd morai_ws/docker/final_ws
 bash run_highway.sh stop
-bash install_curvature_signal.sh
+bash install_curvature_signal.sh --config
 bash run_highway.sh start
+
+bash run_test.sh turn safe
+bash run_test.sh speed 35
+bash run_test.sh lane on
+bash run_test.sh show 2
 bash run_test.sh drive 2
 
 
