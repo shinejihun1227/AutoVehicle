@@ -48,13 +48,25 @@ class Message:
 
 
 class Image:
-    def __init__(self, data=b"jpeg"):
+    def __init__(self, data=b"jpeg", shape=(48, 64, 3)):
         self.data = data
         self.size = len(data)
-        self.shape = (48, 64, 3)
+        self.shape = shape
+        self.source_region = None
 
     def copy(self):
-        return Image(self.data)
+        image = Image(self.data, self.shape)
+        image.source_region = self.source_region
+        return image
+
+    def __getitem__(self, region):
+        rows, columns = region
+        y0, y1, ystep = rows.indices(self.shape[0])
+        x0, x1, xstep = columns.indices(self.shape[1])
+        image = Image(self.data, (len(range(y0, y1, ystep)),
+                                 len(range(x0, x1, xstep)), self.shape[2]))
+        image.source_region = (x0, y0, x1, y1)
+        return image
 
 
 class Clock:
@@ -335,6 +347,8 @@ class CameraTimestampTest(unittest.TestCase):
         received = iter(frames)
         base = Mock(names={})
         custom_model = Mock(names={})
+        roi_model = Mock(names={})
+        fallback_model = Mock(names={})
 
         def base_predict(source, **_kwargs):
             if source.data == b"\x01":
@@ -351,9 +365,12 @@ class CameraTimestampTest(unittest.TestCase):
         base.predict.side_effect = base_predict
         custom_model.track.side_effect = (RuntimeError("tracker unavailable")
                                           if tracker_fails else custom_predict)
-        if tracker_fails:
-            custom_model.predict.side_effect = custom_predict
-        factory = Mock(side_effect=[base, custom_model] if custom else [base])
+        roi_model.predict.side_effect = custom_predict
+        fallback_model.predict.side_effect = custom_predict
+        models = [base, custom_model, roi_model] if custom else [base]
+        if custom and tracker_fails:
+            models.append(fallback_model)
+        factory = Mock(side_effect=models)
         receiver = Mock()
 
         def next_frame(*_args, **_kwargs):
@@ -405,6 +422,7 @@ class CameraTimestampTest(unittest.TestCase):
         deps['camera_perception.debug_images'] = SimpleNamespace(
             DebugImagePublisher=Mock(return_value=preview_writer), render_objects=Mock())
         with patch.dict(sys.modules, deps), patch.object(yolo.os.path, "isfile", return_value=custom), \
+                patch.object(yolo, "_tracking_available", return_value=True), \
                 patch.dict(yolo.os.environ, {'MORAI_CAMERA_DEBUG': 'true' if preview else 'false'}):
             yolo.main(custom_model_path="test.pt")
         self.assertTrue(finished.is_set(), "worker must publish newest pending frame")
@@ -414,8 +432,21 @@ class CameraTimestampTest(unittest.TestCase):
         self.assertEqual([call.kwargs["source"].data for call in base.predict.call_args_list], [b"\x01", b"\x03"])
         if custom:
             self.assertEqual([call.kwargs["source"].data for call in custom_model.track.call_args_list],
+                             [b"\x01"] if tracker_fails else [b"\x01", b"\x03"])
+            # Discard the failed tracker's callbacks instead of predicting on it.
+            custom_model.predict.assert_not_called()
+            self.assertEqual([call.kwargs["source"].data for call in fallback_model.predict.call_args_list],
+                             [b"\x01", b"\x03"] if tracker_fails else [])
+            fallback_model.track.assert_not_called()
+            self.assertEqual([call.kwargs["source"].data for call in roi_model.predict.call_args_list],
                              [b"\x01", b"\x03"])
-            self.assertEqual(custom_model.predict.call_count, 2 if tracker_fails else 0)
+            roi_model.track.assert_not_called()
+            for call in custom_model.track.call_args_list + fallback_model.predict.call_args_list:
+                self.assertEqual(call.kwargs["source"].shape, (48, 64, 3))
+                self.assertIsNone(call.kwargs["source"].source_region)
+            for call in roi_model.predict.call_args_list:
+                self.assertEqual(call.kwargs["source"].shape, (26, 19, 3))
+                self.assertEqual(call.kwargs["source"].source_region, (19, 2, 38, 28))
         receiver.close.assert_called_once()
         if preview:
             self.assertEqual([call.args[3] for call in preview_writer.submit.call_args_list], [1, 3])

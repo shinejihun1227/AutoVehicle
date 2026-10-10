@@ -15,6 +15,10 @@
   <arg name="custom_model_path" default="$(find camera_perception)/models/best0917.pt" />
   <arg name="yolo_confidence" default="0.4" />
   <arg name="yolo_inference_size" default="416" />
+  <!-- Normalized XMIN YMIN XMAX YMAX; full-frame inference supplements this crop. -->
+  <arg name="yolo_signal_roi" default="0.3 0.05 0.6 0.6" />
+  <arg name="yolo_signal_full_frame" default="1" />
+  <arg name="yolo_signal_window_size" default="5" />
   <!-- 0: MORAI camera source rate; no extra GUI wait is inserted. -->
   <arg name="camera_display_fps" default="0.0" />
   <arg name="show_raw_camera_preview" default="0" />
@@ -82,7 +86,7 @@
         name="yolo_camera"
         output="screen"
         respawn="false"
-        args="--mode yolo --camera-stack-root $(arg camera_stack_root) --cam-ip $(arg camera_ip) --cam-port $(arg yolo_port) --base-model $(arg base_model_path) --custom-model $(arg custom_model_path) --confidence $(arg yolo_confidence) --inference-size $(arg yolo_inference_size) --display-fps $(arg camera_display_fps) --cpu-threads $(arg yolo_cpu_threads) --show-raw-preview $(arg show_raw_camera_preview) --car-detected-topic $(arg car_detected_topic) --person-detected-topic $(arg person_detected_topic) --traffic-light-topic $(arg traffic_light_topic) --obstacle-topic $(arg camera_obstacle_topic)">
+        args="--mode yolo --camera-stack-root $(arg camera_stack_root) --cam-ip $(arg camera_ip) --cam-port $(arg yolo_port) --base-model $(arg base_model_path) --custom-model $(arg custom_model_path) --confidence $(arg yolo_confidence) --inference-size $(arg yolo_inference_size) --signal-roi $(arg yolo_signal_roi) --signal-full-frame $(arg yolo_signal_full_frame) --window-size $(arg yolo_signal_window_size) --display-fps $(arg camera_display_fps) --cpu-threads $(arg yolo_cpu_threads) --show-raw-preview $(arg show_raw_camera_preview) --car-detected-topic $(arg car_detected_topic) --person-detected-topic $(arg person_detected_topic) --traffic-light-topic $(arg traffic_light_topic) --obstacle-topic $(arg camera_obstacle_topic)">
     <env name="MORAI_CAMERA_DEBUG" value="$(arg enable_debug_images)" />
   </node>
 

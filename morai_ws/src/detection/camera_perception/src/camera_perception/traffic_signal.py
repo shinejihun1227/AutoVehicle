@@ -47,30 +47,87 @@ def traffic_bbox_in_signal_roi(x, y, width, height, image_width, image_height):
 
 
 class TrackedSignalVotes:
-    """Smooth one tracked lamp without delaying a newly observed stop colour.
+    """Smooth one tracked lamp without delaying current stop evidence.
 
-    Track IDs belong to the custom detector, not to the road or route. A green
-    indication needs three matching samples from the last five frames; red and
-    yellow take effect on the current frame. Missing IDs use the raw class so
-    a tracker that has not assigned IDs does not hide an otherwise valid lamp.
+    Call begin_frame once after merging the full-frame and ROI detections,
+    observe at most once per track, and retain once with the merged visible IDs.
+    A duplicate frame must not be published or counted again. Missing IDs use
+    the raw class; downstream route-associated control still confirms permission
+    over distinct, fresh source images before releasing a stop.
+
+    Legacy observe(track_id, class_name) callers remain supported, but cannot
+    detect silence or duplicate images without calling begin_frame. RED_LEFT
+    remains current evidence immediately; its red lamp does not erase the lit
+    arrow's directional meaning. Stop/unknown observations erase older votes.
     """
 
     def __init__(self, window=5, green_votes=3):
         self.window = int(window)
         self.green_votes = int(green_votes)
+        self.reset()
+
+    def reset(self):
+        """Discard votes and frame clocks after source/tracker changes."""
         self.history = {}
+        self._last_sequence = None
+        self._last_source_stamp = None
+        self._last_received = None
+
+    def begin_frame(self, sequence, source_stamp, received):
+        """Accept a new frame and clear votes after a gap or clock restart.
+
+        source_stamp is the original ROS image time, or None when unavailable;
+        received uses one monotonic clock. With no source time, sequence and
+        receipt time still protect the vote history; they do not make that
+        image fresh enough for downstream control. False means skip voting and
+        publication. Duplicates do not refresh either accepted-frame watermark.
+        """
+        valid_sequence = (isinstance(sequence, int) and not isinstance(sequence, bool)
+                          and sequence >= 0)
+        valid_received = (isinstance(received, (int, float))
+                          and not isinstance(received, bool)
+                          and math.isfinite(received) and received >= 0)
+        valid_stamp = (source_stamp is None or
+                       (isinstance(source_stamp, (int, float))
+                        and not isinstance(source_stamp, bool)
+                        and math.isfinite(source_stamp) and source_stamp > 0))
+        if not (valid_sequence and valid_received and valid_stamp):
+            self.reset()
+            return False
+        clock_reset = (
+            (self._last_received is not None and received < self._last_received)
+            or (source_stamp is not None and self._last_source_stamp is not None
+                and source_stamp < self._last_source_stamp)
+            or (self._last_sequence is not None and sequence < self._last_sequence)
+        )
+        if clock_reset:
+            self.reset()
+        if (sequence == self._last_sequence
+                or (source_stamp is not None and source_stamp == self._last_source_stamp)):
+            return False
+        if ((self._last_received is not None and received - self._last_received > 0.5)
+                or (source_stamp is not None and self._last_source_stamp is not None
+                    and source_stamp - self._last_source_stamp > 0.5)):
+            self.history.clear()
+        self._last_sequence = sequence
+        if source_stamp is not None:
+            self._last_source_stamp = source_stamp
+        self._last_received = received
+        return True
 
     def observe(self, track_id, class_name):
         if track_id is None:
             return class_name
         key = int(track_id)
-        samples = self.history.setdefault(key, deque(maxlen=self.window))
-        samples.append(class_name)
         name = str(class_name).lower()
-        if "red" in name or "yellow" in name or "amber" in name:
+        if any(word in name for word in ("red", "yellow", "amber", "unknown", "conflict")):
+            self.history.pop(key, None)
             return class_name
         if any(word in name for word in ("green", "left", "right", "arrow")):
+            samples = self.history.setdefault(key, deque(maxlen=self.window))
+            samples.append(class_name)
             return class_name if Counter(samples)[class_name] >= self.green_votes else "Unknown"
+        self.history.pop(key, None)
         return class_name
 
     def retain(self, visible_ids):

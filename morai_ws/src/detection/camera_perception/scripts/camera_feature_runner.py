@@ -2,6 +2,7 @@
 """Run the integrated object or lane detector under roslaunch."""
 
 import argparse
+import math
 import os
 from pathlib import Path
 import sys
@@ -22,6 +23,14 @@ def main():
     parser.add_argument("--custom-model", default="best0917.pt")
     parser.add_argument("--confidence", type=float, default=0.4)
     parser.add_argument("--inference-size", type=int, default=416)
+    parser.add_argument("--signal-roi", type=float, nargs=4,
+                        metavar=("XMIN", "YMIN", "XMAX", "YMAX"),
+                        default=(0.3, 0.05, 0.6, 0.6),
+                        help="Normalized signal crop bounds, each between 0 and 1")
+    parser.add_argument("--signal-full-frame", type=int, choices=(0, 1), default=1,
+                        help="Also infer signals outside the configured crop")
+    parser.add_argument("--window-size", type=int, default=5,
+                        help="Signal class smoothing window in frames")
     parser.add_argument("--display-fps", type=float, default=0.0)
     parser.add_argument("--cpu-threads", type=int, default=0)
     parser.add_argument("--show-raw-preview", type=int, choices=(0, 1), default=0)
@@ -74,6 +83,14 @@ def main():
         "--person-detected-topic", default="/perception/camera/person_detected"
     )
     args, _ = parser.parse_known_args()
+    if args.mode == "yolo":
+        x_min, y_min, x_max, y_max = args.signal_roi
+        if (not all(math.isfinite(value) for value in args.signal_roi)
+                or not 0.0 <= x_min < x_max <= 1.0
+                or not 0.0 <= y_min < y_max <= 1.0):
+            parser.error("--signal-roi requires finite 0 <= XMIN < XMAX <= 1 and 0 <= YMIN < YMAX <= 1")
+        if args.window_size < 1:
+            parser.error("--window-size must be a positive integer")
 
     try:
         import rospkg
@@ -125,6 +142,8 @@ def main():
             "--custom-model", args.custom_model,
             "--confidence", str(args.confidence),
             "--inference-size", str(args.inference_size),
+            "--signal-full-frame", str(args.signal_full_frame),
+            "--window-size", str(args.window_size),
             "--display-fps", str(args.display_fps),
             "--cpu-threads", str(args.cpu_threads),
             "--show-raw-preview", str(args.show_raw_preview),
@@ -133,6 +152,7 @@ def main():
             "--traffic-light-topic", args.traffic_light_topic,
             "--obstacle-topic", args.obstacle_topic,
         ]
+        target_args.extend(["--signal-roi"] + [str(value) for value in args.signal_roi])
 
     if not target.is_file():
         parser.error(f"camera feature script not found: {target}")
