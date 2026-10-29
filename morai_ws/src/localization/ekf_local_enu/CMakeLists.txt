@@ -5,6 +5,8 @@ find_package(catkin REQUIRED COMPONENTS
   geometry_msgs
   morai_perception_msgs
   nav_msgs
+  morai_msgs
+  std_msgs
   rospy
   sensor_msgs
   tf2_ros

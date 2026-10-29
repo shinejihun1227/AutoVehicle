@@ -3,7 +3,7 @@
   "branch": "new_final_ws",
   "base_branch": "final_ws",
   "base_commit": "c97840c987880736b0b4b10ef346f90e904d9d28",
-  "scope": "final_ws Competition-only migration, followed by user-requested CAM1 recovery, route signal ranking, fourth-junction stop-then-right and lane centering",
+  "scope": "final_ws Competition-only migration, followed by user-requested CAM1 recovery, route signal ranking, fourth-junction stop-then-right and lane centering; green-priority right turns and Competition speed aided GPS-blackout prediction",
   "preserved_remote_branch_snapshot": {
     "final_ws": "c97840c987880736b0b4b10ef346f90e904d9d28",
     "jihun_ws": "20301b1fec2085fd1e7a336b0c3cf18044ae545d",
@@ -53,15 +53,16 @@
     "live_capture_verified": false
   },
   "localization": {
-    "position_source": "GPS-to-MGeo conversion + original GPS/IMU EKF",
+    "position_source": "GPS initialization and updates + IMU yaw/gyro + Competition forward-speed prediction in profile 2",
     "ekf_inputs": [
       "/localization/gps",
-      "/Imu"
+      "/Imu",
+      "/Ego_topic.velocity.x (Competition source, m/s)"
     ],
     "pose_topic": "/localization/odometry",
     "competition_position_used": false,
     "competition_acceleration_used": false,
-    "new_speed_aiding_added_to_ekf": false,
+    "new_speed_aiding_added_to_ekf": true,
     "gps_map_transform_live_validated": false
   },
   "preserved_control_defaults": {
@@ -76,7 +77,7 @@
       {
         "suite": "test_new_final",
         "exit_code": 0,
-        "tests": 11
+        "tests": 18
       },
       {
         "suite": "src/localization/morai_udp_drive_bridge/test",
@@ -106,7 +107,7 @@
       {
         "suite": "src/control/turn_signal_controller/test",
         "exit_code": 0,
-        "tests": 221
+        "tests": 223
       },
       {
         "suite": "src/control/purepursuit_mgeo/test",
@@ -119,10 +120,11 @@
         "tests": 66
       }
     ],
-    "total_tests": 499,
+    "total_tests": 508,
     "ros_build": false,
     "morai_driving": false,
-    "live_competition_packet_verified": false
+    "live_competition_packet_verified": false,
+    "followup_validation": "New-final suite rerun after adding the EKF include wiring regression: 18 passed"
   },
   "validation_command": "python3 morai_ws/tools/validate_new_final.py",
   "limits": [
@@ -225,18 +227,6 @@
   ],
   "unchanged_key_files": [
     {
-      "path": "morai_ws/src/localization/ekf_local_enu/scripts/ekf_local_enu_node.py",
-      "git_blob_sha1": "f882b22f7ca315abe3acc07a704758a17fbc30b0",
-      "canonical_blob_sha256": "c2dd97bae1820a862f08c614f7bd0307c0ad07eb90235ec53c9b1aff82d2d206",
-      "unchanged_from_base": true
-    },
-    {
-      "path": "morai_ws/src/localization/gps_mgeo_converter/scripts/gps_mgeo_converter_node.py",
-      "git_blob_sha1": "fec3369caf1eacabb56cbd102008a072b4d25792",
-      "canonical_blob_sha256": "bb7fe42133258877532d5ff8dd46c8d4dba9cf97ecd8107643f2723592dbdb8b",
-      "unchanged_from_base": true
-    },
-    {
       "path": "morai_ws/src/localization/gps_mgeo_converter/src/gps_mgeo_converter/coordinate.py",
       "git_blob_sha1": "17a08732ec72cdaeb3985891bbaad67ecedd1ed1",
       "canonical_blob_sha256": "af563a0a6bd20166d719acc259d00d65966c19f10bfa76cb6e3f1f90056e7445",
@@ -316,5 +306,13 @@
       "conflict_margin": 0.025
     },
     "morai_driving_verified": false
+  },
+  "followup_20261030": {
+    "guide": "morai_ws/docs/20261030_RIGHT_TUNNEL_KO.md",
+    "right_turn": "confirmed green takes priority; red/unknown use stop-then-right",
+    "blackout": "IMU + fresh Competition forward speed dead reckoning after GPS initialization",
+    "gps_frozen_gate_sec": 0.5,
+    "competition_speed_timeout_sec": 0.5,
+    "actual_tunnel_drive_verified": false
   }
 }

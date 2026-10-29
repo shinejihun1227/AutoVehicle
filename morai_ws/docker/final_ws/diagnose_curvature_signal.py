@@ -15,6 +15,8 @@ import time
 
 
 def summarize(kind, msg, ros_now):
+    if kind == 'estimator':
+        return json.loads(msg.data)
     if kind == 'status':
         data = json.loads(msg.data)
         keys = ('mode', 'reason', 'reference_path_match', 'progress_s_m',
@@ -44,7 +46,8 @@ def summarize(kind, msg, ros_now):
             result['event'] = {key: event[key] for key in
                                ('id', 'start', 'stop_s', 'end', 'direction', 'committed',
                                 'camera_line_confirmed', 'stopline_match_error_m',
-                                'direction_source', 'heading_change_deg', 'entry_fault')
+                                'direction_source', 'heading_change_deg', 'entry_fault', 'right_entry_policy',
+                                'right_stop_released')
                                if key in event}
         return result
     if kind == 'lane_centering':
@@ -248,6 +251,7 @@ def main():
         'gps': ('/localization/gps', rospy.AnyMsg),
         'imu': ('/Imu', rospy.AnyMsg),
         'odom': ('/localization/odometry', Odometry),
+        'estimator': ('/localization/estimator_status', String),
         'ego': ('/Ego_topic', EgoVehicleStatus),
         'signal': ('/perception/traffic_light/directional_state', TrafficLight),
         'reference': ('/experimental/curvature_reference_path', RosPath),

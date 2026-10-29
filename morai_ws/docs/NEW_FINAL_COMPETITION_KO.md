@@ -1,3 +1,5 @@
+최신 녹색 우회전·GPS 음영 주행: [20261030_RIGHT_TUNNEL_KO.md](20261030_RIGHT_TUNNEL_KO.md).
+
 현재 카메라·신호·우회전·차선 보정 업데이트: [20261029_CAMERA_SIGNAL_KO.md](20261029_CAMERA_SIGNAL_KO.md).
 기존 로컬 env는 `bash run_test.sh lane on`으로 새 보정 프리셋을 적용한다.
 
@@ -19,7 +21,7 @@ catkin 작업 공간은 저장소 루트가 아닌 **`morai_ws/`**다.
 
 기존 final_ws의 **위치는 GPS+IMU**, **주행 속도 피드백은 일반 Ego Vehicle Status**였다.
 전체 localization이 Competition Vehicle Status에서 나오던 구조가 아니다.
-기존 EKF의 `/localization/gps`, `/Imu` 구독과 추정 구현은 변경하지 않았다.
+초기 전환에서는 GPS/IMU EKF를 보존했다. 10월 30일 profile 2에는 Competition 전진 속도 보조를 추가했다.
 
 | 정보 | new_final_ws 입력과 처리 |
 |---|---|
@@ -35,7 +37,7 @@ Competition을 구독하는 속도 제어·신호 제어·평가기는 `abs(velo
 EKF Odometry를 구독하는 기존 노드의 속도 계산은 유지한다.
 IMU 센서에서 직접 받은 가속도는 별도 입력이므로 기존처럼 사용한다.
 GPS 없이 Competition만 받아서는 초기 map 위치를 알 수 없다.
-초기화 이후 GPS blackout 동안에는 기존 EKF의 IMU 예측이 동작한다.
+초기화 이후 profile 2의 GPS blackout에서는 IMU 방향과 Competition 전진 속도로 이동 거리를 예측한다.
 
 GPS-MGeo 정렬은 실측 확인 전까지 `transform_validated: false`다.
 예전 문서의 Ego 위치와 비교하는 절차는 이 브랜치에서 적용하지 않는다.

@@ -1366,9 +1366,11 @@ class ManeuverFusionNode:
                                                target_id=event["id"])
                     stop_right = bool(event and direction == "RIGHT"
                                       and event["id"] in self.stop_then_right_context_ids)
-                    if not stop_right:
+                    if not (stop_right and event.get("right_stop_released")):
                         self.consume_route_signals(event, ready, route_valid and not motion.fault,
                                                    now, ros_now)
+                    else:
+                        self.signal_observations.clear()
                     if self.route_camera_calibrated and not committed:
                         release_latched = bool(objects is not None and
                                                self.route_green_visibility_loss(
@@ -1379,20 +1381,21 @@ class ManeuverFusionNode:
                         permitted = bool(signal_ok and (release_latched or signal_permits(
                             self.selection.state, direction, self.right_on_green)))
                     if stop_right and not committed:
-                        self.signal_observations.clear()
                         gap = (event["start"] - self.progress - self.core.front_reference_offset_m
                                - self.core.hold_distance_m) if self.progress is not None else float("nan")
-                        permitted = stop_then_turn(event, speed, gap, now,
-                                                  route_valid and not motion.fault and ready
-                                                  and (not self.require_vehicle_speed or
-                                                       self.vehicle_speed_source.sample(ros_now, now) is not None))
-                        signal_ok = False  # This is a stop policy, not an observed green.
-                        self.selection = Selection("UNKNOWN", 0.0, False,
-                                                   None, "stop_then_right_released" if permitted
-                                                   else "stop_then_right_wait")
-                        self.selection_stamp = ros_now
-                        self.core.observe_signal("GREEN" if permitted else "RED", 1.0, True,
-                                                 ros_now, now, ros_now)
+                        stopped_permission = stop_then_turn(event, speed, gap, now,
+                            route_valid and not motion.fault and ready
+                            and (not self.require_vehicle_speed or
+                                 self.vehicle_speed_source.sample(ros_now, now) is not None))
+                        # A confirmed route green has priority over the stop policy.
+                        # Keep the real camera selection for visibility-loss tracking.
+                        event["right_entry_policy"] = ("green_priority" if permitted else
+                            "stop_then_right_released" if stopped_permission else "stop_then_right_wait")
+                        if not permitted:
+                            permitted = stopped_permission
+                            self.signal_observations.clear()
+                            self.core.observe_signal("GREEN" if permitted else "RED", 1.0, True,
+                                                     ros_now, now, ros_now)
                     if not committed:
                         permitted = bool(permitted and event and
                                          (self.route_camera_calibrated or event["camera_line_confirmed"])

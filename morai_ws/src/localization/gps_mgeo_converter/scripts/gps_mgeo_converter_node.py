@@ -89,6 +89,11 @@ class GpsMgeoConverter:
             rospy.logwarn_throttle(5.0, "유효하지 않은 GPS status=%d를 무시한다.", msg.status)
             return
 
+        if (not all(math.isfinite(float(v)) for v in (msg.latitude, msg.longitude, msg.altitude))
+                or not -90 <= msg.latitude <= 90 or not -180 <= msg.longitude <= 180
+                or (abs(msg.latitude) < 1e-8 and abs(msg.longitude) < 1e-8)):
+            rospy.logwarn_throttle(5.0, "Ignoring invalid/zero GPS coordinates")
+            return
         stamp = stamp_seconds(msg.header.stamp)
         gps_position = gps_to_mgeo(
             msg.latitude,

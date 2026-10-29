@@ -84,11 +84,27 @@ class RightTurnNodeTest(unittest.TestCase):
         self.assertEqual(output.brake, 1.)
         self.assertFalse(status['permission'])
 
-    def test_green_still_requires_stop_at_target_not_far_upstream(self):
+    def test_green_passes_without_stopping_far_upstream(self):
         for _ in range(45):
             _, status = self.case.frame('GREEN', x=75.)
-        self.assertFalse(status['permission'])
+        self.assertTrue(status['permission'], status)
         self.assertFalse(self.node.event.get('right_stop_released', False))
+        self.assertEqual(self.node.event['right_entry_policy'], 'green_priority')
+
+    def test_green_at_stop_target_releases_and_missing_head_does_not_restop(self):
+        for _ in range(15):
+            output, status = self.case.frame('GREEN')
+        self.assertTrue(status['permission'], status)
+        self.assertEqual(output.brake, 0.)
+        output, status = self.case.frame('UNKNOWN', no_objects=True)
+        self.assertTrue(status['permission'], status)
+
+    def test_red_before_entry_revokes_green_and_requires_stop(self):
+        for _ in range(15):
+            _, status = self.case.frame('GREEN', x=75.)
+        self.assertTrue(status['permission'])
+        _, status = self.case.frame('RED', x=75.)
+        self.assertFalse(status['permission'])
 
 
 class NarrowLaneTest(unittest.TestCase):
