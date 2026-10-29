@@ -5,7 +5,7 @@ avoidance_region_gate_enabled: true
 # GPS blackout permits avoidance outside the configured waypoint regions.
 # Fresh finite map-frame EKF odometry and mission ownership checks still apply.
 avoidance_gps_blackout_override: true
-avoidance_route_fingerprint: 851de2afe4a357d041ce39331a34f2b575651333380e1af0ef80660881dcd48b
+avoidance_route_fingerprint: 478510b0d72f42d3aad8454da7eb27f9288b6c4d95122aa5eb20e2e6bf1220df
 avoidance_max_route_distance_m: 12.0
 avoidance_progress_search_ahead_m: 60.0
 avoidance_progress_search_behind_m: 20.0

@@ -1,9 +1,10 @@
 #!/usr/bin/env python3
-"""MORAI EgoVehicleStatus 수신 및 EgoCtrlCmd 송신 ROS 브릿지."""
+"""Competition Vehicle Status input and the single EgoCtrlCmd UDP output."""
 
 from __future__ import annotations
 
 import math
+import json
 import socket
 import threading
 import time
@@ -11,13 +12,14 @@ from typing import Optional
 
 import rospy
 from geometry_msgs.msg import Vector3
+from std_msgs.msg import String
 from morai_msgs.msg import CtrlCmd, EgoVehicleStatus
 
 from morai_udp_drive_bridge.protocol import (
-    EGO_STATUS_PACKET_SIZE,
     ProtocolError,
     build_ego_ctrl_cmd,
     parse_ego_vehicle_status,
+    parse_competition_vehicle_status,
 )
 
 
@@ -26,7 +28,10 @@ class MoraiUdpDriveBridge:
         rospy.init_node("morai_udp_drive_bridge", anonymous=False)
 
         self.status_bind_ip = rospy.get_param("~status_bind_ip", "0.0.0.0")
-        self.status_port = int(rospy.get_param("~status_port", 909))
+        self.status_port = int(rospy.get_param("~status_port", 9081))
+        self.status_protocol = str(rospy.get_param("~status_protocol", "competition"))
+        if self.status_protocol not in ("competition", "ego_legacy"):
+            raise ValueError('status_protocol must be competition or ego_legacy')
         self.status_topic = rospy.get_param("~status_topic", "/Ego_topic")
         self.status_frame_id = rospy.get_param("~status_frame_id", "map")
         # Read once at startup: dry-run output cannot be enabled at runtime.
@@ -47,10 +52,12 @@ class MoraiUdpDriveBridge:
         self.last_command: Optional[CtrlCmd] = None
         self.last_command_time = 0.0
         self.stop_event = threading.Event()
+        self.last_packet_time = None
         self.send_socket = None
         self.send_timer = None
 
         self.status_pub = rospy.Publisher(self.status_topic, EgoVehicleStatus, queue_size=20)
+        self.metadata_pub = rospy.Publisher("~status_metadata", String, queue_size=1)
         rospy.Subscriber(self.command_topic, CtrlCmd, self.command_callback, queue_size=20)
 
         if self.control_output_enabled:
@@ -81,13 +88,12 @@ class MoraiUdpDriveBridge:
 
     def status_receive_loop(self) -> None:
         receive_socket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-        receive_socket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
         receive_socket.setsockopt(socket.SOL_SOCKET, socket.SO_RCVBUF, 1024 * 1024)
         try:
             receive_socket.bind((self.status_bind_ip, self.status_port))
         except OSError as exc:
             rospy.logfatal(
-                "EgoVehicleStatus UDP bind 실패 %s:%d: %s",
+                "Vehicle status UDP bind 실패 %s:%d: %s",
                 self.status_bind_ip,
                 self.status_port,
                 exc,
@@ -96,29 +102,33 @@ class MoraiUdpDriveBridge:
             return
         receive_socket.settimeout(0.5)
         rospy.loginfo(
-            "EgoVehicleStatus UDP bind %s:%d expected=%d bytes",
+            "Vehicle status UDP bind %s:%d protocol=%s (Competition: 181/229 bytes)",
             self.status_bind_ip,
             self.status_port,
-            EGO_STATUS_PACKET_SIZE,
+            self.status_protocol,
         )
 
         try:
             while not rospy.is_shutdown() and not self.stop_event.is_set():
                 try:
-                    packet, sender = receive_socket.recvfrom(EGO_STATUS_PACKET_SIZE)
+                    # Read the entire datagram. recvfrom(181) silently truncates
+                    # a 229-byte packet before its real tail can be validated.
+                    packet, sender = receive_socket.recvfrom(65535)
                 except socket.timeout:
                     continue
                 except OSError as exc:
                     if not self.stop_event.is_set():
-                        rospy.logerr_throttle(5.0, "EgoVehicleStatus UDP 수신 오류: %s", exc)
+                        rospy.logerr_throttle(5.0, "Vehicle status UDP 수신 오류: %s", exc)
                     break
 
                 try:
-                    measurement = parse_ego_vehicle_status(packet)
+                    parser = (parse_competition_vehicle_status if self.status_protocol == 'competition'
+                              else parse_ego_vehicle_status)
+                    measurement = parser(packet)
                 except (ProtocolError, ValueError) as exc:
                     rospy.logwarn_throttle(
                         5.0,
-                        "EgoVehicleStatus 패킷 폐기 sender=%s:%d len=%d error=%s",
+                        "Vehicle status 패킷 폐기 sender=%s:%d len=%d error=%s",
                         sender[0],
                         sender[1],
                         len(packet),
@@ -126,69 +136,64 @@ class MoraiUdpDriveBridge:
                     )
                     continue
 
+                source_time = (measurement.sec, measurement.nsec)
+                if self.status_protocol == 'competition':
+                    if self.last_packet_time is not None and source_time <= self.last_packet_time:
+                        rospy.logwarn_throttle(5.0, 'Competition status duplicate/out-of-order source time; '
+                                              'restart the launch after a scene reset')
+                        continue
+                    self.last_packet_time = source_time
                 self.publish_status(measurement)
         finally:
             receive_socket.close()
 
     def publish_status(self, measurement) -> None:
-        import time
-
-        packet_t = measurement.sec + measurement.nsec * 1e-9
-        ros_t = rospy.Time.now().to_sec()
-        wall_t = time.monotonic()
-
-        if packet_t > 0:
-            if not hasattr(self, "_clock_test_start"):
-                self._clock_test_start = (packet_t, ros_t, wall_t)
-
-            p0, r0, w0 = self._clock_test_start
-            elapsed = wall_t - w0
-
-            if elapsed > 1.0:
-                rospy.logwarn_throttle(
-                    2.0,
-                    "CLOCK TEST packet/wall=%.3f ros/wall=%.3f",
-                    (packet_t - p0) / elapsed,
-                    (ros_t - r0) / elapsed
-                )
-
+        competition = self.status_protocol == 'competition'
+        received = rospy.Time.now()
         message = EgoVehicleStatus()
         if self.status_use_packet_time and measurement.sec > 0:
             message.header.stamp = rospy.Time(measurement.sec, measurement.nsec)
         else:
-            message.header.stamp = rospy.Time.now()
+            message.header.stamp = received
         message.header.frame_id = self.status_frame_id
         message.unique_id = 0
-        message.acceleration = Vector3(
-            measurement.acceleration_x_mps2,
-            measurement.acceleration_y_mps2,
-            measurement.acceleration_z_mps2,
-        )
-        message.position = Vector3(
-            measurement.pos_x_m,
-            measurement.pos_y_m,
-            measurement.pos_z_m,
-        )
+        # Keep the existing ROS type for consumers, but never expose reserved
+        # competition slots as measured zeros/ground truth. Consumers explicitly
+        # read longitudinal velocity.x; pose remains GPS/IMU EKF only.
+        unavailable = float('nan')
+        message.acceleration = (Vector3(unavailable, unavailable, unavailable) if competition else
+            Vector3(measurement.acceleration_x_mps2, measurement.acceleration_y_mps2,
+                    measurement.acceleration_z_mps2))
+        message.position = (Vector3(unavailable, unavailable, unavailable) if competition else
+            Vector3(measurement.pos_x_m, measurement.pos_y_m, measurement.pos_z_m))
         message.velocity = Vector3(
             measurement.velocity_x_kmh / 3.6,
-            measurement.velocity_y_kmh / 3.6,
-            measurement.velocity_z_kmh / 3.6,
+            unavailable if competition else measurement.velocity_y_kmh / 3.6,
+            unavailable if competition else measurement.velocity_z_kmh / 3.6,
         )
         message.heading = measurement.heading_deg
         message.accel = measurement.accel_pedal
         message.brake = measurement.brake_pedal
         message.wheel_angle = measurement.steer_deg
         self.status_pub.publish(message)
+        self.metadata_pub.publish(String(data=json.dumps({
+            'timestamp': received.to_sec(), 'packet_sec': measurement.sec,
+            'packet_nsec': measurement.nsec, 'packet_length': measurement.packet_length,
+            'source': self.status_protocol, 'listen_port': self.status_port,
+            'velocity_unit': 'm/s', 'velocity_x_mps': message.velocity.x,
+            'signed_velocity_mps': measurement.signed_velocity_kmh/3.6,
+            'heading_deg': measurement.heading_deg, 'wheel_angle_deg': measurement.steer_deg,
+            'ctrl_mode': measurement.ctrl_mode, 'gear': measurement.gear,
+            'position_available': not competition, 'acceleration_available': not competition,
+            'velocity_yz_available': not competition,
+        }, allow_nan=False, separators=(',', ':'))))
         rospy.loginfo_throttle(
             2.0,
-            "Ego UDP pos=(%.2f, %.2f, %.2f) vel=(%.2f, %.2f) heading=%.2f deg link=%s",
-            measurement.pos_x_m,
-            measurement.pos_y_m,
-            measurement.pos_z_m,
+            "Vehicle UDP source=%s port=%d bytes=%d vx=%.2fm/s heading=%.2fdeg ctrl=%d gear=%d",
+            self.status_protocol, self.status_port, measurement.packet_length,
             measurement.velocity_x_kmh / 3.6,
-            measurement.velocity_y_kmh / 3.6,
             measurement.heading_deg,
-            measurement.link_id,
+            measurement.ctrl_mode, measurement.gear,
         )
 
     def command_callback(self, message: CtrlCmd) -> None:

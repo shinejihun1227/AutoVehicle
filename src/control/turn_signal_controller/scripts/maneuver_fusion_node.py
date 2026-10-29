@@ -604,7 +604,7 @@ class ManeuverFusionNode:
     def vehicle_speed_callback(self, message):
         # morai_udp_drive_bridge converts the UDP km/h velocity into ROS m/s.
         velocity = message.velocity
-        speed = math.hypot(float(velocity.x), float(velocity.y))
+        speed = abs(float(velocity.x))
         with self.lock:
             self.vehicle_speed_source.observe(speed, message.header.stamp.to_sec(),
                                               rospy.get_time(), time.monotonic())

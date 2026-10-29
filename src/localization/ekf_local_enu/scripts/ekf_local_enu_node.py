@@ -421,7 +421,7 @@ class LocalEnuEkf:
         # The existing UDP bridge already converted km/h to ROS m/s.
         now, wall = rospy.get_time(), time.monotonic()
         stamp = msg.header.stamp.to_sec()
-        speed = math.hypot(float(msg.velocity.x), float(msg.velocity.y))
+        speed = abs(float(msg.velocity.x))
         if (not all(math.isfinite(v) for v in (stamp, speed)) or stamp <= 0
                 or not 0 <= speed <= self.max_vehicle_speed
                 or not -0.05 <= now-stamp <= self.vehicle_speed_timeout):

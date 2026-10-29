@@ -121,7 +121,7 @@ class TurnSignalController:
 
     def odometry_callback(self, message: Odometry) -> None:
         velocity = message.twist.twist.linear
-        speed = math.hypot(float(velocity.x), float(velocity.y))
+        speed = abs(float(velocity.x))
         if math.isfinite(speed):
             self.latest_speed_mps = max(0.0, speed)
 

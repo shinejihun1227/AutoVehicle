@@ -16,6 +16,10 @@ catkin_python_setup()
 catkin_package()
 
 catkin_install_python(PROGRAMS
+  scripts/highway_overtake_node.py
+  scripts/highway_overtake_escape_node.py
+  scripts/curvature_pp_overtake_node.py
+  scripts/maneuver_fusion_overtake_node.py
   scripts/tunnel_clearance_obstacle_state_node.py
   scripts/v61_highway_with_avoidance_node.py
   scripts/v61_obstacle_avoidance_node.py

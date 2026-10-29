@@ -1,5 +1,8 @@
 # 2026-10-29 최종 기능 병합
 
+이 문서는 첫 병합 당시 기록이다. 현재 고속도로 노드와 Competition 차량 상태
+9081 수신·실행 설정은 [후속 통합 안내](COMPETITION_OVERTAKE_WAIT5_20261029_KO.md)를 따른다.
+
 기준: x010806-sudo/morai_ws_full main `b3e0747b0d9ad2a96f50da07a7dfee1f06d1f5c6`.
 대상: shinejihun1227/AutoVehicle의 새 `morai_ws_full` 브랜치.
 이 브랜치 루트가 catkin workspace다. 기존 브랜치의 `morai_ws/` 하위 구조와 다르다.

@@ -1,0 +1,158 @@
+{
+  "date": "2026-10-29",
+  "branch": "morai_ws_full",
+  "parent_commit": "1dc658d4c14ff19ce354ad11d4f84ebe58ca835c",
+  "highway_source": {
+    "url": "https://github.com/whddbs3061/car/tree/highway-overtake-v61",
+    "commit": "5cafadecc1365aaa32e7e3705ab4c79b6eef2bb2",
+    "default_variant": "stable",
+    "upstream_source_sha256": {
+      "src/control/purepursuit_mgeo/scripts/curvature_pp_overtake_node.py": "b5f3c24be3fa50136c3bdc05e660da983eb9d1cc75308639a17374da09394374",
+      "src/control/purepursuit_mgeo/scripts/highway_overtake_escape_node.py": "e6371319539e38d95137f2a1e79a6b3d60d78a878a97c406b9eca27c184cd23e",
+      "src/control/purepursuit_mgeo/scripts/highway_overtake_node.py": "416ded9cb3bd6810cd694d5363132cc0ca390a658abfe4f06c684291d6338fd2",
+      "src/control/purepursuit_mgeo/scripts/maneuver_fusion_overtake_node.py": "0fc340f13890eb67220aa1e0f8a3ef098cc2a6beb059269a72730c87901b5df0",
+      "src/control/purepursuit_mgeo/test/test_highway_overtake.py": "b22929b84a0cebc418db925a91c2476e5c5b977eac3e5bb7ceab2ab0ba942f55",
+      "src/control/purepursuit_mgeo/test/test_highway_overtake_escape.py": "0667ffcfc18af6da88128b2150b6b2e329a4cbaf107482634116db80a904a7c4",
+      "src/control/purepursuit_mgeo/test/test_highway_overtake_node.py": "7c557d528991d6ee272472d5c4660c77ee83f7fbe28829a9b5c0c2afe78a5e76",
+      "src/control/purepursuit_mgeo/test/test_overtake_v61.py": "3fc1e40af2361a48a37ec472cfff7ae28be48c1642195af816a18c45731aa380",
+      "src/control/purepursuit_mgeo/tools/highway_overtake_sim.py": "544edf5b8a5d4590e38419d3be267fe7f468f9bed172e77fc2cf843238bf836f",
+      "src/control/purepursuit_mgeo/src/purepursuit_mgeo/highway_overtake.py": "9e7243b4969817ac25d26a9d8792caf14c772fe19a1df6e994fc0a0ffb64de1c",
+      "src/control/purepursuit_mgeo/src/purepursuit_mgeo/highway_overtake_escape.py": "6de8fe8a082f9ccf726470987b44b40c8b609d771886cbd75eb7d636fc865e00",
+      "src/control/purepursuit_mgeo/src/purepursuit_mgeo/highway_zone.py": "2c620bbde00a1b0b0909c9aa7d6ccf0a9b984753931fb78767704a6ce09fba4c"
+    }
+  },
+  "avoidance_source": {
+    "filename": "morai_wait5_tunnel_complete.zip",
+    "zip_sha256": "cf887ca4b47923f606f5db0f5ec4b578993df918b490a00a88eba6312a977a0f",
+    "payloads": {
+      "src/bringup/morai_bringup/launch/integrated_obstacle_v61.launch": {
+        "zip_sha256": "8bc918a3ec2cfb2ad0f4a37302b49de35994889c0da12b4e4c5c7dd96382dd8d",
+        "integrated_sha256": "0b09ffa995a2b25eb941cead732239e89de51757f86acc3bc3c211f076ec0ae1",
+        "identical": false
+      },
+      "src/control/purepursuit_mgeo/config/avoidance_regions.yaml": {
+        "zip_sha256": "5865b86a6df15c8f573cc5abbdf5108a1d4807802adb3c7301e7ededa9cc9a50",
+        "integrated_sha256": "5865b86a6df15c8f573cc5abbdf5108a1d4807802adb3c7301e7ededa9cc9a50",
+        "identical": true
+      },
+      "src/control/purepursuit_mgeo/scripts/v61_obstacle_avoidance_node.py": {
+        "zip_sha256": "0848244e75c1f6b99df1b74f1c0c61e76fe984de51c1b8bc69f195bb5619e913",
+        "integrated_sha256": "bd240427ca8c79cefe69068473d2105568b084abd9b8f5b3ebb916a95f27217d",
+        "identical": false
+      },
+      "src/control/purepursuit_mgeo/src/purepursuit_mgeo/dynamic_zone_guard.py": {
+        "zip_sha256": "f4b415f1e38df10fadf861ec3a668a14da3cfdc5900c358a275ef362d0cbff59",
+        "integrated_sha256": "f4b415f1e38df10fadf861ec3a668a14da3cfdc5900c358a275ef362d0cbff59",
+        "identical": true
+      },
+      "src/control/purepursuit_mgeo/src/purepursuit_mgeo/route_avoidance_gate.py": {
+        "zip_sha256": "7d9e984244ef484e870296e65d27bb0edce4c5d7296956032a7bd9070b77e074",
+        "integrated_sha256": "7d9e984244ef484e870296e65d27bb0edce4c5d7296956032a7bd9070b77e074",
+        "identical": true
+      },
+      "src/control/turn_signal_controller/scripts/maneuver_fusion_node.py": {
+        "zip_sha256": "dcca673255494cdf6e7a769e0c1c57879071d5c272e52d5039f0c97d5c82f393",
+        "integrated_sha256": "eaa989d66c12386df98101666a0bd9fcade2e962551c23be65dbee25534d6059",
+        "identical": false
+      },
+      "src/localization/ekf_local_enu/scripts/ekf_local_enu_node.py": {
+        "zip_sha256": "98e6928db60462d469d1fcbe9280daf4c76bb8f6d6b9dc899a18c4261605fe9c",
+        "integrated_sha256": "5446411932f26333848ee739da9105cfcf7f91bcdc2b62b2ea57c602e8b78316",
+        "identical": false
+      },
+      "src/localization/ekf_local_enu/src/ekf_local_enu/distance_scale.py": {
+        "zip_sha256": "84d5e41a15d42daa0a552ac135ca6ede39a2409d49f4f3bfcf757c70698762fc",
+        "integrated_sha256": "84d5e41a15d42daa0a552ac135ca6ede39a2409d49f4f3bfcf757c70698762fc",
+        "identical": true
+      }
+    }
+  },
+  "competition_schema": {
+    "evidence": "Team path_planning/morai_udp_competition_status.py and stored packed NetworkModule EgoVehicleStatus.py; no live capture",
+    "local_parser_evidence_sha256": "1e8d036ad48a761fbd42349e785fd978fb0d3d02c3a512276258207be55f7c4c",
+    "header": "#MoraiInfo$",
+    "datagram_sizes": [
+      181,
+      229
+    ],
+    "declared_data_lengths": [
+      152,
+      200
+    ],
+    "ubuntu_destination_port": 9081,
+    "port_source": "User-specified personal test; organiser forwarder destination not verified",
+    "position_xyz_available": false,
+    "acceleration_xyz_available": false,
+    "velocity_yz_available": false,
+    "speed_unit_internal": "m/s",
+    "live_packet_capture_verified": false
+  },
+  "limits": {
+    "stopline_front_bumper_clearance_m": 7.0,
+    "normal_max_speed_kph": 53.2,
+    "highway_cruise_kph": 54.0,
+    "highway_max_speed_kph": 59.0,
+    "nominal_additional_gap_sec": 0.2
+  },
+  "validation": {
+    "syntax_errors": [],
+    "suites": [
+      {
+        "suite": "integration_tests/wait5_complete",
+        "exit_code": 0,
+        "tests": 40
+      },
+      {
+        "suite": "src/localization/morai_udp_drive_bridge/test",
+        "exit_code": 0,
+        "tests": 20
+      },
+      {
+        "suite": "src/control/purepursuit_mgeo/test:test_highway_overtake*.py",
+        "exit_code": 0,
+        "tests": 36
+      },
+      {
+        "suite": "integration_tests/patches",
+        "exit_code": 0,
+        "tests": 47
+      },
+      {
+        "suite": "integration_tests",
+        "exit_code": 0,
+        "tests": 50
+      },
+      {
+        "suite": "src/experimental/curvature_speed_purepursuit/test",
+        "exit_code": 0,
+        "tests": 32
+      },
+      {
+        "suite": "src/control/stopline_control/test",
+        "exit_code": 0,
+        "tests": 59
+      },
+      {
+        "suite": "src/control/turn_signal_controller/test",
+        "exit_code": 0,
+        "tests": 210
+      },
+      {
+        "suite": "src/detection/camera_perception/test:test_camera_timestamps.py",
+        "exit_code": 0,
+        "tests": 24
+      },
+      {
+        "suite": "src/detection/camera_perception/test:test_traffic_signal.py",
+        "exit_code": 0,
+        "tests": 11
+      }
+    ],
+    "ros_build": false,
+    "morai_driving": false,
+    "preview_and_http_verified": false,
+    "total_tests": 529,
+    "python_38_syntax": true,
+    "launch_args_bound": true
+  }
+}

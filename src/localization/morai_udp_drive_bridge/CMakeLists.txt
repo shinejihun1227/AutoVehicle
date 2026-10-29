@@ -5,6 +5,7 @@ find_package(catkin REQUIRED COMPONENTS
   geometry_msgs
   morai_msgs
   rospy
+  std_msgs
 )
 
 catkin_python_setup()

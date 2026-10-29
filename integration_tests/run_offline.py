@@ -10,6 +10,9 @@ import xml.etree.ElementTree as ET
 
 ROOT=Path(__file__).resolve().parents[1]
 SUITES=[
+ 'integration_tests/wait5_complete',
+ 'src/localization/morai_udp_drive_bridge/test',
+ ('src/control/purepursuit_mgeo/test','test_highway_overtake*.py'),
  'integration_tests/patches',
  'integration_tests',
  'src/experimental/curvature_speed_purepursuit/test',
@@ -38,7 +41,7 @@ def main():
         result=subprocess.run([sys.executable,'-X','utf8','-m','unittest','discover','-s',folder,'-p',pattern,'-v'],
             cwd=ROOT,env=env,capture_output=True)
         text=(result.stdout+result.stderr).decode('utf-8',errors='replace')
-        (logs/(label.replace('/','_').replace(':','_')+'.log')).write_text(text,encoding='utf-8')
+        (logs/(label.replace('/','_').replace(':','_').replace('*','all')+'.log')).write_text(text,encoding='utf-8')
         import re
         ran=re.search(r'Ran (\d+) tests?',text)
         summary=dict(suite=label,exit_code=result.returncode,tests=int(ran[1]) if ran else 0)

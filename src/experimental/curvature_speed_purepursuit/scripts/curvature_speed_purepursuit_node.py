@@ -458,7 +458,7 @@ class CurvatureSpeedPurePursuitNode:
 
     def vehicle_speed_callback(self, message: EgoVehicleStatus) -> None:
         self.vehicle_speed_source.observe(
-            math.hypot(float(message.velocity.x), float(message.velocity.y)),
+            abs(float(message.velocity.x)),
             message.header.stamp.to_sec(), rospy.Time.now().to_sec(), time.monotonic())
 
     def lane_info_callback(self, message: String) -> None:

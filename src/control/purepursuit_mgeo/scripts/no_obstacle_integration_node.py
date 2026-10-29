@@ -34,9 +34,12 @@ class Integration:
         self.points = load_mgeo_path(rospy.get_param('~path_file'))
         self.odom = self.nominal = self.decision = self.driver = None
         self.command_grace=float(rospy.get_param('~nominal_gap_grace_sec',.2))
+        self.continuation_speed_limit=float(rospy.get_param('~continuation_speed_limit_kph',53.2))
         self.mission_timeout=float(rospy.get_param('~mission_status_timeout_sec',.5))
         if not 0 <= self.command_grace <= .3 or not .3 <= self.mission_timeout <= .5:
             raise ValueError('Invalid bounded command continuation window')
+        if not math.isfinite(self.continuation_speed_limit) or not 0 <= self.continuation_speed_limit <= 120:
+            raise ValueError('Invalid command continuation speed bound')
         self.last_path_publish=None
         self.s = [0.0]
         for a,b in zip(self.points,self.points[1:]):
@@ -90,7 +93,8 @@ class Integration:
                 velocity=self.odom[0].twist.twist.linear
                 speed=math.hypot(velocity.x,velocity.y)
                 selected=continue_command(self.nominal[0],self.nominal[1],now,.3,
-                    self.command_grace,healthy=math.isfinite(speed) and speed<=53.2/3.6)
+                    self.command_grace,healthy=math.isfinite(speed) and
+                    speed<=getattr(self,'continuation_speed_limit',53.2)/3.6)
                 continued=selected is not None
                 if continued:reason='nominal_short_gap_continue'
             cmd=CtrlCmd();cmd.longlCmdType=1;cmd.brake=1

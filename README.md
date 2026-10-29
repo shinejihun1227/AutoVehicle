@@ -1,8 +1,13 @@
 # MORAI 통합 작업공간
 
+현재 실행 구성: [고속도로 overtake·완전판 wait5 회피·Competition UDP 9081](docs/COMPETITION_OVERTAKE_WAIT5_20261029_KO.md).
+통합 실행은 `bash RUN_INTEGRATED.sh drive`이며 ROS 환경에서 업데이트 후 재빌드합니다.
+일반 53.2km/h, 고속도로 순항 54/상한 59km/h, 앞범퍼 기준 정지선 7m 전 정차입니다.
+차량 상태는 `Competition Vehicle Status`를 Ubuntu 목적지 9081로 전송합니다.
+
 추가 개선: [짧은 제어 공백 유지·경로 처리 부담 감소·신호 외형 및 가중치 판단](docs/SMOOTH_DRIVE_20261029_KO.md).
 
-**`morai_ws_full` 브랜치의 현재 실행 안내:** [2026-10-29 최종 병합과 설정](docs/FINAL_MERGE_20261029_KO.md).
+**첫 병합 기록:** [2026-10-29 최종 병합과 당시 설정](docs/FINAL_MERGE_20261029_KO.md).
 작업공간을 빌드한 뒤 `bash RUN_INTEGRATED.sh monitor` 또는 `bash RUN_INTEGRATED.sh drive`를 사용합니다.
 이 브랜치 루트가 catkin 작업공간입니다. 일반 최고속도 기본값 53.2km/h,
 앞범퍼 기준 정지선 7m 정차이며, 아래의 이전 문서·`drive 2` 절차는 새 통합 실행 경로와 다릅니다.

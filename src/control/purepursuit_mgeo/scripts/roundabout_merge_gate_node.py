@@ -26,7 +26,7 @@ from purepursuit_mgeo.route_geometry import RoutePolyline, travel_time
 
 def _speed(msg: Odometry) -> float:
     velocity = msg.twist.twist.linear
-    return math.hypot(float(velocity.x), float(velocity.y))
+    return abs(float(velocity.x))
 
 
 def _nearest_span(spans, progress):

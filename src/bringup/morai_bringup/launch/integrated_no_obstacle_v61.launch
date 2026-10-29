@@ -10,7 +10,8 @@
   <arg name="morai_host_ip" default="192.168.10.14" />
   <arg name="gps_port" default="3001" />
   <arg name="imu_port" default="4001" />
-  <arg name="ego_status_port" default="1911" />
+  <arg name="status_protocol" default="competition" />
+  <arg name="ego_status_port" default="9081" />
   <arg name="control_remote_port" default="9093" />
   <arg name="control_source_port" default="9094" />
   <arg name="max_speed_kph" default="7.2" />
@@ -84,6 +85,7 @@
     <arg name="morai_host_ip" value="$(arg morai_host_ip)" />
     <arg name="gps_port" value="$(arg gps_port)" />
     <arg name="imu_port" value="$(arg imu_port)" />
+    <arg name="status_protocol" value="$(arg status_protocol)" />
     <arg name="ego_status_port" value="$(arg ego_status_port)" />
     <arg name="control_remote_port" value="$(arg control_remote_port)" />
     <arg name="control_source_port" value="$(arg control_source_port)" />

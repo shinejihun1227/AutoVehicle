@@ -355,6 +355,9 @@ class AdaptiveCurvaturePurePursuit:
         self.lane_status_pub.publish(String(data=json.dumps(status, allow_nan=False)))
         return _clamp(steering+correction, -self.max_steering_rad, self.max_steering_rad), status
 
+    def _speed_profile_context(self):
+        return (self.max_speed_kph, self.lateral_accel_limit)
+
     def _make_speed_profile(
         self,
         s_values: List[float],
@@ -413,14 +416,14 @@ class AdaptiveCurvaturePurePursuit:
         self.merge_status_wall_time = time.monotonic()
 
     def _vehicle_speed_cb(self, msg):
-        speed = math.hypot(float(msg.velocity.x), float(msg.velocity.y))
+        speed = abs(float(msg.velocity.x))
         self.vehicle_speed_source.observe(speed, msg.header.stamp.to_sec(),
                                           rospy.get_time(), time.monotonic())
 
     def _measured_speed(self, ros_now, wall_now):
         speed = self.vehicle_speed_source.sample(ros_now, wall_now)
         if speed is not None:
-            self.speed_source_name = "ego_vehicle_status"
+            self.speed_source_name = "vehicle_status_x"
             return speed, None
         if self.require_vehicle_speed:
             self.speed_source_name = "unavailable"
@@ -511,8 +514,10 @@ class AdaptiveCurvaturePurePursuit:
             points = clean_consecutive_duplicates(points)
         except ValueError:
             return
+        context = self._speed_profile_context()
         with self._lock:
-            if points == self.active_points:
+            if (points == self.active_points
+                    and context == getattr(self, 'active_profile_context', context)):
                 self.active_path_received = True
                 self.active_path_wall_time = time.monotonic() - max(0., age)
                 self.active_path_seq = int(msg.header.seq)
@@ -537,6 +542,7 @@ class AdaptiveCurvaturePurePursuit:
             self.active_s = s_values
             self.active_curvature = curvatures
             self.active_speed_profile = speed_profile
+            self.active_profile_context = context
             self.active_path_received = True
             self.active_path_wall_time = time.monotonic()
             self.active_path_seq = int(msg.header.seq)
