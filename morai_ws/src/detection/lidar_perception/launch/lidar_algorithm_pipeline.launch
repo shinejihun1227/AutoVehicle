@@ -12,6 +12,7 @@
   <arg name="lidar_x_m" default="0.0" />
   <arg name="lidar_y_m" default="0.0" />
   <arg name="lidar_yaw_deg" default="0.0" />
+  <arg name="ground_z_threshold_m" default="-1.5" />
   <arg name="deskew_enabled" default="true" />
   <arg name="udp_cluster_enabled" default="true" />
   <arg name="cluster_tolerance_m" default="0.8" />
@@ -30,6 +31,7 @@
     <arg name="destination_port" value="$(arg destination_port)" />
     <arg name="odometry_topic" value="$(arg odometry_topic)" />
     <arg name="deskew_enabled" value="$(arg deskew_enabled)" />
+    <arg name="ground_z_threshold_m" value="$(arg ground_z_threshold_m)" />
     <arg name="cluster_enabled" value="$(arg udp_cluster_enabled)" />
   </include>
 

@@ -19,6 +19,9 @@ SUITES=[
     'src/control/stopline_control/test',
     'src/control/turn_signal_controller/test',
     'src/control/purepursuit_mgeo/test',
+    'src/detection/lidar_perception/test',
+    'src/detection/camera_perception/test',
+    'src/experimental/stability_stack/test',
     'src/mission/mission_evaluator/test',
 ]
 

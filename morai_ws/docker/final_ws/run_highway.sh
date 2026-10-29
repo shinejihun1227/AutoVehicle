@@ -5,8 +5,8 @@ WS="$(cd -- "$SCRIPT_DIR/../.." && pwd)"
 if [[ -f "$SCRIPT_DIR/highway.env" ]]; then source "$SCRIPT_DIR/highway.env"; fi
 UBUNTU_IP="${UBUNTU_IP:-192.168.10.21}"
 MORAI_IP="${MORAI_IP:-192.168.10.14}"
-CONTAINER_NAME="${CONTAINER_NAME:-morai-new-final-net10}"
-IMAGE_NAME="${IMAGE_NAME:-morai-final:highway}"
+CONTAINER_NAME="${CONTAINER_NAME:-morai-ji-ujin-net10}"
+IMAGE_NAME="${IMAGE_NAME:-morai-ji-ujin:latest}"
 TORCH_FLAVOR="${TORCH_FLAVOR:-cpu}"
 # This two-PC setup uses the Ubuntu host Engine, including its LAN and GPU.
 # A Docker Desktop context points at a different daemon with different containers.

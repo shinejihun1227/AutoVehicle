@@ -49,6 +49,9 @@ from curvature_speed_purepursuit.planner import (
     nearest_projection_on_loop,
     profile_value_at_s,
 )
+from curvature_speed_purepursuit.tunnel_lane import TunnelLaneFollower
+from purepursuit_mgeo.roundabout_contract import RoundaboutScope, MissionSpeedGate
+
 from curvature_speed_purepursuit.lane_centering import (
     LaneCenteringAssist, ideal_lane_reference, lane_quality, lane_measurement,
 )
@@ -240,6 +243,14 @@ class CurvatureSpeedPurePursuitNode:
                 or not 0.0 < self.lane_centering_timeout_sec <= 1.0):
             raise ValueError("Lane centering settings must be finite and in range")
         self.lane_lock = threading.RLock()
+        self.enable_tunnel_lane_priority = bool(rospy.get_param("~enable_tunnel_lane_priority", False))
+        self.tunnel_lane = TunnelLaneFollower(
+            float(rospy.get_param("~tunnel_max_speed_kph", 25.))/3.6,
+            self.lane_centering_timeout_sec)
+        self.enable_roundabout = bool(rospy.get_param("~enable_roundabout_mission", False))
+        self.mission_gate = (MissionSpeedGate(RoundaboutScope(
+            rospy.get_param("~roundabout_config_file"), path_file,
+            rospy.get_param("~roundabout_circulating_path_file"))) if self.enable_roundabout else None)
         self.lane_assist = LaneCenteringAssist(
             weight=self.lane_centering_weight,
             max_correction_rad=self.lane_centering_max_correction_rad,
@@ -381,6 +392,12 @@ class CurvatureSpeedPurePursuitNode:
         self.lane_centering_status_pub = rospy.Publisher(
             "/experimental/curvature_lane_centering_status", String, queue_size=1
         )
+        self.tunnel_status_pub = rospy.Publisher('/control/tunnel_lane_status', String, queue_size=1)
+        self.mission_overlay_pub = rospy.Publisher('/control/roundabout_overlay_status', String, queue_size=1)
+        if self.enable_tunnel_lane_priority:
+            rospy.Subscriber('/localization/estimator_status', String, self.estimator_callback, queue_size=1)
+        if self.enable_roundabout:
+            rospy.Subscriber('/roundabout_v61/status', String, self.roundabout_callback, queue_size=1)
         self.progress_pub = rospy.Publisher(
             "/experimental/curvature_progress", Float64, queue_size=1
         )
@@ -398,7 +415,7 @@ class CurvatureSpeedPurePursuitNode:
         if self.vehicle_speed_topic:
             rospy.Subscriber(self.vehicle_speed_topic, EgoVehicleStatus,
                              self.vehicle_speed_callback, queue_size=10)
-        if self.enable_lane_centering:
+        if self.enable_lane_centering or self.enable_tunnel_lane_priority:
             rospy.Subscriber(
                 self.lane_info_topic,
                 String, self.lane_info_callback, queue_size=10,
@@ -461,6 +478,18 @@ class CurvatureSpeedPurePursuitNode:
             abs(float(message.velocity.x)),
             message.header.stamp.to_sec(), rospy.Time.now().to_sec(), time.monotonic())
 
+    def estimator_callback(self, message):
+        with self.lane_lock:
+            try:
+                state = json.loads(message.data)
+            except (ValueError, TypeError):
+                state = None
+            self.tunnel_lane.estimator(state, rospy.Time.now().to_sec(), time.monotonic())
+
+    def roundabout_callback(self, message):
+        with self.lane_lock:
+            self.mission_gate.observe(message.data, rospy.Time.now().to_sec(), time.monotonic())
+
     def lane_info_callback(self, message: String) -> None:
         """Use actual two-sided CAM1 geometry and its original observation time.
 
@@ -488,6 +517,7 @@ class CurvatureSpeedPurePursuitNode:
                 self.last_lane_stamp = stamp
                 valid, quality, reason, confidence = lane_quality(info, self.lane_centering_min_confidence)
                 measurement = lane_measurement(info) if valid else None
+                self.tunnel_lane.observe(measurement, stamp, time.monotonic())
                 if measurement is None:
                     self.lane_assist.invalidate(reason if not valid else "plausibility_failed")
                     self.lane_observations.clear()
@@ -498,6 +528,7 @@ class CurvatureSpeedPurePursuitNode:
                 self.lane_observations.append((stamp, time.monotonic(), measurement[0],
                                                measurement[1], confidence, quality))
             except (TypeError, KeyError, ValueError, AttributeError, OverflowError):
+                self.tunnel_lane.observe(None, 0., 0.)
                 self.lane_observations.clear()
                 self.lane_assist.invalidate("plausibility_failed")
 
@@ -948,7 +979,8 @@ class CurvatureSpeedPurePursuitNode:
         self.last_progress_s = progress_s
 
         remaining_m = max(0.0, self.total_length_m - progress_s)
-        stop = not self.loop_route and remaining_m <= self.goal_tolerance_m
+        goal_reached = not self.loop_route and remaining_m <= self.goal_tolerance_m
+        stop = goal_reached
         speed_limit = minimum_speed_ahead(
             self.preview_s_values, self.preview_speeds, progress_s,
             measured_speed_mps * self.speed_preview_time_sec)
@@ -957,6 +989,16 @@ class CurvatureSpeedPurePursuitNode:
         )
         if stopline_cap_active:
             speed_limit = min(speed_limit, self.stopline_approach_speed_kph / MPS_TO_KPH)
+        mission_reason = 'roundabout_disabled'
+        with self.lane_lock:
+            if self.mission_gate is not None:
+                speed_limit, mission_stop, mission_reason = self.mission_gate.limit(
+                    speed_limit, progress_s, now, time.monotonic())
+                stop = stop or mission_stop
+        self.mission_overlay_pub.publish(String(data=json.dumps(dict(reason=mission_reason,
+            stop=stop, target_speed_mps=speed_limit, progress_s_m=progress_s))))
+        if stop:
+            self.command_speed_mps = 0.
         command_speed = 0.0 if stop else self.apply_speed_rate_limit(speed_limit, dt)
         curvature = profile_value_at_s(self.s_values, self.curvatures, progress_s)
 
@@ -975,6 +1017,19 @@ class CurvatureSpeedPurePursuitNode:
             steering, lane_correction, lane_correction_active = self.lane_centered_steering(
                 steering, measured_speed_mps, dt
             )
+            if self.enable_tunnel_lane_priority:
+                with self.lane_lock:
+                    tunnel = self.tunnel_lane.update(steering, measured_speed_mps,
+                        self.wheelbase_m, self.steering_sign, now, time.monotonic(), dt)
+                steering = tunnel.pop('steering')
+                if tunnel['speed_cap_mps'] is not None:
+                    speed_limit = min(speed_limit, tunnel['speed_cap_mps'])
+                    command_speed = min(command_speed, speed_limit)
+                    self.command_speed_mps = command_speed
+                stop = stop or tunnel['stop']
+                if stop:
+                    command_speed = self.command_speed_mps = 0.
+                self.tunnel_status_pub.publish(String(data=json.dumps(tunnel)))
             steering = self.limit_steering_rate(steering, dt)
 
         target_message = PointStamped()
@@ -1003,7 +1058,7 @@ class CurvatureSpeedPurePursuitNode:
         self.lane_correction_pub.publish(Float64(lane_correction))
         self.lane_correction_active_pub.publish(Bool(lane_correction_active))
         self.progress_pub.publish(Float64(progress_s))
-        self.goal_pub.publish(Bool(stop))
+        self.goal_pub.publish(Bool(goal_reached))
         self.stopline_cap_active_pub.publish(Bool(stopline_cap_active))
         self.stopline_cap_target_pub.publish(Float64(
             self.stopline_approach_speed_kph if stopline_cap_active else 0.0

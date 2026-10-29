@@ -4,6 +4,18 @@
        uses the simulator camera settings supplied on 2026-10-10. -->
   <arg name="workspace_path" default="$(env HOME)/morai_ws" />
   <arg name="path_file" default="$(arg workspace_path)/data/routes/2026_molit_comp_global_path.txt" />
+  <arg name="enable_roundabout_mission" default="true" />
+  <arg name="roundabout_config_file" default="$(arg workspace_path)/config/roundabout_v61.yaml" />
+  <arg name="roundabout_circulating_path_file" default="$(arg workspace_path)/data/routes/roundabout_circulating_path.txt" />
+  <arg name="enable_tunnel_lane_priority" default="true" />
+  <arg name="tunnel_max_speed_kph" default="25.0" />
+  <arg name="lidar_host_port" default="2000" />
+  <arg name="lidar_port" default="2001" />
+  <arg name="lidar_x_m" default="1.22" />
+  <arg name="lidar_y_m" default="0.0" />
+  <arg name="lidar_z_m" default="1.23" />
+  <arg name="lidar_yaw_deg" default="0.0" />
+  <arg name="lidar_ground_z_threshold_m" default="$(eval -float(arg('lidar_z_m')) + 0.15 if float(arg('lidar_z_m')) > 0.2 else -1.5)" />
   <arg name="signal_config_file" default="$(arg workspace_path)/config/curvature_signal.yaml" />
   <arg name="signal_mgeo_path" default="$(find camera_perception)/lane/mgeo/R_KR_PR_K-city_2025" />
   <arg name="enable_control" default="false" />
@@ -97,6 +109,32 @@
     <arg name="max_steering_rad" value="$(arg max_steering_rad)" />
   </include>
 
+  <include if="$(arg enable_roundabout_mission)" file="$(find lidar_perception)/launch/lidar_algorithm_pipeline.launch">
+    <arg name="algorithm_type" value="lidar_tracking_node.py" />
+    <arg name="algorithm_name" value="roundabout_lidar_tracking" />
+    <arg name="result_prefix" value="roundabout_tracking" />
+    <arg name="rviz_config" value="morai_lidar_tracking.rviz" />
+    <arg name="rviz" value="false" />
+    <arg name="bind_ip" value="$(arg bind_ip)" />
+    <arg name="host_port" value="$(arg lidar_host_port)" />
+    <arg name="destination_port" value="$(arg lidar_port)" />
+    <arg name="udp_cluster_enabled" value="false" />
+    <arg name="y_abs_m" value="40.0" />
+    <arg name="lidar_x_m" value="$(arg lidar_x_m)" />
+    <arg name="lidar_y_m" value="$(arg lidar_y_m)" />
+    <arg name="lidar_yaw_deg" value="$(arg lidar_yaw_deg)" />
+    <arg name="ground_z_threshold_m" value="$(arg lidar_ground_z_threshold_m)" />
+  </include>
+  <node if="$(arg enable_roundabout_mission)" pkg="purepursuit_mgeo"
+        type="yujin_roundabout_gate_node.py" name="yujin_roundabout_gate" output="screen">
+    <param name="config_file" value="$(arg roundabout_config_file)" />
+    <param name="path_file" value="$(arg path_file)" />
+    <param name="circulating_file" value="$(arg roundabout_circulating_path_file)" />
+    <param name="vehicle_speed_topic" value="$(arg vehicle_speed_topic)" />
+    <param name="max_accel" value="$(arg max_accel_mps2)" />
+    <param name="max_lateral_accel" value="$(arg curve_lateral_accel_limit_mps2)" />
+  </node>
+
   <!-- Keep nominal ROS output available in monitor mode; enable_control gates UDP only. -->
   <node pkg="curvature_speed_purepursuit" type="curvature_speed_purepursuit_node.py"
         name="curvature_speed_purepursuit" output="screen">
@@ -154,6 +192,11 @@
     <param name="lane_centering_correction_rate_rad_s" value="$(arg lane_centering_correction_rate_rad_s)" />
     <param name="lane_centering_release_rate_rad_s" value="$(arg lane_centering_release_rate_rad_s)" />
     <param name="lane_info_topic" value="/perception/camera/lane_info" />
+    <param name="enable_tunnel_lane_priority" value="$(arg enable_tunnel_lane_priority)" />
+    <param name="tunnel_max_speed_kph" value="$(arg tunnel_max_speed_kph)" />
+    <param name="enable_roundabout_mission" value="$(arg enable_roundabout_mission)" />
+    <param name="roundabout_config_file" value="$(arg roundabout_config_file)" />
+    <param name="roundabout_circulating_path_file" value="$(arg roundabout_circulating_path_file)" />
   </node>
 
   <!-- The real_lane model supplies stop lines and optional bounded lane centering. -->

@@ -5,6 +5,6 @@ package_name = "purepursuit_mgeo"
 setup(
     name=package_name,
     version="0.1.0",
-    packages=[package_name],
+    packages=[package_name, package_name + ".yujin_roundabout"],
     package_dir={"": "src"},
 )

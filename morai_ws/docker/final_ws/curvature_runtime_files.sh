@@ -17,6 +17,8 @@ curvature_runtime_files() (
       src/detection/camera_perception/lane/mgeo/R_KR_PR_K-city_2025/traffic_light_set.json \
       src/control/purepursuit_mgeo/src/purepursuit_mgeo/longitudinal_controller.py \
       data/routes/2026_molit_comp_global_path.txt \
+      data/routes/roundabout_circulating_path.txt \
+      config/roundabout_v61.yaml \
       docker/final_ws/curvature_runtime_files.sh \
       docker/final_ws/install_curvature_signal.sh \
       docker/final_ws/run_test.sh \
@@ -27,6 +29,7 @@ curvature_runtime_files() (
     local package
     for package in \
       src/experimental/curvature_speed_purepursuit \
+      src/control/purepursuit_mgeo src/detection/lidar_perception \
       src/control/turn_signal_controller src/control/stopline_control \
       src/detection/camera_perception \
       src/localization/ekf_local_enu src/localization/gps_mgeo_converter \
@@ -39,6 +42,7 @@ curvature_runtime_files() (
     done
     find src/localization/ekf_local_enu/launch src/localization/gps_mgeo_converter/launch \
       src/localization/morai_udp_bridge/launch src/localization/morai_udp_drive_bridge/launch \
+      src/detection/lidar_perception/launch \
       -type f -name '*.launch'
     find src/detection/camera_perception/lane src/detection/camera_perception/post_processing \
       -maxdepth 1 -type f -name '*.py'

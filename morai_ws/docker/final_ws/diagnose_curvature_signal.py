@@ -15,7 +15,7 @@ import time
 
 
 def summarize(kind, msg, ros_now):
-    if kind == 'estimator':
+    if kind in ('roundabout', 'tunnel', 'mission_overlay', 'estimator'):
         return json.loads(msg.data)
     if kind == 'status':
         data = json.loads(msg.data)
@@ -252,6 +252,9 @@ def main():
         'imu': ('/Imu', rospy.AnyMsg),
         'odom': ('/localization/odometry', Odometry),
         'estimator': ('/localization/estimator_status', String),
+        'roundabout': ('/roundabout_v61/status', String),
+        'tunnel': ('/control/tunnel_lane_status', String),
+        'mission_overlay': ('/control/roundabout_overlay_status', String),
         'ego': ('/Ego_topic', EgoVehicleStatus),
         'signal': ('/perception/traffic_light/directional_state', TrafficLight),
         'reference': ('/experimental/curvature_reference_path', RosPath),

@@ -1,5 +1,13 @@
 # MORAI 자율주행 통합 저장소
 
+**현재 브랜치 `ji_ujin_merge`:** [준비·실행·설정 안내](morai_ws/docs/JI_UJIN_MERGE_KO.md).
+`new_final_ws`의 Competition 전용 제어·EKF·신호등 주행에 터널 카메라 우선 조향과
+대회 MGeo 지정 구간의 유진 V6.1 회전교차로 판단을 추가했습니다.
+기존처럼 `bash run_test.sh drive 2`로 실행합니다. 처음에는 안내대로 별도 이미지를 빌드합니다.
+출처와 보존 파일: [JI_UJIN_PROVENANCE.json](JI_UJIN_PROVENANCE.json).
+
+아래 `new_final_ws` 설명은 기반 브랜치의 이력입니다. 현재 실행은 위 안내를 우선합니다.
+
 **`new_final_ws` 브랜치 실행 기준:** [Competition 전용 상태 수신과 실행 안내](morai_ws/docs/NEW_FINAL_COMPETITION_KO.md).
 기존 `final_ws`의 GPS·IMU 위치 추정과 곡률·신호등 주행을 유지하고,
 차량 상태 입력을 Competition Vehicle Status / Ubuntu UDP **9081**로 교체했습니다.

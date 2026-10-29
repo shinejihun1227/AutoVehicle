@@ -45,7 +45,8 @@ class CurvatureSignalLaunchTest(unittest.TestCase):
         self.assertEqual(self.param(self.fusion, "require_fresh_camera_stream"), "false")
         self.assertEqual(self.param(self.fusion, "test_without_turn_signals"), "true")
         self.assertEqual(self.param(self.fusion, "safety_topic"), "/curvature_signal/unused_external_safety")
-        camera = self.root.findall("include")[1]
+        camera = next(i for i in self.root.findall("include")
+                      if i.get("file", "").endswith("/launch/camera_perception.launch"))
         for key in ("enable_lane", "enable_highway_gate", "enable_pedestrian_crossing", "enable_intersection_detection"):
             self.assertEqual(camera.find("arg[@name='%s']" % key).get("value"), "false")
 

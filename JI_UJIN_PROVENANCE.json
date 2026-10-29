@@ -1,0 +1,172 @@
+{
+  "branch": "ji_ujin_merge",
+  "base_branch": "new_final_ws",
+  "base_commit": "9b6b31fcc4f47628174a29bc04b1d4a11fd63d65",
+  "upstream": {
+    "repository": "https://github.com/ohdang23/yujin_morai",
+    "commit": "6c7d805c993f8f2f0d73362de1898206401e0b05",
+    "directory": "roundabout_v6_1/roundabout_v6_1/roundabout_mission/src/roundabout_mission",
+    "files": {
+      "__init__.py": "94a67f10905231ff988881989d7e3e0d950cd5aa",
+      "core.py": "399dcf88e2b10fb6cc41101e3f303650bb4c24ec",
+      "entry_decision.py": "95f2b037fa789a36e0ab37c75e31026615c40ce0",
+      "prediction.py": "4fd8726b4dc4431f7bc715ec20d4f27201b75ed6"
+    },
+    "installed_sha256": {
+      "core.py": "57515c0c5a81ae25fa06c2a6aaac9633be29a3f33e5c864fa051ab5d2e0736b3",
+      "entry_decision.py": "17dfe9425dc404f4cb5255df4043532be25f4ced578d620e1cf8e97061eb3f5d",
+      "__init__.py": "99cdc5882743492c169e794c5a6003ba4c7385c6562be999189245ba5da84150",
+      "prediction.py": "bac430eaa74d05af8dfe623bfb7258c8172cbc7466c536f1162c41ee37640366"
+    }
+  },
+  "scope": "Original V6.1 runtime entry/obstacle prediction/following decisions only; original validation, standalone UDP driver, PID, logging and trial launch excluded. Competition-only base control/localization preserved; camera tunnel steering added.",
+  "preserved_main_files": [
+    {
+      "path": "morai_ws/config/curvature_signal.yaml",
+      "sha256": "898637bf659f3c3f82b000f076860d7de90c194f0a41abf2934d0fd0f7ebc6f8"
+    },
+    {
+      "path": "morai_ws/data/routes/2026_molit_comp_global_path.txt",
+      "sha256": "f74ff6f53e27c0c4b2cc0e004e5873f7ee1f68f2107f0429f0aad55254d73ee6"
+    },
+    {
+      "path": "morai_ws/src/control/purepursuit_mgeo/src/purepursuit_mgeo/longitudinal_controller.py",
+      "sha256": "b7d50651a00e06a694c9dafe62c766ccada423da66fae5556d2b1a5eecf4557b"
+    },
+    {
+      "path": "morai_ws/src/control/turn_signal_controller/scripts/maneuver_fusion_node.py",
+      "sha256": "298f8285b47d273999eb49157b14c40226da329d954bfff26d126acbf1eba649"
+    },
+    {
+      "path": "morai_ws/src/localization/ekf_local_enu/launch/ekf_local_enu.launch",
+      "sha256": "f152da413292040fca0fbb20e24c97cb32c5ea57fc20ec72908400c199447dde"
+    },
+    {
+      "path": "morai_ws/src/localization/ekf_local_enu/package.xml",
+      "sha256": "c47ca02e184b4c67123de2d72e46c9c2e19379764d5e196a113db1bae9f5cd39"
+    },
+    {
+      "path": "morai_ws/src/localization/ekf_local_enu/scripts/ekf_local_enu_node.py",
+      "sha256": "214085ca7e3471b0b0530b90d464138d2725e7fd8c0a0147ffd135b33818d508"
+    },
+    {
+      "path": "morai_ws/src/localization/ekf_local_enu/setup.py",
+      "sha256": "7c718c8e9d5d1b068ba71bbdceaa885a3ec597d952a5d2e4571261d157713c67"
+    },
+    {
+      "path": "morai_ws/src/localization/ekf_local_enu/src/ekf_local_enu/__init__.py",
+      "sha256": "d9161d17f7200de26998eca5806f6e072963a90bad3c95ada4ca17c9c105c23e"
+    },
+    {
+      "path": "morai_ws/src/localization/ekf_local_enu/src/ekf_local_enu/math_utils.py",
+      "sha256": "297ec23a8756e3ac51a4e4597b4ba18ef769019e05e401a07493bbcc2f730efc"
+    },
+    {
+      "path": "morai_ws/src/localization/gps_mgeo_converter/launch/gps_mgeo_converter.launch",
+      "sha256": "6247275cb97dcf2ac3b5a01e099a32f74666e97b729f8db6ae5e931fd13120c2"
+    },
+    {
+      "path": "morai_ws/src/localization/gps_mgeo_converter/package.xml",
+      "sha256": "fbc9f27f41c80b6ce71d65e564a1afc69b4e3c67b7dd0b6c620fb04f957f4e2e"
+    },
+    {
+      "path": "morai_ws/src/localization/gps_mgeo_converter/scripts/gps_mgeo_converter_node.py",
+      "sha256": "af35fff6bd9f645fd568bf02be5b2ff023d23d4011591a5b47be75f3a0168776"
+    },
+    {
+      "path": "morai_ws/src/localization/gps_mgeo_converter/setup.py",
+      "sha256": "3383a0451f5c29d4b9ab92ca16ed66fd432b315d45dea2dab2742d66b9f87a86"
+    },
+    {
+      "path": "morai_ws/src/localization/gps_mgeo_converter/src/gps_mgeo_converter/__init__.py",
+      "sha256": "e6a597f029ac521aad70e50c932df880a6f2e802d05670785427fbc9e197574f"
+    },
+    {
+      "path": "morai_ws/src/localization/gps_mgeo_converter/src/gps_mgeo_converter/coordinate.py",
+      "sha256": "af563a0a6bd20166d719acc259d00d65966c19f10bfa76cb6e3f1f90056e7445"
+    },
+    {
+      "path": "morai_ws/src/localization/gps_mgeo_converter/test/test_coordinate.py",
+      "sha256": "bd327fe1a8b4e5dab5b9df8fb979612402d10bf50446f443ec92a8c90520fea9"
+    },
+    {
+      "path": "morai_ws/src/localization/morai_udp_bridge/launch/morai_udp_bridge.launch",
+      "sha256": "82d900c383d1a635827bbe2c51e754548aebe095c7e82a6678ee8220460355ae"
+    },
+    {
+      "path": "morai_ws/src/localization/morai_udp_bridge/package.xml",
+      "sha256": "1480278e6e13ab9baa61771455e827d0857efe8bb8a5ce92ac3527c08a475d7d"
+    },
+    {
+      "path": "morai_ws/src/localization/morai_udp_bridge/scripts/morai_udp_bridge_node.py",
+      "sha256": "323f7b0032795705e18323f2352a8dc49ee0ee78199ed435acd43d2a2b060718"
+    },
+    {
+      "path": "morai_ws/src/localization/morai_udp_bridge/scripts/morai_udp_dump.py",
+      "sha256": "c21811c54d501cc9f1bea3860c2f9945ec6d5207b1f5f992bbba36fe82195409"
+    },
+    {
+      "path": "morai_ws/src/localization/morai_udp_bridge/setup.py",
+      "sha256": "f4efe056043f3cbf7c1dd65d56e74feea9fd12c163f7af723046efd18f2e31dc"
+    },
+    {
+      "path": "morai_ws/src/localization/morai_udp_bridge/src/morai_udp_bridge/__init__.py",
+      "sha256": "3c77c9697c0c6261fa01fbc261916ec990722e55ebbdf841c05ce3b5940ed6a0"
+    },
+    {
+      "path": "morai_ws/src/localization/morai_udp_bridge/src/morai_udp_bridge/protocol.py",
+      "sha256": "83a7da37db3ca302e7a1e2272d5bbf2032a45fec40e383b4bad9089c4068c3fd"
+    },
+    {
+      "path": "morai_ws/src/localization/morai_udp_bridge/test/test_protocol.py",
+      "sha256": "22cd7a38de28290226e2a67bb0a433c8aa9d07ec61ff12d7dd335a6b3a11c75b"
+    },
+    {
+      "path": "morai_ws/src/localization/morai_udp_drive_bridge/launch/morai_udp_drive_bridge.launch",
+      "sha256": "33dac02e66564bffefca8fc6775962d57d468a5e889ac56cc9608cb3f28bbb26"
+    },
+    {
+      "path": "morai_ws/src/localization/morai_udp_drive_bridge/package.xml",
+      "sha256": "6b725711e586c559cebc91fed7a6e11ff74cc55571db0130ef6fc69e7a8813e3"
+    },
+    {
+      "path": "morai_ws/src/localization/morai_udp_drive_bridge/scripts/morai_udp_drive_bridge_node.py",
+      "sha256": "1ca7a3a8a6e5b4e40733540a13d3a7fef63b00c1fdf43cf4ffaf7b200dae6030"
+    },
+    {
+      "path": "morai_ws/src/localization/morai_udp_drive_bridge/setup.py",
+      "sha256": "05a0a3a78099e66175f71e20d4276634d0de41f3cb4258bd2920a4b852621654"
+    },
+    {
+      "path": "morai_ws/src/localization/morai_udp_drive_bridge/src/morai_udp_drive_bridge/__init__.py",
+      "sha256": "eef2acf8a3ce5da77571d2aef9270c5fbc99ca4154d162803efe8b27aa1ccb9e"
+    },
+    {
+      "path": "morai_ws/src/localization/morai_udp_drive_bridge/src/morai_udp_drive_bridge/protocol.py",
+      "sha256": "8b136f4c021f44888b4a8034c4464ccd43069f89083d183bd4bbf79ae57cf2f6"
+    },
+    {
+      "path": "morai_ws/src/localization/morai_udp_drive_bridge/test/test_competition_status.py",
+      "sha256": "012280843314d9909c40db580d507404c1a9b28666c50f184591fe46989b4a08"
+    },
+    {
+      "path": "morai_ws/src/localization/morai_udp_drive_bridge/test/test_protocol.py",
+      "sha256": "5170711b5b238d74408bea570cab1662e61f3bce5da45decc8e8bb0b2df4794d"
+    },
+    {
+      "path": "morai_ws/src/localization/morai_udp_drive_bridge/test/test_transport_safety.py",
+      "sha256": "d990cf46bbb603bdf2b835626a36e2676d0d087cae9dc227f0cf29dd0f969d32"
+    }
+  ],
+  "status_source": "Competition Vehicle Status only; /Ego_topic is the unchanged internal compatibility message name; unavailable fields remain NaN. Position from GPS/IMU/Competition EKF, not status truth slots.",
+  "ports": "Unchanged new_final_ws defaults; prepare script preserves saved personal IPs/ports/caps. Source must be Competition in MORAI.",
+  "roundabout_scope": "Explicit main route indices 1720..1900; MGeo cycle A2256W000134,135,132,133; route and circle canonical text hashes pinned in config/roundabout_v61.yaml.",
+  "verification": {
+    "offline_report": "JI_UJIN_TEST_RESULTS.json",
+    "live_ros_build": false,
+    "live_morai_driving": false,
+    "competition_packet_capture": false,
+    "tests_passed": 713,
+    "all_suites_passed": true
+  }
+}
