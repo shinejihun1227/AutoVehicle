@@ -91,6 +91,11 @@ class FinalContracts(unittest.TestCase):
         launch=ET.parse(ROOT/'src/bringup/morai_bringup/launch/integrated_obstacle_v61.launch').getroot()
         self.assertEqual(launch.find("arg[@name='stopline_hold_distance_m']").get('default'),'7.0')
         self.assertEqual(launch.find("arg[@name='max_speed_kph']").get('default'),'53.2')
+        self.assertEqual(launch.find("arg[@name='nominal_gap_grace_sec']").get('default'),'0.2')
+        self.assertEqual(launch.find("arg[@name='yolo_signal_visual_filter']").get('default'),'1')
+        camera=ET.parse(ROOT/'src/detection/camera_perception/launch/camera_perception.launch').getroot()
+        self.assertIn('--signal-visual-filter $(arg yolo_signal_visual_filter)',
+                      camera.find("node[@name='yolo_camera']").get('args'))
         for name in ('frenet_fsm_controller','curvature_signal_controller'):
             self.assertIsNotNone(launch.find("node[@name='%s']/rosparam[@file='$(arg avoidance_config_file)']"%name))
         pp=launch.find("node[@name='curvature_speed_purepursuit']")
@@ -117,6 +122,7 @@ class FinalContracts(unittest.TestCase):
         self.assertIsNotNone(node.dynamic_zone_guard)
         self.assertEqual(node.core.hold_distance_m,7.)
         self.assertEqual(node.signal_pose_pair_tolerance,.15)
+        self.assertTrue(node.weighted_signal_group)
 
     def test_v9_status_has_the_heartbeat_required_by_avoidance(self):
         import ast

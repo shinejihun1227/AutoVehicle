@@ -9,6 +9,55 @@ import math
 from numbers import Integral, Real
 
 
+def signal_label_known(label):
+    """Exact model classes/aliases, rather than 'red' in 'red_car'."""
+    key=''.join(c for c in str(label).lower() if c.isalpha())
+    if key.startswith('trafficlight') and key!='trafficlight':key=key[12:]
+    return key in {'red','green','yellow','amber','left','right','arrow',
+        'redleft','redright','redarrow','redyellow','greenleft','greenright',
+        'greenarrow','yellowleft','yellowright','amberleft','amberright',
+        'redgreen','greenred','unknown','traffic','trafficlight'}
+
+
+def signal_visual_evidence(image, xyxy, label):
+    """Require a small lit region inside a darker signal housing.
+
+    BGR pixels only corroborate the detector's class; they never invent a
+    green or arrow. A solid colored sign/body is not a lit signal housing.
+    Sampling is bounded to at most ~1200 pixels and adds no model/ROS imports.
+    """
+    try:
+        h,w=image.shape[:2]
+        x0,y0,x1,y1=(int(v) for v in xyxy)
+        x0,y0,x1,y1=max(0,x0),max(0,y0),min(w,x1),min(h,y1)
+        if x1-x0<2 or y1-y0<2:return False,'visual_box_too_small'
+        name=str(label).lower()
+        red='red' in name
+        yellow='yellow' in name or 'amber' in name
+        green=any(t in name for t in ('green','left','right','arrow'))
+        if not (red or yellow or green):return False,'visual_unknown_class'
+        total=dark=lit=0
+        for y in range(y0,y1,max(1,math.ceil((y1-y0)/20))):
+            for x in range(x0,x1,max(1,math.ceil((x1-x0)/48))):
+                b,g,r=(float(v) for v in image[y,x][:3])
+                if not all(math.isfinite(v) and 0<=v<=255 for v in (b,g,r)):
+                    return False,'visual_invalid_pixel'
+                high,low=max(b,g,r),min(b,g,r)
+                total+=1
+                dark+=high<=90
+                saturated=high>=100 and high-low>=max(25.,.35*high)
+                supported=((red and r>=1.2*g and r>=1.2*b)
+                    or (yellow and min(r,g)>=1.3*b and min(r,g)>=.55*max(r,g))
+                    or (green and g>=1.1*r and g>=1.05*b))
+                lit+=saturated and supported
+        if total<4:return False,'visual_insufficient_pixels'
+        if dark/total<.12:return False,'visual_no_dark_housing'
+        if not .005<=lit/total<=.65:return False,'visual_no_compact_lamp'
+        return True,'visual_housing_and_lamp'
+    except (AttributeError,IndexError,TypeError,ValueError,OverflowError):
+        return False,'visual_image_unavailable'
+
+
 def _finite(value):
     return isinstance(value, Real) and not isinstance(value, bool) and math.isfinite(value)
 

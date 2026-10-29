@@ -12,6 +12,7 @@ from __future__ import annotations
 import math
 import json
 import os
+import copy
 import threading
 import time
 from typing import List, Optional, Tuple
@@ -173,6 +174,9 @@ class AdaptiveCurvaturePurePursuit:
             speed_error_deadband_kph=max(
                 0.0, float(rospy.get_param("~speed_error_deadband_kph", 0.1))
             ),
+            accel_rise_rate_per_sec=float(rospy.get_param('~pedal_accel_rise_rate_per_sec',0.)),
+            brake_rise_rate_per_sec=float(rospy.get_param('~pedal_brake_rise_rate_per_sec',0.)),
+            pedal_release_rate_per_sec=float(rospy.get_param('~pedal_release_rate_per_sec',0.)),
         )
 
         self.enable_lane_centering = bool(rospy.get_param("~enable_lane_centering", False))
@@ -210,6 +214,9 @@ class AdaptiveCurvaturePurePursuit:
         self.active_path_wall_time: Optional[float] = None
         self.active_path_seq: Optional[int] = None
         self.active_source = "global"
+        self.active_source_stamp = rospy.Time.now()
+        self._reference_geometry = None
+        self._reference_message = None
         self.stop_required = False
         self.stop_status_wall_time: Optional[float] = None
         self.target_speed_override_mps = self.max_speed_kph / MPS_TO_KPH
@@ -283,6 +290,7 @@ class AdaptiveCurvaturePurePursuit:
         if self.vehicle_speed_topic:
             rospy.Subscriber(self.vehicle_speed_topic, EgoVehicleStatus, self._vehicle_speed_cb, queue_size=1)
         self._publish_active_path()
+        self.reference_timer = rospy.Timer(rospy.Duration(.1), self._publish_active_path)
         self.timer = rospy.Timer(
             rospy.Duration(1.0 / self.rate_hz), self._control_cb
         )
@@ -434,7 +442,6 @@ class AdaptiveCurvaturePurePursuit:
             return
         self._accept_active_path(msg)
 
-    @plan_locked
     def _trajectory_cb(self, msg: String) -> None:
         try:
             path, stop, speed, reason = read_trajectory(
@@ -442,20 +449,22 @@ class AdaptiveCurvaturePurePursuit:
                 min(self.active_path_timeout_sec, self.stop_status_timeout_sec,
                     self.target_speed_override_timeout_sec),
                 path_type=Path, pose_type=PoseStamped, stamp_type=rospy.Time)
-            # A rejected new plan must not inherit the previous plan's permit.
-            self.active_path_received = False
-            self._accept_active_path(path)
         except (KeyError, TypeError, ValueError) as exc:
-            self.active_path_received = False
-            self.stop_required = True
-            self.trajectory_reason = 'invalid_trajectory:' + str(exc)
+            with self._lock:
+                self.active_path_received = False
+                self.stop_required = True
+                self.trajectory_reason = 'invalid_trajectory:' + str(exc)
             return
-        source_age = max(0.0, rospy.get_time() - path.header.stamp.to_sec())
-        received_at = time.monotonic() - source_age
-        self.active_path_wall_time = received_at
-        self.stop_required, self.target_speed_override_mps = stop, speed
-        self.stop_status_wall_time = self.target_speed_override_wall_time = received_at
-        self.trajectory_reason = reason
+        # JSON parsing and ROS message construction above do not hold the
+        # control lock. Commit geometry + stop + speed as one transaction.
+        with self._lock:
+            self._accept_active_path(path)
+            source_age = max(0.0, rospy.get_time() - path.header.stamp.to_sec())
+            received_at = time.monotonic() - source_age
+            self.active_path_wall_time = received_at
+            self.stop_required, self.target_speed_override_mps = stop, speed
+            self.stop_status_wall_time = self.target_speed_override_wall_time = received_at
+            self.trajectory_reason = reason
 
     def _accept_active_path(self, msg: Path) -> None:
         self.active_path_received = False
@@ -498,11 +507,16 @@ class AdaptiveCurvaturePurePursuit:
             # previous geometry for diagnostics, but let freshness expire.
             rospy.logwarn_throttle(1.0, "active path is empty")
             return
+        try:
+            points = clean_consecutive_duplicates(points)
+        except ValueError:
+            return
         with self._lock:
             if points == self.active_points:
                 self.active_path_received = True
                 self.active_path_wall_time = time.monotonic() - max(0., age)
                 self.active_path_seq = int(msg.header.seq)
+                self.active_source_stamp = msg.header.stamp
                 return
         try:
             points = clean_consecutive_duplicates(points)
@@ -526,27 +540,34 @@ class AdaptiveCurvaturePurePursuit:
             self.active_path_received = True
             self.active_path_wall_time = time.monotonic()
             self.active_path_seq = int(msg.header.seq)
+            self.active_source_stamp = msg.header.stamp
             self.active_source = "dynamic"
-        self._publish_active_path()
 
-    def _publish_active_path(self) -> None:
+    def _publish_active_path(self, _event=None) -> None:
         with self._lock:
-            points = list(self.active_points)
+            if self.use_active_path and not self.active_path_received:
+                return
+            points = self.active_points
             source = self.active_source
             seq = self.active_path_seq
-        msg = Path()
-        msg.header.stamp = rospy.Time.now()
+            stamp = self.active_source_stamp if self.use_active_path else rospy.Time.now()
+        # Cache geometry but publish every fresh execution heartbeat, including
+        # repeated identical plans. Never re-date an old planner source stamp.
+        if self._reference_geometry is not points:
+            template = Path()
+            for p in points:
+                pose = PoseStamped()
+                pose.pose.position.x, pose.pose.position.y, pose.pose.position.z = p.x,p.y,p.z
+                pose.pose.orientation.w = 1.0
+                template.poses.append(pose)
+            self._reference_message = template
+            self._reference_geometry = points
+        msg = copy.copy(self._reference_message)
+        msg.header = copy.copy(msg.header)
+        msg.header.stamp = stamp
         msg.header.frame_id = self.map_frame
         if seq is not None:
             msg.header.seq = seq
-        for p in points:
-            pose = PoseStamped()
-            pose.header = msg.header
-            pose.pose.position.x = p.x
-            pose.pose.position.y = p.y
-            pose.pose.position.z = p.z
-            pose.pose.orientation.w = 1.0
-            msg.poses.append(pose)
         self.reference_pub.publish(msg)
         self.source_pub.publish(String(data=source))
         self.seq_pub.publish(String(data="" if seq is None else str(seq)))

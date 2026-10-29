@@ -81,6 +81,7 @@ class AdaptiveTest(unittest.TestCase):
         self.node._active_path_cb(self.path(y=3.5))
         self.node.global_reference_pub.publish.assert_called_once()
         global_path = self.node.global_reference_pub.publish.call_args.args[0]
+        self.node._publish_active_path()  # Separate reference timer is mocked.
         active_path = self.node.reference_pub.publish.call_args.args[0]
         self.assertEqual([p.pose.position.y for p in global_path.poses], [0.] * 101)
         self.assertEqual([p.pose.position.y for p in active_path.poses], [3.5] * 21)

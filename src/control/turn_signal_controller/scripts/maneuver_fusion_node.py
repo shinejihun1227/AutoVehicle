@@ -217,6 +217,8 @@ class ManeuverFusionNode:
                                   for h in json.load(stream) if h.get("type") == "car"]
         self.signal_pose_pair_tolerance = float(rospy.get_param("~signal_pose_pair_tolerance_sec", 0.05))
         self.signal_projection_gate_px = float(rospy.get_param("~signal_projection_gate_px", 40.0))
+        self.weighted_signal_group = bool(rospy.get_param('~weighted_signal_group',False))
+        self.signal_confidence_margin = float(rospy.get_param('~signal_confidence_margin',.15))
         if not 0.05 <= self.signal_pose_pair_tolerance <= 0.15 or not 25 <= self.signal_projection_gate_px <= 50:
             raise ValueError("Invalid bounded signal association tolerance")
         self.pose_history = deque(maxlen=100)
@@ -1157,13 +1159,17 @@ class ManeuverFusionNode:
             group = event.get("source") == "route_camera"
             pair = group and event.get("id") in self.correlated_signal_heads
             selection = associate(objects.value.objects, targets, others,
-                                  allow_target_group=group, allow_correlated_pair=pair)
+                                  allow_target_group=group, allow_correlated_pair=pair,
+                                  weighted_group=self.weighted_signal_group,
+                                  confidence_margin=self.signal_confidence_margin)
             # Keep a valid precise match; widening every gate would create
             # spurious ambiguity with another junction in the same image.
             if selection.reason == "no_match" and self.signal_projection_gate_px > 25.0:
                 selection = associate(objects.value.objects, targets, others,
                     allow_target_group=group, allow_correlated_pair=pair,
-                    gate_px=self.signal_projection_gate_px)
+                    gate_px=self.signal_projection_gate_px,
+                    weighted_group=self.weighted_signal_group,
+                    confidence_margin=self.signal_confidence_margin)
         except (ValueError, TypeError, AttributeError, KeyError):
             selection = Selection("UNKNOWN", 0.0, False, None, "signal_projection_invalid")
         return selection

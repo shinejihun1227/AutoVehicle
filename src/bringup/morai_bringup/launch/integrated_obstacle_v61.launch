@@ -58,6 +58,8 @@
   <arg name="yolo_signal_roi" default="0.3 0.05 0.6 0.6" />
   <arg name="yolo_signal_full_frame" default="1" />
   <arg name="yolo_signal_window_size" default="5" />
+  <arg name="yolo_signal_visual_filter" default="1" />
+  <arg name="nominal_gap_grace_sec" default="0.2" />
   <arg name="lane_info_device" default="auto" />
   <arg name="lane_info_every" default="1" />
   <arg name="lane_info_timeout_s" default="0.6" />
@@ -177,6 +179,7 @@
     <arg name="yolo_signal_roi" value="$(arg yolo_signal_roi)" />
     <arg name="yolo_signal_full_frame" value="$(arg yolo_signal_full_frame)" />
     <arg name="yolo_signal_window_size" value="$(arg yolo_signal_window_size)" />
+    <arg name="yolo_signal_visual_filter" value="$(arg yolo_signal_visual_filter)" />
     <arg name="enable_highway_gate" value="false" />
     <arg name="enable_pedestrian_crossing" value="false" />
     <arg name="enable_intersection_detection" value="false" />
@@ -325,6 +328,8 @@
     <param name="evaluation_mode" value="false" />
   </node>
   <node pkg="purepursuit_mgeo" type="no_obstacle_integration_node.py" name="no_obstacle_integration" output="screen" required="true">
+    <param name="nominal_gap_grace_sec" value="$(arg nominal_gap_grace_sec)" />
+    <param name="mission_status_timeout_sec" value="0.5" />
     <param name="path_file" value="$(arg path_file)" />
   </node>
   <node pkg="purepursuit_mgeo" type="tunnel_clearance_obstacle_state_node.py" name="tunnel_clearance_obstacle_state" output="screen">

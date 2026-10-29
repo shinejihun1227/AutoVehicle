@@ -1,0 +1,68 @@
+{
+  "syntax_errors": [],
+  "suites": [
+    {
+      "suite": "integration_tests/patches",
+      "exit_code": 0,
+      "tests": 47
+    },
+    {
+      "suite": "integration_tests",
+      "exit_code": 0,
+      "tests": 44
+    },
+    {
+      "suite": "src/experimental/curvature_speed_purepursuit/test",
+      "exit_code": 0,
+      "tests": 32
+    },
+    {
+      "suite": "src/control/stopline_control/test",
+      "exit_code": 0,
+      "tests": 59
+    },
+    {
+      "suite": "src/control/turn_signal_controller/test",
+      "exit_code": 0,
+      "tests": 210
+    },
+    {
+      "suite": "src/detection/camera_perception/test:test_camera_timestamps.py",
+      "exit_code": 0,
+      "tests": 24
+    },
+    {
+      "suite": "src/detection/camera_perception/test:test_traffic_signal.py",
+      "exit_code": 0,
+      "tests": 11
+    }
+  ],
+  "ros_build": false,
+  "morai_driving": false,
+  "preview_and_http_verified": false,
+  "total_tests": 427,
+  "parent_commit": "045407233d1f6a33daaf4e1d240c385f2eaf4492",
+  "date": "2026-10-29",
+  "signal_weights_changed": false,
+  "retained_targets": {
+    "stopline_front_bumper_clearance_m": 7.0,
+    "normal_max_speed_kph": 53.2
+  },
+  "changed_runtime_sha256": {
+    "src/bringup/morai_bringup/launch/integrated_no_obstacle_v61.launch": "e51c249645c5720065dda8777178587c7ae83533106f29c4b7d970c56a274a17",
+    "src/bringup/morai_bringup/launch/integrated_obstacle_v61.launch": "b9e83c769fc5b5e060779bf23b74d783aaa1a0de2da5e1e719d17b02e60d40b0",
+    "src/control/purepursuit_mgeo/scripts/highway_lane_strategy_node.py": "3f659f7be3cbf969e7c64eb994e62c2326b485c6a6e095bbe09d2c489a9e9de4",
+    "src/control/purepursuit_mgeo/scripts/no_obstacle_integration_node.py": "43e6f911fa622c28f61cd161b72407782b4ba95559547a969b42724e49757b6d",
+    "src/control/turn_signal_controller/scripts/maneuver_fusion_node.py": "9f4fbe00d87588e9ea3a3020c977671813ac73881925b2d34b9e8f84614036fe",
+    "src/control/turn_signal_controller/src/turn_signal_controller/signal_association.py": "c10186f3dffc8d0a5883aecf9416c33e90bd5a71f5bf601f6ae8c6e136971cd3",
+    "src/detection/camera_perception/launch/camera_perception.launch": "32c3a9beef44ec39002560cbd779392d941403529dc34630bf0a8e0b9b1bbe37",
+    "src/detection/camera_perception/scripts/camera_feature_runner.py": "e48307922b1056bd0cb261be0a2458dd319be1443db9cb82357a12fcf1cbf467",
+    "src/detection/camera_perception/scripts/camera_object_detection_node.py": "f7ad313b8f2de1dfb8a857e514415764006e26ae101c24ad86f1a63ff1dad84f",
+    "src/detection/camera_perception/src/camera_perception/debug_dashboard.py": "82c4f311f999970bf09889d15ad7f2e6fcfc72aa9faf6851961b14343cd6abe1",
+    "src/detection/camera_perception/src/camera_perception/signal_detection.py": "ba3db8c19b4567fd1ade86cfba9be1ea77c382c84ad624d89aaca5d44a2f2617",
+    "src/detection/camera_perception/src/camera_perception/traffic_signal.py": "bb3e5c214e70d25874b9c217723eec713c09ac99ac9f932d784b5e22d83cd45d",
+    "src/experimental/curvature_speed_purepursuit/scripts/adaptive_curvature_purepursuit_node.py": "c1ffb7f096f26bb06d20e3d784f38119c5b3cecdefb57c0fb5f69f7190011003",
+    "src/experimental/curvature_speed_purepursuit/test/test_adaptive_node.py": "070a0ace70212b3de27d7d9832f83eb8168b7c089249c26b3248f0064efde1e4",
+    "src/control/purepursuit_mgeo/src/purepursuit_mgeo/command_continuity.py": "e455cbf44a6aa128da88c5772cd110d37656c869403ab5c448bca45b4255688b"
+  }
+}

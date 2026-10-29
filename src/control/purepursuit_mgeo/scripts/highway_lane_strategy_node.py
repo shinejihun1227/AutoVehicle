@@ -1813,7 +1813,10 @@ class HighwayLaneStrategyNode:
 
     def _publish(self, path: Optional[RosPath], stop: bool, speed: float, active: bool, status: dict, now: rospy.Time, dt: float) -> None:
         # V9 decision and speed profile; v61 transport is an extra output only.
-        output_path = copy.deepcopy(path) if path is not None else RosPath()
+        # Geometry is immutable during this locked publication; clone only the
+        # header instead of deep-copying the whole 4k-point route every tick.
+        output_path = copy.copy(path) if path is not None else RosPath()
+        output_path.header = copy.copy(output_path.header)
         if path is None or len(output_path.poses) < 2:
             stop = True
             status["reason"] = "trajectory_path_missing_or_short"

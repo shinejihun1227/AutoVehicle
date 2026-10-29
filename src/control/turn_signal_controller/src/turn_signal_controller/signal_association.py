@@ -169,7 +169,8 @@ def _contains(box, pixel):
 
 
 def associate(objects, projected_targets, projected_others=None, allow_target_group=False,
-              allow_correlated_pair=False, gate_px=25.0):
+              allow_correlated_pair=False, gate_px=25.0, weighted_group=False,
+              confidence_margin=.15):
     """Select exactly one geometrically unique route-head/detection pair.
 
     Objects expose ObjectInfo attributes x_center/y_center/width/height in
@@ -200,6 +201,8 @@ def associate(objects, projected_targets, projected_others=None, allow_target_gr
     """
     if not isinstance(gate_px, (int, float)) or not math.isfinite(gate_px) or not 0 <= gate_px <= 50:
         return _unknown("invalid_projection_gate")
+    if not isinstance(confidence_margin,(int,float)) or not math.isfinite(confidence_margin) or not .05<=confidence_margin<=.5:
+        return _unknown('invalid_confidence_margin')
     try:
         targets = _projections(projected_targets)
         others = _projections({} if projected_others is None else projected_others)
@@ -215,6 +218,7 @@ def associate(objects, projected_targets, projected_others=None, allow_target_gr
     if allow_target_group:
         from camera_perception.traffic_signal import (
             count_signal_housings, directional_observation,
+            weighted_directional_observation, dominant_signal_indication,
         )
         grouped, unresolved, pair_candidates = {}, [], []
         ambiguous_other = False
@@ -268,7 +272,7 @@ def associate(objects, projected_targets, projected_others=None, allow_target_gr
                 if state == "UNKNOWN":
                     return _unknown("unsupported_class")
                 candidate_states.append((state, _number(obj.conf)))
-            if candidate_states[0][0] != candidate_states[1][0]:
+            if candidate_states[0][0] != candidate_states[1][0] and not weighted_group:
                 return _unknown("conflicting_target_heads")
             target_ids = list(targets)
 
@@ -284,15 +288,23 @@ def associate(objects, projected_targets, projected_others=None, allow_target_gr
                     or favors_target(first, target_ids[1]) and favors_target(second, target_ids[0])):
                 return _unknown("ambiguous_other_head")
             identifiers = tuple(sorted(projected_targets, key=str))
+            if candidate_states[0][0] != candidate_states[1][0]:
+                state,confidence=dominant_signal_indication(candidate_states,confidence_margin)
+                if state=='UNKNOWN':return _unknown('conflicting_target_heads')
+                return Selection(state,confidence,True,identifiers,'weighted_correlated_pair')
             return Selection(candidate_states[0][0], max(score for _, score in candidate_states),
                              True, identifiers, "matched_correlated_pair")
         if not grouped and not unresolved:
             return _unknown("no_match")
         indications = list(unresolved)
+        weighted=False
         for detections in grouped.values():
             if count_signal_housings(detections) != 1:
-                return _unknown("ambiguous_housing")
-            state, confidence = directional_observation(detections)
+                if not weighted_group:return _unknown("ambiguous_housing")
+                state,confidence=weighted_directional_observation(detections,confidence_margin)
+                weighted=True
+            else:
+                state, confidence = directional_observation(detections)
             if state == "UNKNOWN":
                 return _unknown("conflicting_target_indication")
             indications.append((state, confidence))
@@ -307,6 +319,11 @@ def associate(objects, projected_targets, projected_others=None, allow_target_gr
             state = "LEFT"
         elif states <= {"RIGHT", "RED_RIGHT", "GREEN_RIGHT"}:
             state = "RIGHT"
+        elif weighted_group and allow_correlated_pair:
+            state,score=dominant_signal_indication(indications,confidence_margin)
+            if state=='UNKNOWN':return _unknown('conflicting_target_heads')
+            indications=[(state,score)]
+            weighted=True
         else:
             return _unknown("conflicting_target_heads")
         # The identity is the map-bound group, even when one of its repeated
@@ -318,7 +335,7 @@ def associate(objects, projected_targets, projected_others=None, allow_target_gr
                       if allow_correlated_pair and len(indications) == 2 and len(states) == 1
                       else min(score for _, score in indications))
         return Selection(state, confidence,
-                         True, selected_id, "matched_route_group")
+                         True, selected_id, "weighted_route_group" if weighted else "matched_route_group")
 
     matches = []
     try:

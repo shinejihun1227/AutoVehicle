@@ -4,6 +4,8 @@ This branch is based on x010806-sudo/morai_ws_full b3e0747 plus the two
 user-supplied overlays. Read docs/FINAL_MERGE_20261029_KO.md and
 docs/FINAL_MERGE_PROVENANCE.json before changing controllers or launch files.
 The repository root is the catkin workspace, not a parent of morai_ws/.
+Latest follow-up: docs/SMOOTH_DRIVE_20261029_KO.md (bounded command continuity
+at the mux only; appearance-qualified, route-scoped signal ranking).
 
 Preserve final_ws, jihun_ws and merge_ws branches. Scope changes to this branch.
 Keep one final CtrlCmd chain. Use original sensor timestamps and distinguish

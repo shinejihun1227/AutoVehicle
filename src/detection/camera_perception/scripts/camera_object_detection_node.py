@@ -30,6 +30,7 @@ from camera_perception.traffic_signal import (
 from camera_perception.signal_detection import (
     validate_signal_roi, signal_crop_rect, signal_box_allowed,
     merge_signal_detections,
+    signal_label_known, signal_visual_evidence,
 )
 from camera_perception.highway_vehicle import (
     HIGHWAY_VEHICLE_CLASSES,
@@ -70,6 +71,8 @@ TRAFFIC_KEYWORDS = (
 
 
 def _parse_traffic_signal(label):
+    if not signal_label_known(label):
+        return None,None,None
     normalized = label.lower()
     if normalized in ("unknown", "traffic", "traffic light"):
         return "Unknown", "UNKNOWN", (128, 128, 128)
@@ -136,7 +139,7 @@ def main(ip=IP, port=PORT, base_model_path=BASE_MODEL_PATH,
          inference_size=INFERENCE_SIZE, display_fps=DISPLAY_FPS,
          cpu_threads=CPU_THREADS, show_raw_preview=False,
          signal_roi=(0.3, 0.05, 0.6, 0.6), signal_full_frame=True,
-         window_size=5):
+         window_size=5, signal_visual_filter=False):
     """Cam 4 UDP receive, asynchronous YOLO inference, and live display.
 
     Camera receive/display must not wait for model inference.  The inference
@@ -322,8 +325,17 @@ def main(ip=IP, port=PORT, base_model_path=BASE_MODEL_PATH,
             obstacle_objects.append(object_message(box, model))
         return candidates, obstacle_objects
 
-    def finalize_signals(candidates):
+    def finalize_signals(candidates, image=None):
         merged = merge_signal_detections(candidates)
+        if signal_visual_filter:
+            accepted=[];rejected=Counter()
+            for record in merged:
+                allowed,reason=signal_visual_evidence(image,record['xyxy'],record['label'])
+                if allowed:accepted.append(record)
+                else:rejected[reason]+=1
+            if rejected:
+                rospy.loginfo_throttle(2.,'CAM4 rejected signal appearances: %s',dict(rejected))
+            merged=accepted
         counts = Counter(record["track_id"] for record in merged
                          if record["track_id"] is not None)
         visible_ids = set(counts)
@@ -522,7 +534,7 @@ def main(ip=IP, port=PORT, base_model_path=BASE_MODEL_PATH,
                     if pass_errors:
                         rospy.logwarn_throttle(2.0, "CAM4 partial inference: %s",
                                                "; ".join(pass_errors))
-                    traffic_objects, signal_detections = finalize_signals(candidates)
+                    traffic_objects, signal_detections = finalize_signals(candidates, image)
                     if signal_detections:
                         labels = ", ".join(sorted({d[4] for d in signal_detections}))
                         rospy.loginfo_throttle(1.0, "%s published signals: %s", CAM_NAME, labels)
@@ -852,10 +864,11 @@ if __name__ == "__main__":
                         default=(0.3, 0.05, 0.6, 0.6))
     parser.add_argument("--signal-full-frame", type=int, choices=(0, 1), default=1)
     parser.add_argument("--window-size", type=int, default=5)
+    parser.add_argument("--signal-visual-filter", type=int, choices=(0,1), default=1)
     args = parser.parse_args()
     main(args.cam_ip, args.cam_port, args.base_model, args.custom_model,
          args.confidence, args.car_detected_topic, args.person_detected_topic,
          args.traffic_light_topic, args.obstacle_topic,
          args.inference_size, args.display_fps, args.cpu_threads,
          bool(args.show_raw_preview), args.signal_roi,
-         bool(args.signal_full_frame), args.window_size)
+         bool(args.signal_full_frame), args.window_size, bool(args.signal_visual_filter))

@@ -1,5 +1,7 @@
 # MORAI 통합 작업공간
 
+추가 개선: [짧은 제어 공백 유지·경로 처리 부담 감소·신호 외형 및 가중치 판단](docs/SMOOTH_DRIVE_20261029_KO.md).
+
 **`morai_ws_full` 브랜치의 현재 실행 안내:** [2026-10-29 최종 병합과 설정](docs/FINAL_MERGE_20261029_KO.md).
 작업공간을 빌드한 뒤 `bash RUN_INTEGRATED.sh monitor` 또는 `bash RUN_INTEGRATED.sh drive`를 사용합니다.
 이 브랜치 루트가 catkin 작업공간입니다. 일반 최고속도 기본값 53.2km/h,

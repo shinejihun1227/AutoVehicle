@@ -398,6 +398,39 @@ def count_signal_housings(objects, min_confidence=0.5):
     return 1
 
 
+def dominant_signal_indication(indications, margin=.15, minimum=.7):
+    """Rank already-associated hypotheses; a close conflict stays UNKNOWN.
+
+    Repeated copies do not accumulate votes. Use only within one verified
+    housing or an explicitly co-phased route group, never over the full image.
+    """
+    scores={}
+    for state,score in indications:
+        if (not isinstance(score,(int,float)) or not math.isfinite(score)
+                or not .5<=score<=1 or state=='UNKNOWN'):
+            return 'UNKNOWN',0.
+        scores[state]=max(scores.get(state,0.),score)
+    ranked=sorted(scores.items(),key=lambda p:p[1],reverse=True)
+    if not ranked or ranked[0][1]<minimum:return 'UNKNOWN',0.
+    if len(ranked)>1 and ranked[0][1]-ranked[1][1]+1e-9<margin:return 'UNKNOWN',0.
+    return ranked[0]
+
+
+def weighted_directional_observation(objects, margin=.15):
+    objects=list(objects)
+    state,score=directional_observation(objects)
+    if state!='UNKNOWN':return state,score
+    if (not objects or any(not _same_signal_housing(objects[0],o) for o in objects[1:])):
+        return 'UNKNOWN',0.
+    names=[]
+    supported={'RED','YELLOW','GREEN','LEFT','RIGHT','GREEN_LEFT','GREEN_RIGHT','RED_LEFT','RED_RIGHT'}
+    for o in objects:
+        name=str(o.class_name).strip().upper().replace('-','_').replace(' ','_')
+        if name not in supported:return 'UNKNOWN',0.
+        names.append((name,float(o.conf)))
+    return dominant_signal_indication(names,margin)
+
+
 def straight_observation(objects, min_confidence=0.5):
     """Conservative straight-ahead state for consumers without route intent.
 

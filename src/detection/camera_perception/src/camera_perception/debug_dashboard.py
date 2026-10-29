@@ -26,6 +26,8 @@ EXPLANATIONS = {
     'conflicting_target_heads': '같은 경로에 연결된 신호등들의 허용 방향이 서로 다릅니다.',
     'matched_route_group': '현재 경로에 연결된 MGeo 신호등과 CAM4 검출이 일치합니다.',
     'matched_correlated_pair': '같은 교차로의 두 신호가 일치하여 신뢰도가 높은 검출을 선택했습니다.',
+    'weighted_route_group': '현재 경로의 같은 신호등에서 신뢰도가 뚜렷하게 높은 관측을 선택했습니다.',
+    'weighted_correlated_pair': '같은 신호 주기로 연결된 두 신호등 중 신뢰도가 높은 관측을 선택했습니다.',
     'nominal_stale_or_not_type1': '곡률 제어 명령이 없거나 오래됐거나 명령 형식이 다릅니다.',
     'unassociated_visible_signal': '신호등은 검출됐지만 진행 경로의 신호등으로 연결되지 않았습니다.',
     'unmapped_signal_or_stopline': '지도 경로와 연결되지 않은 신호등·정지선이 감지됐습니다.',

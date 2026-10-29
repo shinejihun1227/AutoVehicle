@@ -15,6 +15,8 @@ SUITES=[
  'src/experimental/curvature_speed_purepursuit/test',
  'src/control/stopline_control/test',
  'src/control/turn_signal_controller/test',
+ ('src/detection/camera_perception/test','test_camera_timestamps.py'),
+ ('src/detection/camera_perception/test','test_traffic_signal.py'),
 ]
 
 def main():
@@ -31,17 +33,20 @@ def main():
     for p in (ROOT/'src').rglob('*.launch'):ET.parse(p)
     results=[]
     for suite in SUITES:
-        result=subprocess.run([sys.executable,'-X','utf8','-m','unittest','discover','-s',suite,'-v'],
+        folder,pattern=(suite,'test*.py') if isinstance(suite,str) else suite
+        label=folder if isinstance(suite,str) else folder+':'+pattern
+        result=subprocess.run([sys.executable,'-X','utf8','-m','unittest','discover','-s',folder,'-p',pattern,'-v'],
             cwd=ROOT,env=env,capture_output=True)
         text=(result.stdout+result.stderr).decode('utf-8',errors='replace')
-        (logs/(suite.replace('/','_')+'.log')).write_text(text,encoding='utf-8')
+        (logs/(label.replace('/','_').replace(':','_')+'.log')).write_text(text,encoding='utf-8')
         import re
         ran=re.search(r'Ran (\d+) tests?',text)
-        summary=dict(suite=suite,exit_code=result.returncode,tests=int(ran[1]) if ran else 0)
+        summary=dict(suite=label,exit_code=result.returncode,tests=int(ran[1]) if ran else 0)
         results.append(summary);print(summary,flush=True)
         if result.returncode:
             print('\n'.join(line for line in text.splitlines() if line.startswith(('ERROR:','FAIL:'))))
-    report=dict(syntax_errors=syntax,suites=results,ros_build=False,morai_driving=False)
+    report=dict(syntax_errors=syntax,suites=results,ros_build=False,morai_driving=False,
+                preview_and_http_verified=False)
     (logs/'summary.json').write_text(json.dumps(report,indent=2),encoding='utf-8')
     return int(bool(syntax) or any(r['exit_code'] for r in results))
 

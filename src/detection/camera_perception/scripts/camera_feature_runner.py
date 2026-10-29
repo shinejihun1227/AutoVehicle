@@ -31,6 +31,7 @@ def main():
                         help="Also infer signals outside the configured crop")
     parser.add_argument("--window-size", type=int, default=5,
                         help="Signal class smoothing window in frames")
+    parser.add_argument('--signal-visual-filter',type=int,choices=(0,1),default=1)
     parser.add_argument("--display-fps", type=float, default=0.0)
     parser.add_argument("--cpu-threads", type=int, default=0)
     parser.add_argument("--show-raw-preview", type=int, choices=(0, 1), default=0)
@@ -144,6 +145,7 @@ def main():
             "--inference-size", str(args.inference_size),
             "--signal-full-frame", str(args.signal_full_frame),
             "--window-size", str(args.window_size),
+            "--signal-visual-filter",str(args.signal_visual_filter),
             "--display-fps", str(args.display_fps),
             "--cpu-threads", str(args.cpu_threads),
             "--show-raw-preview", str(args.show_raw_preview),

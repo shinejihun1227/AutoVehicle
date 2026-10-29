@@ -37,6 +37,8 @@ accel_rise_rate_per_sec: 0.8
 green_confirmation_sec: 0.15
 signal_pose_pair_tolerance_sec: 0.15
 signal_projection_gate_px: 40.0
+weighted_signal_group: true
+signal_confidence_margin: 0.15
 turn_max_heading_error_deg: 60.0
 turn_max_lateral_error_m: 1.5
 turn_exit_heading_error_deg: 15.0
