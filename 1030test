@@ -1,14 +1,15 @@
-cd ~/AutoVehicle_new_final_ws
-git pull --ff-only origin new_final_ws
+git clone --single-branch --branch ji_ujin_merge https://github.com/shinejihun1227/AutoVehicle.git ~/AutoVehicle_ji_ujin_merge
+cd ~/AutoVehicle_ji_ujin_merge/morai_ws/docker/final_ws
 
-cd morai_ws/docker/final_ws
+bash prepare_ji_ujin.sh "$HOME/AutoVehicle_new_final_ws/morai_ws/docker/final_ws"
+python3 fetch_highway_model.py
+bash run_highway.sh build
+bash run_highway.sh start
 bash run_highway.sh stop
 bash install_curvature_signal.sh --config
 bash run_highway.sh start
+
+bash run_test.sh show 2
+bash run_test.sh monitor 2
+입력을 확인하고 Ctrl+C로 종료한 후 주행합니다.
 bash run_test.sh drive 2
-저장한 정차 거리·속도·포트 설정은 유지됩니다.
-
-오프라인 검사 508개가 통과했습니다. 실제 MORAI 터널 주행은 아직 확인하지 못했습니다. 터널 진입 전 GPS로 초기 위치를 받아야 하며, 터널 내부에서도 IMU와 Competition 속도는 수신되어야 합니다.
-
-계속 멈추면 별도 터미널에서 다음을 실행해주세요. 새 estimator 행과 status.reason으로 원인을 구분할 수 있습니다.
-bash run_test.sh diagnose 2
