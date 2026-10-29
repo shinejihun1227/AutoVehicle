@@ -3,6 +3,7 @@ import importlib.util
 import os
 from pathlib import Path
 import shutil
+import stat
 import subprocess
 import tempfile
 import unittest
@@ -26,6 +27,7 @@ class SignalUpdateBundleTest(unittest.TestCase):
         with zipfile.ZipFile(archive) as z:
             paths=[n for n in z.namelist() if n.startswith('morai_ws/')]
             self.assertEqual(len(paths),10)
+            self.archive_modes={i.filename:(i.create_system,i.external_attr >> 16) for i in z.infolist()}
             z.extractall(self.bundle)
         self.files=(self.bundle/'signal_update_files.txt').read_text().splitlines()
         self.target=self.root/'target';self.target.mkdir()
@@ -59,3 +61,16 @@ class SignalUpdateBundleTest(unittest.TestCase):
         (self.bundle/self.files[0]).write_bytes(b'corrupt payload')
         result=self.apply();self.assertNotEqual(result.returncode,0)
         for name in self.files:self.assertEqual((self.target/name).read_bytes(),self.old[name])
+
+    def test_archive_permissions_are_readable_for_sudo_docker_readback(self):
+        for name,(system,mode) in self.archive_modes.items():
+            self.assertEqual(system,3,name)
+            self.assertTrue(stat.S_ISREG(mode),name)
+            executable=name.endswith('.sh') or ('/scripts/' in name and name.endswith('.py'))
+            self.assertEqual(stat.S_IMODE(mode),0o755 if executable else 0o644,name)
+
+    def test_permission_repair_preserves_contents_and_env(self):
+        result=subprocess.run([self.bash,str(self.bundle/'repair_signal_permissions.sh'),str(self.target)],capture_output=True)
+        self.assertEqual(result.returncode,0,result.stderr)
+        for name in self.files:self.assertEqual((self.target/name).read_bytes(),self.old[name])
+        self.assertEqual(self.env.read_bytes(),b'COMPETITION_STATUS_PORT=9099\n')

@@ -39,6 +39,26 @@ ZIP을 사용하는 경우 별도 폴더에 풀고 그 안에서 다음을 실�
 bash apply_signal_update.sh "$HOME/AutoVehicle_roundabout"
 ```
 
+### ZIP 덮어쓰기 후 Permission denied 복구
+
+초기 배포 ZIP은 Unix 읽기 권한이 600으로 저장됐습니다. 이 파일을 sudo/Docker로
+복사하고 일반 계정으로 다시 검증하면 `sha256sum: Permission denied`가 발생할 수 있습니다.
+수정 ZIP은 일반 파일 644, 실행 노드와 셸 도구 755를 명시합니다.
+설치기도 컨테이너로 복사할 공개 소스·모델의 읽기 권한을 정규화합니다.
+
+이미 덮어쓴 경우 수정 ZIP을 **별도 새 폴더**에 풀고, 그 폴더에서 다음을 실행합니다.
+sudo bash로 실행하지 않습니다. 필요할 때만 도구가 파일 소유권 변경을 위해 sudo를 요청합니다.
+
+```bash
+bash repair_signal_permissions.sh "$HOME/AutoVehicle_roundabout" &&
+bash apply_signal_update.sh "$HOME/AutoVehicle_roundabout"
+```
+
+복구 도구는 위에 명시한 호스트 소스 10개의 소유권·권한만 복구합니다.
+파일 내용, IP·포트·env, 컨테이너는 변경하지 않습니다. 교체 도구는 기존 내용을 백업합니다.
+그 후 아래 컨테이너 설치 순서를 다시 완료합니다. 이전 검증이 실패했으면 설치 완료로 간주하지 않습니다.
+새 ZIP의 10개 주행 소스 내용은 `28d5c0e`와 동일하며 이번 변경은 전달·설치 권한 문제만 수정합니다.
+
 이전 파일은 대상 저장소 `morai_ws/test-results/signal-backup.XXXXXX/`에 보존됩니다.
 기존 컨테이너에도 반영하려면 실행 중인 주행을 종료한 뒤 다음 순서로 갱신합니다.
 

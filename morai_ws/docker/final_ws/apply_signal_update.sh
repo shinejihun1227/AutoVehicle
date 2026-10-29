@@ -28,6 +28,10 @@ for file in "${FILES[@]}"; do
   mkdir -p "$BACKUP_DIR/$(dirname -- "$file")"
   cp -p -- "$TARGET_DIR/$file" "$BACKUP_DIR/$file"
 done
-for file in "${FILES[@]}"; do cp -- "$BUNDLE_DIR/$file" "$TARGET_DIR/$file"; done
+for file in "${FILES[@]}"; do
+  cp -- "$BUNDLE_DIR/$file" "$TARGET_DIR/$file"
+  chmod 644 -- "$TARGET_DIR/$file"
+  if [[ "$file" == */scripts/*.py ]]; then chmod 755 -- "$TARGET_DIR/$file"; fi
+done
 echo "Updated ten host source files. Backup: $BACKUP_DIR"
 echo 'Stop the driving launch, then stop the container and run install_curvature_signal.sh before restarting.'
