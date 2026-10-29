@@ -11,7 +11,7 @@ from morai_perception_msgs.msg import TrafficLight
 from std_msgs.msg import Bool
 
 from camera_perception.traffic_signal import (
-    TrafficSignalStopLatch, directional_observation, straight_observation,
+    TrafficSignalStopLatch, directional_observation, straight_observation, signal_confidence_valid,
 )
 
 
@@ -21,7 +21,7 @@ class TrafficLightStopNode:
         self.shutting_down = False
         self.last_ros_now = None
         self.input_timeout = float(rospy.get_param("~input_timeout_sec", 0.8))
-        self.min_confidence = float(rospy.get_param("~min_confidence", 0.5))
+        self.min_confidence = float(rospy.get_param("~min_confidence", 0.6))
         if (not math.isfinite(self.input_timeout) or self.input_timeout <= 0
                 or not math.isfinite(self.min_confidence) or not 0 <= self.min_confidence <= 1):
             raise ValueError("Invalid traffic-light timeout/confidence")
@@ -65,7 +65,8 @@ class TrafficLightStopNode:
         state, confidence = directional_observation(message.objects, self.min_confidence)
         self.directional_publisher.publish(self.state_message(
             state, confidence, state != "UNKNOWN", getattr(message, "header", None)))
-        class_names = [str(getattr(item, "class_name", "UNKNOWN")) for item in message.objects]
+        class_names = [str(getattr(item, "class_name", "UNKNOWN")) for item in message.objects
+                       if signal_confidence_valid(getattr(item, 'conf', None), self.min_confidence)]
         state, confidence = straight_observation(message.objects, self.min_confidence)
         header = getattr(message, "header", None)
         stamp = header.stamp.to_sec() if header is not None else 0.0

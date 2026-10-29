@@ -144,11 +144,11 @@ class AssociationTest(unittest.TestCase):
             self.assertEqual(selection.reason, reason)
 
     def test_wrong_lane_green_and_screen_center_cannot_override_own_red(self):
-        own = detection("Red", x=120, conf=0.6)
+        own = detection("Red", x=120, conf=0.61)
         other = detection("Green", x=320, conf=0.99)
         for objects in ([other, own], [own, other]):
             selected = associate(objects, {"own": (120, 240)}, {"other": (320, 240)})
-            self.assertEqual(selected, Selection("RED", 0.6, True, "own", "matched"))
+            self.assertEqual(selected, Selection("RED", 0.61, True, "own", "matched"))
         self.assertUnknown(associate([other], {"own": (120, 240)}), "no_match")
 
     def test_oblique_narrow_bbox_accepts_projection_near_its_edge(self):
@@ -166,7 +166,7 @@ class AssociationTest(unittest.TestCase):
     def test_conflicting_detections_at_target_are_ambiguous_regardless_of_score(self):
         for name in ("Red", "Green", "Left", "unsupported"):
             with self.subTest(name=name):
-                self.assertUnknown(associate([detection(conf=0.99), detection(name, conf=0.5)],
+                self.assertUnknown(associate([detection(conf=0.99), detection(name, conf=0.61)],
                                              {"own": (320, 240)}), "ambiguous_match")
 
     def test_one_box_matching_multiple_route_heads_is_ambiguous(self):
@@ -218,13 +218,14 @@ class AssociationTest(unittest.TestCase):
         self.assertUnknown(associate(None, {"own": (320, 240)}), "invalid_object")
 
     def test_confidence_threshold_and_supported_directional_states(self):
-        self.assertUnknown(associate([detection(conf=0.49)], {"own": (320, 240)}), "no_match")
+        for score in (0.49, 0.5, 0.6):
+            self.assertUnknown(associate([detection(conf=score)], {"own": (320, 240)}), "no_match")
         for name, expected in (("Red_Left", "RED_LEFT"), ("green left", "GREEN_LEFT"),
                                ("Green_Right", "GREEN_RIGHT"), ("Red_Right", "RED_RIGHT"),
                                ("Left", "LEFT"), ("Right", "RIGHT"), ("Amber", "YELLOW"),
                                ("Yellow_Left", "YELLOW")):
             with self.subTest(name=name):
-                selection = associate([detection(name, conf=0.5)], {"own": (320, 240)})
+                selection = associate([detection(name, conf=0.600001)], {"own": (320, 240)})
                 self.assertTrue(selection.valid)
                 self.assertEqual(selection.state, expected)
         for name in ("Green_Arrow", "Arrow", "traffic_light", None):
@@ -276,9 +277,9 @@ class ConfirmationTest(unittest.TestCase):
     def test_confidence_can_change_between_distinct_source_frames(self):
         self.assertFalse(self.confirmation.update(observation(confidence=0.9), 100.0).valid)
         self.assertFalse(self.confirmation.update(observation(confidence=0.7), 100.15).valid)
-        result = self.confirmation.update(observation(confidence=0.6), 100.3)
+        result = self.confirmation.update(observation(confidence=0.61), 100.3)
         self.assertTrue(result.valid)
-        self.assertEqual(result.confidence, 0.6)
+        self.assertEqual(result.confidence, 0.61)
 
     def test_directional_permissions_also_require_confirmation(self):
         for state in ("GREEN_LEFT", "GREEN_RIGHT", "LEFT", "RIGHT", "RED_LEFT", "RED_RIGHT"):

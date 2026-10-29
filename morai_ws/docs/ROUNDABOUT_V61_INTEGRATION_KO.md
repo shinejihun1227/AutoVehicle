@@ -1,5 +1,7 @@
 # new_final_ws 회전교차로 V6.1 통합
 
+`test/roundabout` 신호 제어 후속 수정: [교차로 진입 후 주행 유지·신뢰도 0.6 초과](20261030_SIGNAL_ENTRY_RELEASE_KO.md).
+
 ## 통합 기준
 
 - 기준 코드: `shinejihun1227/AutoVehicle`의 `new_final_ws`

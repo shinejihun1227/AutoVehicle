@@ -4,6 +4,18 @@ import math
 from collections import Counter, deque
 from types import SimpleNamespace
 
+MIN_SIGNAL_CONFIDENCE = 0.6
+
+
+def signal_confidence_valid(value, minimum=MIN_SIGNAL_CONFIDENCE):
+    """The decision floor is exclusive, including for old saved parameters."""
+    try:
+        score, minimum = float(value), float(minimum)
+        return (math.isfinite(score) and math.isfinite(minimum)
+                and 0 <= minimum <= 1 and max(MIN_SIGNAL_CONFIDENCE, minimum) < score <= 1.)
+    except (TypeError, ValueError, OverflowError):
+        return False
+
 
 # CAM4's original signal ROI ended at 65% of the image height.  Keep vertical
 # heads possible; cap area to reject gantry-sized false signal detections.
@@ -285,7 +297,7 @@ def _same_signal_housing(first, second):
     return intersection / min(w1 * h1, w2 * h2) >= 0.8
 
 
-def directional_observation(objects, min_confidence=0.5):
+def directional_observation(objects, min_confidence=MIN_SIGNAL_CONFIDENCE):
     """Preserve one directional class; conflicting signal heads are UNKNOWN.
 
     Combined classes (e.g. Red_Left) must describe one detected signal head.
@@ -302,7 +314,7 @@ def directional_observation(objects, min_confidence=0.5):
             score = float(item.conf)
         except (AttributeError, ValueError, TypeError, OverflowError):
             continue
-        if not math.isfinite(score) or not min_confidence <= score <= 1.0:
+        if not signal_confidence_valid(score, min_confidence):
             continue
         name = str(getattr(item, "class_name", "UNKNOWN")).strip().upper().replace(" ", "_").replace("-", "_")
         if "YELLOW" in name or "AMBER" in name:
@@ -351,7 +363,7 @@ def directional_observation(objects, min_confidence=0.5):
     return next(iter(evidence.items()))
 
 
-def count_signal_housings(objects, min_confidence=0.5):
+def count_signal_housings(objects, min_confidence=MIN_SIGNAL_CONFIDENCE):
     """Count plausible heads without treating duplicate bulb boxes as heads.
 
     Only one coherent combined indication, or strongly overlapping copies of
@@ -364,7 +376,7 @@ def count_signal_housings(objects, min_confidence=0.5):
             score = float(item.conf)
         except (AttributeError, ValueError, TypeError, OverflowError):
             continue
-        if math.isfinite(score) and min_confidence <= score <= 1.0:
+        if signal_confidence_valid(score, min_confidence):
             candidates.append(item)
     if len(candidates) <= 1:
         return len(candidates)
@@ -398,7 +410,7 @@ def count_signal_housings(objects, min_confidence=0.5):
     return 1
 
 
-def straight_observation(objects, min_confidence=0.5):
+def straight_observation(objects, min_confidence=MIN_SIGNAL_CONFIDENCE):
     """Conservative straight-ahead state for consumers without route intent.
 
     An illuminated turn arrow does not authorize straight travel. Preserve

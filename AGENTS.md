@@ -1,5 +1,13 @@
 # new_final_ws
 
+Current user-authorised follow-up (2026-10-30): modify test/roundabout only for
+the permitted junction entry/dropout lifecycle and exclusive >0.6 signal
+confidence floor. This supersedes the older new_final_ws-only scope below
+for that request. Preserve the other branches and this branch's roundabout,
+Competition, localization and speed configuration. See
+morai_ws/docs/20261030_SIGNAL_ENTRY_RELEASE_KO.md and
+SIGNAL_ENTRY_RELEASE_TEST_RESULTS.json for the change and verification scope.
+
 Based on origin/final_ws c97840c987880736b0b4b10ef346f90e904d9d28.
 The catkin workspace is morai_ws/, unlike the morai_ws_full branch.
 Read morai_ws/docs/NEW_FINAL_COMPETITION_KO.md and NEW_FINAL_PROVENANCE.json.

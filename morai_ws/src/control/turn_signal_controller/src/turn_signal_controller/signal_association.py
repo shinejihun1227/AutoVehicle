@@ -15,7 +15,7 @@ __all__ = ["Selection", "project_signal", "associate", "SignalConfirmation"]
 
 _STATES = frozenset(("RED", "YELLOW", "GREEN", "LEFT", "RIGHT", "GREEN_LEFT",
                      "GREEN_RIGHT", "RED_LEFT", "RED_RIGHT"))
-_MIN_CONFIDENCE = 0.5
+_MIN_CONFIDENCE = 0.6
 _GATE_PX = 25.0
 
 
@@ -175,7 +175,7 @@ def associate(objects, projected_targets, projected_others=None, allow_target_gr
     Objects expose ObjectInfo attributes x_center/y_center/width/height in
     pixels, conf in [0,1], and class_name. Boxes expand by a fixed, capped
     25 pixels per side; there is no distance-to-screen-center or confidence
-    ranking. Scores below 0.5 are ignored, but malformed measurements fail
+    ranking. Scores at or below 0.6 are ignored, but malformed measurements fail
     closed (including NaN, confidence >1, and nonpositive box dimensions).
 
     ``projected_targets`` and optional ``projected_others`` map stable head
@@ -218,13 +218,16 @@ def associate(objects, projected_targets, projected_others=None, allow_target_gr
         ambiguous_other = False
         try:
             for obj in objects:
-                x, y, width, height, confidence = (
-                    _number(getattr(obj, key)) for key in
-                    ("x_center", "y_center", "width", "height", "conf"))
-                if x < 0 or y < 0 or width <= 0 or height <= 0 or not 0 <= confidence <= 1:
-                    return _unknown("invalid_object")
-                if confidence < _MIN_CONFIDENCE:
+                confidence = _number(obj.conf)
+                if not 0 <= confidence <= 1:
+                    return _unknown('invalid_object')
+                if confidence <= _MIN_CONFIDENCE:
                     continue
+                x, y, width, height = (
+                    _number(getattr(obj, key)) for key in
+                    ("x_center", "y_center", "width", "height"))
+                if x < 0 or y < 0 or width <= 0 or height <= 0:
+                    return _unknown("invalid_object")
                 box = (x - width/2 - _GATE_PX, y - height/2 - _GATE_PX,
                        x + width/2 + _GATE_PX, y + height/2 + _GATE_PX)
                 if not all(math.isfinite(edge) for edge in box):
@@ -321,18 +324,21 @@ def associate(objects, projected_targets, projected_others=None, allow_target_gr
     matches = []
     try:
         for obj in objects:
-            x, y, width, height, confidence = (
+            confidence = _number(obj.conf)
+            if not 0 <= confidence <= 1:
+                return _unknown('invalid_object')
+            if confidence <= _MIN_CONFIDENCE:
+                continue
+            x, y, width, height = (
                 _number(getattr(obj, key)) for key in
-                ("x_center", "y_center", "width", "height", "conf"))
-            if x < 0 or y < 0 or width <= 0 or height <= 0 or not 0 <= confidence <= 1:
+                ("x_center", "y_center", "width", "height"))
+            if x < 0 or y < 0 or width <= 0 or height <= 0:
                 return _unknown("invalid_object")
             box = (x - width / 2.0 - _GATE_PX, y - height / 2.0 - _GATE_PX,
                    x + width / 2.0 + _GATE_PX, y + height / 2.0 + _GATE_PX)
             if not all(math.isfinite(edge) for edge in box):
                 return _unknown("invalid_object")
             name = obj.class_name
-            if confidence < _MIN_CONFIDENCE:
-                continue
             for head_id, pixel in targets.items():
                 if _contains(box, pixel):
                     matches.append((head_id, box, _state(name), confidence))
@@ -375,12 +381,17 @@ def associate_weighted(objects, projected_targets, projected_others=None,
             return original
         ranked = []
         for obj in objects:
-            x, y, w, h, conf = (_number(getattr(obj, k)) for k in
-                               ('x_center', 'y_center', 'width', 'height', 'conf'))
-            if x < 0 or y < 0 or w <= 0 or h <= 0 or not 0 <= conf <= 1:
+            conf = _number(obj.conf)
+            if not 0 <= conf <= 1:
+                return _unknown('invalid_object')
+            if conf <= _MIN_CONFIDENCE:
+                continue
+            x, y, w, h = (_number(getattr(obj, k)) for k in
+                         ('x_center', 'y_center', 'width', 'height'))
+            if x < 0 or y < 0 or w <= 0 or h <= 0:
                 return _unknown('invalid_object')
             state = _state(obj.class_name)
-            if conf < _MIN_CONFIDENCE or state == 'UNKNOWN':
+            if state == 'UNKNOWN':
                 continue
             box = (x-w/2-_GATE_PX, y-h/2-_GATE_PX,
                    x+w/2+_GATE_PX, y+h/2+_GATE_PX)
@@ -484,7 +495,7 @@ class SignalConfirmation:
                 raise ValueError("invalid selection structure")
             confidence = _number(selection.confidence)
             if (not 0 <= confidence <= 1 or selection.state not in _STATES | {"UNKNOWN"}
-                    or (selection.valid and (confidence < _MIN_CONFIDENCE
+                    or (selection.valid and (confidence <= _MIN_CONFIDENCE
                                             or not _valid_id(selection.selected_id)
                                             or selection.state == "UNKNOWN"))):
                 raise ValueError("invalid selection evidence")

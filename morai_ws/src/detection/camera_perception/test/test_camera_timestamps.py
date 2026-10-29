@@ -530,8 +530,8 @@ class TrafficLightObservationTest(unittest.TestCase):
     def test_low_confidence_green_does_not_override_red_or_yellow(self):
         yellow = self.observe([("Amber", 0.8), ("Green", 0.4)], Stamp(1))
         self.assertEqual((yellow.state, yellow.valid, yellow.confidence), ("YELLOW", True, 0.8))
-        red = self.observe([("Red", 0.5), ("Green", 0.4)], Stamp(2))
-        self.assertEqual((red.state, red.valid, red.confidence), ("RED", True, 0.5))
+        red = self.observe([("Red", 0.61), ("Green", 0.4)], Stamp(2))
+        self.assertEqual((red.state, red.valid, red.confidence), ("RED", True, 0.61))
         self.assertTrue(self.bools[-1].data)
 
     def test_unsupported_classes_never_grant_permission(self):
@@ -592,10 +592,17 @@ class TrafficLightObservationTest(unittest.TestCase):
         self.assertTrue(self.bools[-1].data)
 
     def test_malformed_confidences_never_authorize_green(self):
+        self.observe([("Red", .9)], Stamp(99.95), ros_now=99.95)
         for conf in (float("nan"), float("inf"), -1., 1.1, .49, "bad", None):
             output = self.observe([("Green", conf)], Stamp(100.))
             self.assertEqual((output.state, output.valid, output.confidence), ("UNKNOWN", False, 0.))
             self.assertTrue(self.bools[-1].data)
+
+    def test_signal_at_or_below_point_six_cannot_create_a_new_stop_or_permission(self):
+        for i, (name, score) in enumerate((('Red', .6), ('Yellow', .5), ('Green', .6))):
+            output = self.observe([(name, score)], Stamp(100.+i*.05))
+            self.assertEqual((output.state, output.valid, output.confidence), ('UNKNOWN', False, 0.))
+            self.assertFalse(self.bools[-1].data)
 
     def test_delayed_out_of_order_duplicate_and_zero_stamps_are_preserved(self):
         self.clock.seconds = 9000.0

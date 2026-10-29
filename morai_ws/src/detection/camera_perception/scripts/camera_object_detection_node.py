@@ -26,6 +26,7 @@ from camera_perception.camera_udp import LatestCameraReceiver
 from camera_perception.traffic_signal import (
     TrackedSignalVotes,
     register_cbam_model_layers,
+    signal_confidence_valid,
 )
 from camera_perception.signal_detection import (
     validate_signal_roi, signal_crop_rect, signal_box_allowed,
@@ -290,6 +291,8 @@ def main(ip=IP, port=PORT, base_model_path=BASE_MODEL_PATH,
             normalized = label.lower()
             x1, y1, x2, y2 = box.xyxy[0].detach().cpu().tolist()
             if any(keyword in normalized for keyword in TRAFFIC_KEYWORDS):
+                if not signal_confidence_valid(score):
+                    continue
                 if crop_rect is not None:
                     cx0, cy0, cx1, cy1 = crop_rect
                     # A cropped half-housing can resemble a different signal.

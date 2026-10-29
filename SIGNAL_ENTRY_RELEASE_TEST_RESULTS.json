@@ -1,0 +1,63 @@
+{
+  "python38_syntax_errors": [],
+  "suites": [
+    {
+      "suite": "test_new_final",
+      "exit_code": 0,
+      "tests": 11
+    },
+    {
+      "suite": "src/localization/morai_udp_drive_bridge/test",
+      "exit_code": 0,
+      "tests": 20
+    },
+    {
+      "suite": "src/localization/morai_udp_bridge/test",
+      "exit_code": 0,
+      "tests": 6
+    },
+    {
+      "suite": "src/localization/gps_mgeo_converter/test",
+      "exit_code": 0,
+      "tests": 3
+    },
+    {
+      "suite": "src/experimental/curvature_speed_purepursuit/test",
+      "exit_code": 0,
+      "tests": 32
+    },
+    {
+      "suite": "src/control/stopline_control/test",
+      "exit_code": 0,
+      "tests": 59
+    },
+    {
+      "suite": "src/control/turn_signal_controller/test",
+      "exit_code": 0,
+      "tests": 232
+    },
+    {
+      "suite": "src/control/purepursuit_mgeo/test",
+      "exit_code": 0,
+      "tests": 91
+    },
+    {
+      "suite": "src/mission/mission_evaluator/test",
+      "exit_code": 0,
+      "tests": 66
+    }
+  ],
+  "total_tests": 520,
+  "ros_build": false,
+  "morai_driving": false,
+  "live_competition_packet_verified": false,
+  "branch": "test/roundabout",
+  "base_commit": "e095e970d5a1ac010510c64cde0c092c38a09434",
+  "request": "Continue an already permitted junction crossing through late stop-colour/empty frames; exclude signal confidence <=0.6.",
+  "camera_suite": {
+    "suite": "src/detection/camera_perception/test",
+    "tests": 94,
+    "exit_code": 0
+  },
+  "total_tests_including_camera": 614
+}
