@@ -75,7 +75,7 @@ class RightTurnNodeTest(unittest.TestCase):
     def test_stop_then_release_without_signal_and_retain_obstacle_braking(self):
         for i in range(45):
             output, status = self.case.frame('RED', line=True)
-            if i < 20:
+            if i < 10:
                 self.assertFalse(status['permission'])
         self.assertTrue(status['permission'], status)
         self.assertEqual(output.brake, 0.)
@@ -84,11 +84,94 @@ class RightTurnNodeTest(unittest.TestCase):
         self.assertEqual(output.brake, 1.)
         self.assertFalse(status['permission'])
 
-    def test_green_still_requires_stop_at_target_not_far_upstream(self):
-        for _ in range(45):
-            _, status = self.case.frame('GREEN', x=75.)
-        self.assertFalse(status['permission'])
+    def test_first_route_green_releases_without_stop_even_upstream(self):
+        output, status = self.case.frame('GREEN', x=75.)
+        self.assertTrue(status['permission'], status)
+        self.assertEqual(output.brake, 0.)
+        self.assertEqual(status['entry_policy'], 'green_priority')
+        self.assertEqual(status['selected_signal_state'], 'GREEN')
         self.assertFalse(self.node.event.get('right_stop_released', False))
+
+    def test_red_to_green_releases_on_first_frame_without_finishing_dwell(self):
+        self.case.frame('RED', line=True)
+        _, waiting = self.case.frame('RED', line=True)
+        self.assertFalse(waiting['permission'])
+        output, status = self.case.frame('GREEN', line=True)
+        self.assertTrue(status['permission'], status)
+        self.assertEqual(output.brake, 0.)
+        self.assertEqual(status['entry_policy'], 'green_priority')
+        self.assertFalse(self.node.event.get('right_stop_released', False))
+
+    def test_red_stop_releases_in_half_second_without_second_green_confirmation(self):
+        released = None
+        for i in range(17):
+            output, status = self.case.frame('RED', line=True)
+            if status['permission']:
+                released = i*.05
+                break
+        self.assertIsNotNone(released, status)
+        self.assertGreaterEqual(released, .5)
+        self.assertLessEqual(released, .600001)
+        self.assertEqual(output.brake, 0.)
+        self.assertEqual(status['entry_policy'], 'stop_then_right_released')
+
+    def test_red_permission_persists_through_red_and_empty_frames_after_stop(self):
+        for _ in range(17):output, status = self.case.frame('RED', line=True)
+        for state in ('RED', 'UNKNOWN', 'YELLOW'):
+            output, status = self.case.frame(state, no_objects=state=='UNKNOWN')
+            self.assertTrue(status['permission'], status)
+            self.assertEqual(output.brake, 0.)
+
+    def test_green_release_survives_immediate_empty_frame(self):
+        self.case.frame('GREEN')
+        output, status = self.case.frame('UNKNOWN', no_objects=True)
+        self.assertTrue(status['permission'], status)
+        self.assertEqual(output.brake, 0.)
+
+    def test_fast_release_slew_stays_below_nominal_and_restores_outside_fourth(self):
+        accelerations=[]
+        for _ in range(7):
+            output, status=self.case.frame('GREEN')
+            self.assertEqual(output.brake,0.)
+            self.assertLessEqual(output.accel,.6)
+            accelerations.append(output.accel)
+        self.assertAlmostEqual(accelerations[5],.25,places=5)
+        self.assertEqual(status['accel_rise_rate_per_sec'],1.)
+        self.node.stop_then_right_context_ids.clear()
+        _, status=self.case.frame('GREEN')
+        self.assertEqual(status['accel_rise_rate_per_sec'],.5)
+
+    def test_far_red_stop_cannot_release_and_obstacle_overrides_first_green(self):
+        for _ in range(30):_, status=self.case.frame('RED',x=75.)
+        self.assertFalse(status['permission'])
+        output, status=self.case.frame('GREEN',x=75.,obstacle=True)
+        self.assertFalse(status['permission'])
+        self.assertEqual((output.accel,output.brake),(0.,1.))
+
+    def test_saved_global_false_does_not_disable_fourth_junction_green_priority(self):
+        self.node.right_on_green=False
+        output,status=self.case.frame('GREEN')
+        self.assertTrue(status['permission'],status)
+        self.assertEqual(output.brake,0.)
+        self.assertIn('RIGHT',status['signal_allowed_directions'])
+        other=dict(self.node.event,id='different_junction')
+        self.assertFalse(self.node.event_signal_permits('GREEN',other))
+
+    def test_red_to_green_releases_while_car_is_still_moving(self):
+        self.node.vehicle_speed_topic='/Ego_topic';self.node.require_vehicle_speed=True
+        for state in ('RED','GREEN'):
+            now=self.case.fixture.now
+            self.node.vehicle_speed_source.observe(1.,now,now,now)
+            output,status=self.case.frame(state,x=75.)
+        self.assertTrue(status['permission'],status)
+        self.assertEqual(output.brake,0.)
+        self.assertFalse(self.node.event.get('right_stop_released',False))
+
+    def test_red_stop_release_does_not_reapply_this_junction_approach_cap(self):
+        self.node.speed_governor_enabled=True
+        for _ in range(17):output,status=self.case.frame('RED',line=True)
+        self.assertTrue(status['permission'],status)
+        self.assertIsNone(self.node.governor_stopline_distance_m)
 
 
 class NarrowLaneTest(unittest.TestCase):

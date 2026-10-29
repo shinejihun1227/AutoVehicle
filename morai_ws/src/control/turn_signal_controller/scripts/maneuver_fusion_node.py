@@ -276,6 +276,12 @@ class ManeuverFusionNode:
             raise ValueError("entry_signal_dropout_grace_sec must be in (0, 1]")
         self.accel_limiter = AccelRiseLimiter(
             float(rospy.get_param("~accel_rise_rate_per_sec", 0.5)), self.core.max_update_gap_sec)
+        self.default_accel_rise_rate = self.accel_limiter.rate
+        self.right_stop_dwell_sec = float(rospy.get_param('~right_stop_dwell_sec', 0.5))
+        self.right_accel_rise_rate = float(rospy.get_param('~right_accel_rise_rate_per_sec', 1.0))
+        if not all(finite(v) and v > 0 for v in
+                   (self.right_stop_dwell_sec, self.right_accel_rise_rate)):
+            raise ValueError('Right-turn stop dwell and accelerator rise rate must be positive and finite')
         self.manual = parse_maneuvers(rospy.get_param("~maneuvers", []))
         if self.route_signal_contexts and self.manual:
             raise ValueError("Route-scoped camera mode cannot mix manual maneuvers")
@@ -517,6 +523,13 @@ class ManeuverFusionNode:
         self.entry_grant = None
         self.revoke_entry_permission()
 
+    def event_signal_permits(self, state, event):
+        # The user-designated fourth right turn always accepts its route GREEN,
+        # even if an older saved global right_on_green setting is false.
+        right_green = self.right_on_green or bool(event and event['direction'] == 'RIGHT'
+                            and event['id'] in self.stop_then_right_context_ids)
+        return bool(event and signal_permits(state, event['direction'], right_green))
+
     def route_release_available(self, event, now, ros_now):
         """Carry a confirmed green only while its mapped lamp leaves CAM4 view."""
         ticket = self.green_release
@@ -549,7 +562,7 @@ class ManeuverFusionNode:
                     return False
                 if signal_confidence_valid(confidence):
                     state, _ = directional_observation((obj,))
-                    if not signal_permits(state, event["direction"], self.right_on_green):
+                    if not self.event_signal_permits(state, event):
                         return False
         return True
 
@@ -704,8 +717,7 @@ class ManeuverFusionNode:
                 self.revoke_entry_permission()
                 continue
             allowed = bool(event["camera_line_confirmed"] and ready and route_valid
-                           and signal_permits(sample.value.state, event["direction"],
-                                              self.right_on_green))
+                           and self.event_signal_permits(sample.value.state, event))
             if not allowed:
                 self.revoke_entry_permission()
             self.core.observe_signal("GREEN" if allowed else "RED",
@@ -773,8 +785,7 @@ class ManeuverFusionNode:
                                          sample.stamp, sample.received, ros_now)
                 continue
             allowed = bool(chosen.valid and ready
-                           and route_valid and signal_permits(chosen.state, event["direction"],
-                                                              self.right_on_green))
+                           and route_valid and self.event_signal_permits(chosen.state, event))
             if not allowed:
                 if chosen.valid or chosen.reason not in ("no_match", "no_projected_targets"):
                     self.deny_entry_permission()
@@ -867,8 +878,7 @@ class ManeuverFusionNode:
             self.signal_observations.popleft()
             self.selection_stamp = observation.stamp
             self.selection = self.confirmation.update(selection, observation.stamp)
-            if not (self.selection.valid and signal_permits(
-                    self.selection.state, event["direction"], self.right_on_green)):
+            if not (self.selection.valid and self.event_signal_permits(self.selection.state, event)):
                 self.revoke_entry_permission()
         return self.selection
 
@@ -1217,7 +1227,7 @@ class ManeuverFusionNode:
                 if chosen.reason not in ('no_match', 'no_projected_targets'):
                     return False
                 continue
-            if signal_permits(chosen.state, event['direction'], self.right_on_green):
+            if self.event_signal_permits(chosen.state, event):
                 continue
             pose = min(self.pose_history, key=lambda p: abs(p.stamp-observation.stamp), default=None)
             if pose is None or abs(pose.stamp-observation.stamp) > .05:
@@ -1344,6 +1354,8 @@ class ManeuverFusionNode:
                          and finite(signal.value.confidence) and signal_confidence_valid(signal.value.confidence))
             permitted = bool(signal_ok and signal_permits(signal.value.state, direction, self.right_on_green))
             event = self.event
+            right_green_priority = False
+            right_policy_released = False
             committed = bool(event and event['committed'])
             if not committed:
                 committed = self.route_crossing_permission(event, ready, route_valid, now, ros_now)
@@ -1357,8 +1369,7 @@ class ManeuverFusionNode:
                 else:
                     signal_ok = self.unique_route_signal(
                         signal, self.route_objects_at(signal.stamp) if signal else None)
-                    permitted = bool(event and signal_ok and
-                                     signal_permits(signal.value.state, direction, self.right_on_green))
+                    permitted = bool(event and signal_ok and self.event_signal_permits(signal.value.state, event))
             elif not self.require_context and not committed:
                 if self.stopline_requires_detected_signal:
                     self.consume_sensor_stop_pair(line, signal, direction, now, ros_now)
@@ -1367,7 +1378,7 @@ class ManeuverFusionNode:
             if self.require_context and not committed:
                 chosen = self.selected_signal(objects, event, route_valid and not motion.fault)
                 signal_ok = chosen.valid
-                permitted = chosen.valid and signal_permits(chosen.state, direction, self.right_on_green)
+                permitted = chosen.valid and self.event_signal_permits(chosen.state, event)
 
             if event and event["kind"] == "lane_change":
                 # The PP lookahead is 4 + 0.35*v. Stop the rear axle before it
@@ -1409,7 +1420,7 @@ class ManeuverFusionNode:
                                                target_id=event["id"])
                     stop_right = bool(event and direction == "RIGHT"
                                       and event["id"] in self.stop_then_right_context_ids)
-                    if not stop_right and not committed:
+                    if not committed and not (stop_right and event.get('right_stop_released')):
                         self.consume_route_signals(event, ready, route_valid and not motion.fault,
                                                    now, ros_now)
                     if self.route_camera_calibrated and not committed:
@@ -1419,23 +1430,27 @@ class ManeuverFusionNode:
                         signal_ok = bool(objects is not None and (self.selection.valid or release_latched)
                                          and not self.signal_observations
                                          and -0.05 <= ros_now - self.selection_stamp <= self.signal_timeout)
-                        permitted = bool(signal_ok and (release_latched or signal_permits(
-                            self.selection.state, direction, self.right_on_green)))
+                        permitted = bool(signal_ok and (release_latched or
+                                         self.event_signal_permits(self.selection.state, event)))
                     if stop_right and not committed:
-                        self.signal_observations.clear()
                         gap = (event["start"] - self.progress - self.core.front_reference_offset_m
                                - self.core.hold_distance_m) if self.progress is not None else float("nan")
-                        permitted = stop_then_turn(event, speed, gap, now,
-                                                  route_valid and not motion.fault and ready
-                                                  and (not self.require_vehicle_speed or
-                                                       self.vehicle_speed_source.sample(ros_now, now) is not None))
-                        signal_ok = False  # This is a stop policy, not an observed green.
-                        self.selection = Selection("UNKNOWN", 0.0, False,
-                                                   None, "stop_then_right_released" if permitted
-                                                   else "stop_then_right_wait")
-                        self.selection_stamp = ros_now
-                        self.core.observe_signal("GREEN" if permitted else "RED", 1.0, True,
-                                                 ros_now, now, ros_now)
+                        # A fresh route-matched permitted light takes priority
+                        # on its first valid frame, without a stop/dwell.
+                        right_green_priority = bool(permitted and ready and route_valid and not motion.fault)
+                        if right_green_priority:
+                            event['right_entry_policy'] = 'green_priority'
+                        else:
+                            permitted = stop_then_turn(event, speed, gap, now,
+                                route_valid and not motion.fault and ready
+                                and (not self.require_vehicle_speed or
+                                     self.vehicle_speed_source.sample(ros_now, now) is not None),
+                                dwell=self.right_stop_dwell_sec)
+                            event['right_entry_policy'] = ('stop_then_right_released' if permitted
+                                                           else 'stop_then_right_wait')
+                            self.signal_observations.clear()
+                            self.core.observe_signal('GREEN' if permitted else 'RED', 1., True,
+                                                     ros_now, now, ros_now)
                     if not committed:
                         permitted = bool(permitted and event and
                                          (self.route_camera_calibrated or event["camera_line_confirmed"])
@@ -1443,6 +1458,7 @@ class ManeuverFusionNode:
                                          and not motion.fault and self.core.signal is not None
                                          and self.core.signal.value == "GREEN"
                                          and self.core.signal.fresh(ros_now, now, self.signal_timeout))
+                        right_policy_released = bool(stop_right and permitted)
                     if event and not committed and not permitted:
                         if self.signal_observations:
                             self.suspend_entry_permission()
@@ -1496,6 +1512,8 @@ class ManeuverFusionNode:
             # obstacle and upstream-command safety checks still apply below.
             decision = (Decision("NOMINAL", "junction_entered")
                         if committed and event and event["kind"] == "turn" else
+                        Decision('NOMINAL', 'green' if right_green_priority else 'stop_then_right_released')
+                        if right_policy_released else
                         self.core.update(now, ros_now, speed,
                                          permission_pending=signal_frame_pending))
             # A later junction may impose an APPROACH speed/brake overlay.
@@ -1548,7 +1566,8 @@ class ManeuverFusionNode:
             # original core mode so a speed limit cannot erase an entry ticket.
             decision = motion.constrain(decision)
             released_context_id = (event["id"] if self.route_camera_calibrated
-                                   and event and (committed or (permitted and current_green_released))
+                                   and event and (committed or right_policy_released
+                                                  or (permitted and current_green_released))
                                    else None)
             decision = self.constrain_route_speed(decision, speed, released_context_id)
             reasons = [motion.fault] if motion.fault else []
@@ -1619,7 +1638,7 @@ class ManeuverFusionNode:
                 self.green_release = None
             elif (self.route_camera_calibrated and event and not committed
                     and self.selection.valid and permitted and ready and route_valid
-                    and self.core._green_confirmed(now, ros_now)
+                    and (self.core._green_confirmed(now, ros_now) or right_green_priority)
                     and self.progress is not None
                     and 0 <= event["stop_s"] - self.progress <= self.green_release_start_distance_m
                     and self.progress <= self.crossing_s(event)):
@@ -1644,12 +1663,19 @@ class ManeuverFusionNode:
                                     decision.target_speed_kph, decision.distance_m)
             output = overlay(nominal, decision)
             requested_accel = output.accel
+            faster_right_release = bool(event and direction == 'RIGHT'
+                and event['id'] in self.stop_then_right_context_ids
+                and (committed or right_policy_released) and not reasons)
+            self.accel_limiter.rate = (max(self.default_accel_rise_rate, self.right_accel_rise_rate)
+                                      if faster_right_release else self.default_accel_rise_rate)
             output.accel = self.accel_limiter.limit(output.accel, output.brake, now, ros_now)
             self.output_pub.publish(output)
             route_signal_pixels = self.projected_route_heads(objects, event)
             permission_state = (self.selection.state if self.require_context or self.route_camera_calibrated
                                 else signal.value.state if signal else "UNKNOWN")
-            allowed_directions = sorted(signal_allowed_directions(permission_state, self.right_on_green)) if signal_ok else []
+            effective_right_green = self.right_on_green or bool(event and direction == 'RIGHT'
+                and event['id'] in self.stop_then_right_context_ids)
+            allowed_directions = sorted(signal_allowed_directions(permission_state, effective_right_green)) if signal_ok else []
             route_objects = (objects if self.route_camera_calibrated else
                              self.route_objects_at(signal.stamp) if signal and self.route_signal_contexts else None)
             if self.require_context or self.route_camera_calibrated:
@@ -1739,7 +1765,9 @@ class ManeuverFusionNode:
                 "selected_signal_id": self.selection.selected_id if self.require_context or self.route_camera_calibrated else None,
                 "selected_signal_state": self.selection.state if self.require_context or self.route_camera_calibrated else None,
                 "route_camera_calibrated": self.route_camera_calibrated,
-                "entry_policy": ("stop_then_right" if event and direction == "RIGHT"
+                "right_stop_dwell_sec": self.right_stop_dwell_sec,
+                "accel_rise_rate_per_sec": self.accel_limiter.rate,
+                "entry_policy": (event.get('right_entry_policy', 'stop_then_right') if event and direction == "RIGHT"
                                  and event["id"] in self.stop_then_right_context_ids else "camera_signal"),
                 "mapped_stopline_confirmed": bool(event and event.get("camera_line_confirmed")),
                 "stopline_match_tolerance_m": self.route_stopline_match_tolerance,

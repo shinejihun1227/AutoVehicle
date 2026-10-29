@@ -1,5 +1,9 @@
 # new_final_ws
 
+The current follow-up also authorises test/roundabout's fourth-junction green
+priority, shorter red-stop dwell and local launch slew, plus a six-file source
+transfer bundle. Keep other junction policies and global speed/PID unchanged.
+
 Current user-authorised follow-up (2026-10-30): modify test/roundabout only for
 the permitted junction entry/dropout lifecycle and exclusive >0.6 signal
 confidence floor. This supersedes the older new_final_ws-only scope below
