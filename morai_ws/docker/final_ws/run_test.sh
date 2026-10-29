@@ -218,6 +218,7 @@ case "$TEST_PROFILE" in
       "signal_config_file:=$SIGNAL_CONFIG_FILE"
       "lane_info_port:=$LANE_INFO_PORT" "yolo_port:=$YOLO_PORT"
       "enable_roundabout_mission:=true"
+      "enable_highway:=${HIGHWAY_ENABLED:-true}"
       "lidar_host_port:=$ROI_LIDAR_HOST_PORT" "lidar_port:=$ROI_LIDAR_PORT"
       "lidar_x_m:=$LIDAR_X_M" "lidar_y_m:=$LIDAR_Y_M"
       "lidar_yaw_deg:=$LIDAR_YAW_DEG"

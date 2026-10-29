@@ -9,7 +9,8 @@ import test_no_turn_signals as no_lamps
 class CurvatureSignalLaunchTest(unittest.TestCase):
     def setUp(self):
         self.root = ET.parse(fixtures.SOURCE / "bringup/morai_bringup/launch/final_ws_curvature_signal.launch").getroot()
-        self.fusion = self.root.find("node[@type='maneuver_fusion_node.py']")
+        # With enable_highway the fusion runs through purepursuit_mgeo's wrapper.
+        self.fusion = self.root.find("node[@name='curvature_signal_controller']")
 
     def param(self, element, name):
         return element.find("param[@name='%s']" % name).get("value")
@@ -19,7 +20,9 @@ class CurvatureSignalLaunchTest(unittest.TestCase):
         self.assertNotIn("stopline_controller.py", types)  # Must not veto a permitted left arrow.
         self.assertNotIn("adaptive_curvature_purepursuit_node.py", types)
         pp = self.root.find("node[@type='curvature_speed_purepursuit_node.py']")
-        self.assertEqual(self.param(pp, "command_topic"), "/control/ctrl_cmd")
+        # With enable_highway highway_command_mux forwards it to /control/ctrl_cmd.
+        self.assertEqual(self.param(pp, "command_topic"),
+                         "$(eval '/control/ctrl_cmd_main' if arg('enable_highway') else '/control/ctrl_cmd')")
         self.assertEqual(self.param(pp, "stopline_speed_cap_enabled"), "false")
         self.assertEqual(self.param(pp, "stopline_approach_speed_kph"), "$(arg stopline_approach_speed_kph)")
         self.assertEqual(self.param(self.fusion, "nominal_command_topic"), "/control/ctrl_cmd")

@@ -28,6 +28,12 @@ catkin_install_python(PROGRAMS
   scripts/record_route_landmarks.py
   scripts/lane_info_runner.py
   scripts/lane_info_semantic_adapter.py
+  scripts/highway_overtake_node.py
+  scripts/highway_overtake_escape4_node.py
+  scripts/curvature_pp_overtake_node.py
+  scripts/maneuver_fusion_overtake_node.py
+  scripts/highway_base_path_node.py
+  scripts/highway_command_mux_node.py
   DESTINATION ${CATKIN_PACKAGE_BIN_DESTINATION}
 )
 

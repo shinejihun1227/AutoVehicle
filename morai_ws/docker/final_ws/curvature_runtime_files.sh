@@ -19,6 +19,8 @@ curvature_runtime_files() (
       data/routes/2026_molit_comp_global_path.txt \
       data/routes/roundabout_circulating_path.txt \
       config/roundabout_v61_main.yaml \
+      src/control/purepursuit_mgeo/config/highway_overtake.yaml \
+      src/control/purepursuit_mgeo/config/highway_overtake_escape4.yaml \
       docker/final_ws/curvature_runtime_files.sh \
       docker/final_ws/install_curvature_signal.sh \
       docker/final_ws/run_test.sh \

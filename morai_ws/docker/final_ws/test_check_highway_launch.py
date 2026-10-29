@@ -31,6 +31,25 @@ class CurvatureLaunchValidationTest(unittest.TestCase):
         with self.assertRaises(AssertionError):
             check.validate_curvature_names(names, '\n'.join(names), roundabout_enabled=False)
 
+    def test_highway_nodes_are_required_when_enabled(self):
+        names = self.base_names() + sorted(check.ROUNDABOUT_REQUIRED) + sorted(check.HIGHWAY_NODES)
+        check.validate_curvature_names(names, '\n'.join(names), roundabout_enabled=True,
+                                       highway_enabled=True)
+        partial = [n for n in names if n != '/highway_command_mux']
+        with self.assertRaises(AssertionError):
+            check.validate_curvature_names(partial, '\n'.join(partial), roundabout_enabled=True,
+                                           highway_enabled=True)
+
+    def test_highway_keeps_the_lidar_without_the_roundabout(self):
+        names = self.base_names() + sorted(check.ROUNDABOUT_LIDAR_NODES) + sorted(check.HIGHWAY_NODES)
+        check.validate_curvature_names(names, '\n'.join(names), roundabout_enabled=False,
+                                       highway_enabled=True)
+
+    def test_highway_node_left_enabled_is_rejected(self):
+        names = self.base_names() + ['/highway_lane_strategy']
+        with self.assertRaises(AssertionError):
+            check.validate_curvature_names(names, '\n'.join(names), roundabout_enabled=False)
+
 
 if __name__ == '__main__':
     unittest.main()

@@ -24,6 +24,8 @@ IP는 Ubuntu `192.168.0.185`, MORAI `192.168.0.147` 기준입니다.
 
 고속도로 차선 변경·차로 유지·경로 복귀와 회전교차로 위치 설정은
 [통합 기능 안내](morai_ws/docs/HIGHWAY_LANE_CHANGE_INTEGRATION_20261005_KO.md)를 참고하세요.
+`final_ws_curvature_signal.launch`에 병합한 고속도로 escape4(`enable_highway`)는
+[escape4 병합 안내](morai_ws/docs/HIGHWAY_ESCAPE4_KO.md)를 참고하세요.
 
 카메라 포트는 다음으로 통일합니다.
 
