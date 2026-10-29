@@ -60,11 +60,17 @@ RUN source /opt/ros/noetic/setup.bash \
     && catkin_make -j2 -l2 -DPYTHON_EXECUTABLE=/opt/morai-venv/bin/python3 \
     && source devel/setup.bash \
     && python docker/final_ws/check_morai_messages.py \
-    && python -c 'import rospy, cv2, torch, torchvision, ultralytics; from morai_msgs.msg import CtrlCmd, GPSMessage, EgoVehicleStatus; from morai_perception_msgs.msg import StopLineDetection; from common.msg import ObjectInfoArray' \
-    && python docker/final_ws/run_regression.py \
-    && python docker/final_ws/check_highway_launch.py \
-    && python docker/final_ws/smoke_highway_model.py \
-    && python -m pip freeze > /opt/morai-build/pip-freeze.txt \
+    && python -c 'import rospy, cv2, torch, torchvision, ultralytics; from morai_msgs.msg import CtrlCmd, GPSMessage, EgoVehicleStatus; from morai_perception_msgs.msg import StopLineDetection; from common.msg import ObjectInfoArray'
+
+# Keep each required check visible as a separate build step. A failed check
+# must still fail the image build, rather than being hidden in a long chain.
+RUN source /opt/ros/noetic/setup.bash && source devel/setup.bash \
+    && python docker/final_ws/run_regression.py
+RUN source /opt/ros/noetic/setup.bash && source devel/setup.bash \
+    && python docker/final_ws/check_highway_launch.py
+RUN source /opt/ros/noetic/setup.bash && source devel/setup.bash \
+    && python docker/final_ws/smoke_highway_model.py
+RUN python -m pip freeze > /opt/morai-build/pip-freeze.txt \
     && dpkg-query -W > /opt/morai-build/apt-packages.txt \
     && printf '%s\n' "${CODE_REVISION}" > /opt/morai-build/code-revision.txt \
     && git -C src/common/morai_msgs rev-parse HEAD > /opt/morai-build/morai-msgs-revision.txt

@@ -20,13 +20,18 @@ case "$MODE" in
     [[ "$MSGS_SHA" =~ ^[0-9a-fA-F]{40}$ ]] || { echo 'Cannot resolve beta_drive SHA'; exit 1; }
     "${DOCKER[@]}" build -f "$SCRIPT_DIR/Dockerfile" -t "$IMAGE_NAME" \
       --build-arg "MORAI_MSGS_REF=$MSGS_SHA" --build-arg "TORCH_FLAVOR=$TORCH_FLAVOR" \
-      --build-arg "CODE_REVISION=$(git -C "$WS" rev-parse HEAD)" "$WS"
+      --build-arg "CODE_REVISION=$(git -C "$WS" rev-parse HEAD)" "$@" "$WS"
     ;;
   start)
     if "${DOCKER[@]}" container inspect "$CONTAINER_NAME" >/dev/null 2>&1; then
       "${DOCKER[@]}" start "$CONTAINER_NAME"
       echo 'Existing container started. Changed image/IP/GPU settings require a new CONTAINER_NAME.'
       exit 0
+    fi
+    if ! "${DOCKER[@]}" image inspect "$IMAGE_NAME" >/dev/null 2>&1; then
+      echo "Local image $IMAGE_NAME is missing. Run bash run_highway.sh build and resolve its FIRST error before start." >&2
+      echo 'This project image is built locally; docker login/pull will not fix a failed build.' >&2
+      exit 2
     fi
     GPU_ARGS=()
     if [[ "$TORCH_FLAVOR" == cu121 ]]; then GPU_ARGS=(--gpus all); fi

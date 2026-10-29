@@ -93,6 +93,29 @@ bash run_highway.sh start
 bash run_test.sh drive 2
 ```
 
+### 빌드 실패 뒤 image/container not found가 함께 나오는 경우
+
+`morai-ji-ujin:latest`는 이 PC에서 만드는 이미지입니다. 앞선 빌드가 실패하면
+그 뒤의 start/stop/install도 실패합니다. Docker Hub 로그인으로 해결하는 문제가 아닙니다.
+초기 통합본의 빌드 검사에 남아 있던 "profile 2에는 LiDAR 노드가 없어야 함" 조건을
+수정했습니다. 이제 회전교차로를 켰을 때 필요한 수신·추적·판단 노드를 확인하고,
+껐을 때 해당 노드가 빠지는지도 검사합니다. 빌드 검사는 생략하지 않습니다.
+
+먼저 업데이트하고 빌드만 다시 수행하세요. 패키지 다운로드 캐시는 재사용합니다.
+
+```bash
+set -o pipefail
+cd ~/AutoVehicle_ji_ujin_merge &&
+git pull --ff-only origin ji_ujin_merge &&
+cd morai_ws/docker/final_ws &&
+bash run_highway.sh build --progress=plain 2>&1 | tee "$HOME/ji-ujin-build.log"
+```
+
+성공하면 위의 start → stop → install → start → monitor/drive 순서로 진행합니다.
+실패하면 start를 반복하지 말고 `tail -n 160 "$HOME/ji-ujin-build.log"`의
+앞선 실제 오류를 확인합니다. 컴파일·회귀 검사·런치 검사·모델 검사 단계를
+각각 분리해 어떤 단계가 실패했는지도 빌드 출력에 표시합니다.
+
 ## 터널: GPS 음영에서 카메라 우선
 
 기존 EKF의 `IMU_COMPETITION_DEAD_RECKONING` 상태일 때만 작동합니다.

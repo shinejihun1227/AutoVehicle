@@ -25,10 +25,12 @@ def main():
             'ROI YOLO camera configuration mismatch', yolo, output)
         assert '/purepursuit_mgeo' not in names and '/curvature_speed_purepursuit' not in names
     print('HIGHWAY_LAUNCH_OK: ROS resolved all includes; control was not started')
-    for control in ('false', 'true'):
+    for control, roundabout in (('false', 'true'), ('true', 'true'),
+                               ('false', 'false'), ('true', 'false')):
         output=subprocess.check_output(['roslaunch','--nodes','morai_bringup',
             'final_ws_curvature_signal.launch','workspace_path:='+str(ws),
-            'enable_control:='+control],env=env,text=True)
+            'enable_control:='+control,
+            'enable_roundabout_mission:='+roundabout],env=env,text=True)
         names=output.splitlines()
         assert len(names)==len(set(names)), output
         for required in ('/curvature_speed_purepursuit','/curvature_signal_controller',
@@ -41,7 +43,15 @@ def main():
                          '/roi_sensor_safety_adapter','/intersection_environment',
                          '/pedestrian_crossing_fusion','/highway_environment_gate'):
             assert excluded not in names, (excluded,output)
-        assert not any('lidar' in name.lower() for name in names), output
+        mission_nodes = {'/morai_lidar_udp_source', '/roundabout_lidar_tracking',
+                         '/yujin_roundabout_gate'}
+        if roundabout == 'true':
+            assert mission_nodes.issubset(names), ('Roundabout pipeline missing', output)
+        else:
+            assert mission_nodes.isdisjoint(names), ('Disabled mission still running', output)
+        lidar_nodes = {name for name in names if 'lidar' in name.lower()}
+        assert lidar_nodes == (mission_nodes - {'/yujin_roundabout_gate'}
+                               if roundabout == 'true' else set()), output
     print('CURVATURE_SIGNAL_LAUNCH_OK: ROS resolved monitor/drive; control was not started')
 
 

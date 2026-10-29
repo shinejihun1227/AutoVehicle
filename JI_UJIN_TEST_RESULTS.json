@@ -65,5 +65,16 @@
   "total_tests": 713,
   "ros_build": false,
   "morai_driving": false,
-  "live_competition_packet_verified": false
+  "live_competition_packet_verified": false,
+  "build_fix_followup": {
+    "baseline_commit": "dbe9ce76e47febbfd39c5212fa4c2aa3e6e38076",
+    "reason": "Legacy profile-2 launch checker rejected the newly integrated LiDAR nodes.",
+    "suite": "test_new_final",
+    "tests": 30,
+    "exit_code": 0,
+    "includes_four_new_regressions": true,
+    "node_inventory_in_test": "mocked; actual roslaunch --nodes remains a required Docker build step",
+    "docker_build_verified_here": false,
+    "morai_driving_verified_here": false
+  }
 }
