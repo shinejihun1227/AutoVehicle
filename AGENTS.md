@@ -1,5 +1,10 @@
 # new_final_ws
 
+Latest authorised scope: add the prior a5a8f7c IMU/Competition GPS-blackout
+EKF prediction to test/roundabout, with its launch wiring. Do not add tunnel
+camera priority or new lane correction. The cumulative source-transfer list
+is now ten files; see 20261030_TUNNEL_IMU_FILES_KO.md.
+
 The current follow-up also authorises test/roundabout's fourth-junction green
 priority, shorter red-stop dwell and local launch slew, plus a six-file source
 transfer bundle. Keep other junction policies and global speed/PID unchanged.

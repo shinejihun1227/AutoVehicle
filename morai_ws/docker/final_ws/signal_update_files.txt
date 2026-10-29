@@ -4,3 +4,7 @@ morai_ws/src/detection/camera_perception/launch/camera_perception.launch
 morai_ws/src/detection/camera_perception/scripts/camera_object_detection_node.py
 morai_ws/src/detection/camera_perception/scripts/traffic_light_stop_node.py
 morai_ws/src/detection/camera_perception/src/camera_perception/traffic_signal.py
+morai_ws/src/localization/ekf_local_enu/scripts/ekf_local_enu_node.py
+morai_ws/src/localization/ekf_local_enu/launch/ekf_local_enu.launch
+morai_ws/src/bringup/morai_bringup/launch/morai_udp_ekf_purepursuit.launch
+morai_ws/src/bringup/morai_bringup/launch/final_ws_curvature_signal.launch

@@ -1,0 +1,71 @@
+{
+  "python38_syntax_errors": [],
+  "suites": [
+    {
+      "suite": "test_new_final",
+      "exit_code": 0,
+      "tests": 23
+    },
+    {
+      "suite": "src/localization/morai_udp_drive_bridge/test",
+      "exit_code": 0,
+      "tests": 20
+    },
+    {
+      "suite": "src/localization/morai_udp_bridge/test",
+      "exit_code": 0,
+      "tests": 6
+    },
+    {
+      "suite": "src/localization/gps_mgeo_converter/test",
+      "exit_code": 0,
+      "tests": 3
+    },
+    {
+      "suite": "src/experimental/curvature_speed_purepursuit/test",
+      "exit_code": 0,
+      "tests": 32
+    },
+    {
+      "suite": "src/control/stopline_control/test",
+      "exit_code": 0,
+      "tests": 59
+    },
+    {
+      "suite": "src/control/turn_signal_controller/test",
+      "exit_code": 0,
+      "tests": 241
+    },
+    {
+      "suite": "src/control/purepursuit_mgeo/test",
+      "exit_code": 0,
+      "tests": 91
+    },
+    {
+      "suite": "src/mission/mission_evaluator/test",
+      "exit_code": 0,
+      "tests": 66
+    }
+  ],
+  "total_tests": 541,
+  "ros_build": false,
+  "morai_driving": false,
+  "live_competition_packet_verified": false,
+  "branch": "test/roundabout",
+  "base_commit": "ef3d0e8",
+  "reused_implementation_commit": "a5a8f7c",
+  "scope": "IMU yaw/gyro plus signed Competition forward speed during GPS blackout; no tunnel camera priority or new lane correction.",
+  "previous_six_signal_runtime_files_preserved": true,
+  "cumulative_runtime_files": [
+    "morai_ws/src/control/turn_signal_controller/scripts/maneuver_fusion_node.py",
+    "morai_ws/src/control/turn_signal_controller/src/turn_signal_controller/signal_association.py",
+    "morai_ws/src/detection/camera_perception/launch/camera_perception.launch",
+    "morai_ws/src/detection/camera_perception/scripts/camera_object_detection_node.py",
+    "morai_ws/src/detection/camera_perception/scripts/traffic_light_stop_node.py",
+    "morai_ws/src/detection/camera_perception/src/camera_perception/traffic_signal.py",
+    "morai_ws/src/localization/ekf_local_enu/scripts/ekf_local_enu_node.py",
+    "morai_ws/src/localization/ekf_local_enu/launch/ekf_local_enu.launch",
+    "morai_ws/src/bringup/morai_bringup/launch/morai_udp_ekf_purepursuit.launch",
+    "morai_ws/src/bringup/morai_bringup/launch/final_ws_curvature_signal.launch"
+  ]
+}

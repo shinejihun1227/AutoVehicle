@@ -96,6 +96,7 @@
     <arg name="workspace_path" value="$(arg workspace_path)" />
     <arg name="path_file" value="$(arg path_file)" />
     <arg name="enable_purepursuit" value="false" />
+    <arg name="ekf_competition_speed_topic" value="$(arg vehicle_speed_topic)" />
     <arg name="enable_control" value="$(arg enable_control)" />
     <arg name="bind_ip" value="$(arg bind_ip)" />
     <arg name="morai_host_ip" value="$(arg morai_host_ip)" />

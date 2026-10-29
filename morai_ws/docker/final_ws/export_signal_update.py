@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Export the six runtime files for the cumulative test/roundabout signal fix."""
+"""Export ten runtime files: cumulative signals/right turn and IMU blackout."""
 import argparse
 import hashlib
 from pathlib import Path
@@ -10,8 +10,8 @@ import zipfile
 def export_bundle(repo, destination):
     scripts=repo/'morai_ws/docker/final_ws'
     files=(scripts/'signal_update_files.txt').read_text().splitlines()
-    if len(files)!=6 or len(set(files))!=6:
-        raise ValueError('Expected exactly six runtime files')
+    if len(files)!=10 or len(set(files))!=10:
+        raise ValueError('Expected exactly ten runtime files')
     payload={}
     for file in files:
         if not file.startswith('morai_ws/src/') or '..' in Path(file).parts:
@@ -19,7 +19,7 @@ def export_bundle(repo, destination):
         payload[file]=(repo/file).read_bytes().replace(b'\r\n',b'\n')
     payload['apply_signal_update.sh']=(scripts/'apply_signal_update.sh').read_bytes().replace(b'\r\n',b'\n')
     payload['signal_update_files.txt']=('\n'.join(files)+'\n').encode()
-    payload['README_KO.md']=(repo/'morai_ws/docs/20261030_SIGNAL_TRANSFER_RIGHT_KO.md').read_bytes().replace(b'\r\n',b'\n')
+    payload['README_KO.md']=(repo/'morai_ws/docs/20261030_TUNNEL_IMU_FILES_KO.md').read_bytes().replace(b'\r\n',b'\n')
     payload['REVISION.txt']=(subprocess.check_output(['git','-C',str(repo),'rev-parse','HEAD'],text=True).strip()+'\n').encode()
     payload['SHA256SUMS']=''.join(hashlib.sha256(data).hexdigest()+'  '+name+'\n'
                                 for name,data in sorted(payload.items())).encode()

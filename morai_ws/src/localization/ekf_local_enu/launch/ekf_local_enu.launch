@@ -1,6 +1,7 @@
 <launch>
   <arg name="gps_topic" default="/localization/gps" />
   <arg name="imu_topic" default="/Imu" />
+  <arg name="competition_speed_topic" default="" />
   <arg name="default_gps_variance_m2" default="1.0" />
   <arg name="default_yaw_std_deg" default="8.0" />
   <arg name="gyro_noise_std_rad_s" default="0.08" />
@@ -21,6 +22,7 @@
         output="screen">
     <param name="gps_topic" value="$(arg gps_topic)" />
     <param name="imu_topic" value="$(arg imu_topic)" />
+    <param name="competition_speed_topic" value="$(arg competition_speed_topic)" />
     <param name="odom_topic" value="/localization/odometry" />
     <param name="pose_topic" value="/localization/pose" />
     <param name="map_frame" value="map" />

@@ -1,5 +1,7 @@
 # new_final_ws 회전교차로 V6.1 통합
 
+GPS 음영 후속 수정·누적 교체 목록: [IMU/Competition 예측과 실행 파일 10개](20261030_TUNNEL_IMU_FILES_KO.md).
+
 `test/roundabout` 신호 제어 후속 수정: [교차로 진입 후 주행 유지·신뢰도 0.6 초과](20261030_SIGNAL_ENTRY_RELEASE_KO.md).
 추가 수정·다른 PC 파일 적용: [4번째 초록불 우회전 우선·빠른 정차 후 출발·덮어쓸 6개 파일](20261030_SIGNAL_TRANSFER_RIGHT_KO.md).
 

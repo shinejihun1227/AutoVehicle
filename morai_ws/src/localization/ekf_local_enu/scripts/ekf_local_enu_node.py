@@ -11,6 +11,8 @@ GPS는 /localization/gps(nav_msgs/Odometry), IMU는 /Imu(sensor_msgs/Imu)를
 from __future__ import annotations
 
 import math
+import time
+import json
 from typing import Optional
 
 import numpy as np
@@ -33,6 +35,12 @@ class LocalEnuEkf:
 
         self.gps_topic = rospy.get_param("~gps_topic", "/localization/gps")
         self.imu_topic = rospy.get_param("~imu_topic", "/Imu")
+        self.competition_speed_topic = str(rospy.get_param("~competition_speed_topic", ""))
+        self.speed_sample = None
+        self.speed_timeout = 0.5
+        self.last_changing_gps = None
+        self.last_changing_gps_stamp = None
+        self.gps_frozen = False
         self.odom_topic = rospy.get_param("~odom_topic", "/localization/odometry")
         self.pose_topic = rospy.get_param("~pose_topic", "/localization/pose")
         self.map_frame = rospy.get_param("~map_frame", "map")
@@ -77,6 +85,7 @@ class LocalEnuEkf:
         self.covariance = np.diag([4.0, 4.0, 0.5, 4.0, 0.05, 0.5]).astype(float)
         self.initialized = False
         self.last_imu_stamp: Optional[float] = None
+        self.last_valid_imu_stamp = None
         self.last_gps_stamp: Optional[float] = None
         self.latest_z = 0.0
         self.latest_imu_yaw: Optional[float] = None
@@ -87,6 +96,14 @@ class LocalEnuEkf:
 
         self.gps_sub = rospy.Subscriber(self.gps_topic, Odometry, self.gps_callback, queue_size=20)
         self.imu_sub = rospy.Subscriber(self.imu_topic, Imu, self.imu_callback, queue_size=50)
+        self.speed_sub = self.estimator_status_pub = None
+        if self.competition_speed_topic:
+            from morai_msgs.msg import EgoVehicleStatus
+            from std_msgs.msg import String
+            self.status_type = String
+            self.speed_sub = rospy.Subscriber(self.competition_speed_topic, EgoVehicleStatus,
+                                              self.speed_callback, queue_size=20)
+            self.estimator_status_pub = rospy.Publisher('/localization/estimator_status', String, queue_size=1)
         self.quality_sub = None
         if self.use_sensor_quality_gate:
             self.quality_sub = rospy.Subscriber(
@@ -108,6 +125,29 @@ class LocalEnuEkf:
             self.base_frame,
             self.use_imu_orientation,
         )
+
+    def speed_callback(self, message) -> None:
+        # Internal bridge contract: signed Competition velocity.x, already m/s.
+        # No simulator pose/heading, lateral velocity or acceleration is read.
+        try:
+            speed = float(message.velocity.x)
+            stamp = message.header.stamp.to_sec()
+            now = rospy.get_time()
+            if (not math.isfinite(speed) or abs(speed) > 80.0 or not math.isfinite(stamp)
+                    or not -0.05 <= now - stamp <= self.speed_timeout):
+                raise ValueError('invalid Competition speed')
+            self.speed_sample = (speed, stamp, time.monotonic())
+        except (AttributeError, TypeError, ValueError):
+            self.speed_sample = None
+
+    def current_speed(self, stamp):
+        if self.speed_sample is None:
+            return None
+        speed, source, received = self.speed_sample
+        if (-0.05 <= stamp - source <= self.speed_timeout
+                and 0 <= time.monotonic() - received <= self.speed_timeout):
+            return speed
+        return None
 
     def quality_callback(self, message: SensorQuality) -> None:
         self.latest_quality = message
@@ -149,10 +189,21 @@ class LocalEnuEkf:
             rospy.logwarn_throttle(5.0, "IMU dt가 비정상이라 예측을 건너뛴다: %.6f", dt)
             return
 
+        speed = self.current_speed(stamp) if self.competition_speed_topic else None
+        if self.competition_speed_topic and speed is None:
+            rospy.logwarn_throttle(2.0, 'EKF waits for fresh Competition speed; pose not refreshed')
+            return
+        gyro = float(msg.angular_velocity.z)
+        accel = float(msg.linear_acceleration.x)
+        if not math.isfinite(gyro) or (speed is None and not math.isfinite(accel)):
+            return
+
+        self.last_valid_imu_stamp = stamp
         self.predict(
-            gyro_z=float(msg.angular_velocity.z),
-            accel_x=float(msg.linear_acceleration.x),
+            gyro_z=gyro,
+            accel_x=accel if speed is None else 0.0,
             dt=dt,
+            measured_speed=speed,
         )
 
         if self.use_imu_orientation and self.latest_imu_yaw is not None:
@@ -164,13 +215,36 @@ class LocalEnuEkf:
         stamp = stamp_seconds(msg.header.stamp)
         x = float(msg.pose.pose.position.x)
         y = float(msg.pose.pose.position.y)
-        self.latest_z = float(msg.pose.pose.position.z)
+        measured_z = float(msg.pose.pose.position.z)
 
         gps_vx = float(msg.twist.twist.linear.x)
         gps_vy = float(msg.twist.twist.linear.y)
         gps_speed = math.hypot(gps_vx, gps_vy)
+        if not all(math.isfinite(v) for v in (x, y, measured_z, gps_vx, gps_vy)):
+            return
+        if self.competition_speed_topic and self.initialized:
+            # Never freshen an old pose solely because a GPS packet arrived.
+            if (self.last_valid_imu_stamp is None or not -0.05 <= stamp - self.last_valid_imu_stamp <= 0.5
+                    or self.current_speed(stamp) is None):
+                return
+            changed = (self.last_changing_gps is None or
+                       math.hypot(x-self.last_changing_gps[0], y-self.last_changing_gps[1]) > 0.03)
+            if changed:
+                self.last_changing_gps = (x, y)
+                self.last_changing_gps_stamp = stamp
+            speed = self.current_speed(stamp)
+            self.gps_frozen = bool(abs(speed) > 1.0 and self.last_changing_gps_stamp is not None
+                                   and stamp-self.last_changing_gps_stamp > 0.5)
+            if self.gps_frozen:
+                return
+            if self.last_accepted_gps_position is not None:
+                elapsed = max(0., stamp-self.last_accepted_gps_stamp)
+                distance = math.hypot(x-self.last_accepted_gps_position[0], y-self.last_accepted_gps_position[1])
+                if distance > 10.0 + 60.0*elapsed:
+                    return
 
         if not self.initialized:
+            self.latest_z = measured_z
             self.state[0, 0] = x
             self.state[1, 0] = y
             if self.latest_imu_yaw is not None:
@@ -232,6 +306,7 @@ class LocalEnuEkf:
         if variance_y <= 0.0:
             variance_y = self.default_gps_variance
         self.update_position(x, y, variance_x, variance_y)
+        self.latest_z = measured_z
         self.last_accepted_gps_position = (x, y)
         self.last_accepted_gps_stamp = stamp
         self.publish(stamp)
@@ -253,10 +328,16 @@ class LocalEnuEkf:
             return distance <= self.gps_jump_gate_m
         return distance <= self.gps_jump_gate_m and distance / dt <= self.gps_speed_gate_mps
 
-    def predict(self, gyro_z: float, accel_x: float, dt: float) -> None:
+    def predict(self, gyro_z: float, accel_x: float, dt: float, measured_speed=None) -> None:
         x, y, yaw, velocity, gyro_bias, accel_bias = self.state[:, 0]
         yaw_rate = gyro_z - gyro_bias
         forward_accel = accel_x - accel_bias
+        if measured_speed is not None:
+            velocity = measured_speed
+            forward_accel = 0.0
+            self.covariance[3, :] = 0.0
+            self.covariance[:, 3] = 0.0
+            self.covariance[3, 3] = 0.04
 
         self.state[0, 0] = x + velocity * math.cos(yaw) * dt + 0.5 * forward_accel * math.cos(yaw) * dt * dt
         self.state[1, 0] = y + velocity * math.sin(yaw) * dt + 0.5 * forward_accel * math.sin(yaw) * dt * dt
@@ -269,7 +350,7 @@ class LocalEnuEkf:
         f[1, 2] = velocity * math.cos(yaw) * dt
         f[1, 3] = math.sin(yaw) * dt
         f[2, 4] = -dt
-        f[3, 5] = -dt
+        f[3, 5] = -dt if measured_speed is None else 0.0
 
         q = np.diag([
             0.02 * dt,
@@ -328,6 +409,15 @@ class LocalEnuEkf:
         odom.pose.covariance[7] = self.covariance[1, 1]
         odom.pose.covariance[35] = self.covariance[2, 2]
         self.odom_pub.publish(odom)
+        if self.estimator_status_pub is not None:
+            age = (stamp_seconds_value-self.last_accepted_gps_stamp
+                   if self.last_accepted_gps_stamp is not None else None)
+            mode = ('IMU_COMPETITION_DEAD_RECKONING' if age is None or age > 0.5
+                    else 'GPS_IMU_COMPETITION')
+            self.estimator_status_pub.publish(self.status_type(data=json.dumps(dict(
+                mode=mode, gps_age_sec=age, gps_frozen=self.gps_frozen,
+                speed_mps=self.current_speed(stamp_seconds_value),
+                position_std_m=math.sqrt(max(self.covariance[0, 0], self.covariance[1, 1]))))))
 
         pose = PoseWithCovarianceStamped()
         pose.header = odom.header

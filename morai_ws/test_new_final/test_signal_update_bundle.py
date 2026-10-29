@@ -25,7 +25,7 @@ class SignalUpdateBundleTest(unittest.TestCase):
         self.bundle=self.root/'bundle'
         with zipfile.ZipFile(archive) as z:
             paths=[n for n in z.namelist() if n.startswith('morai_ws/')]
-            self.assertEqual(len(paths),6)
+            self.assertEqual(len(paths),10)
             z.extractall(self.bundle)
         self.files=(self.bundle/'signal_update_files.txt').read_text().splitlines()
         self.target=self.root/'target';self.target.mkdir()
@@ -41,7 +41,7 @@ class SignalUpdateBundleTest(unittest.TestCase):
     def apply(self):
         return subprocess.run([self.bash,str(self.bundle/'apply_signal_update.sh'),str(self.target)],capture_output=True)
 
-    def test_updates_exactly_six_sources_backs_up_and_preserves_env(self):
+    def test_updates_exactly_ten_sources_backs_up_and_preserves_env(self):
         result=self.apply();self.assertEqual(result.returncode,0,result.stderr)
         backups=list((self.target/'morai_ws/test-results').glob('signal-backup.*'))
         self.assertEqual(len(backups),1)

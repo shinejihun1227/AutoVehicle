@@ -13,7 +13,7 @@ TARGET_DIR="$(cd -- "$1" && pwd -P)"
 cd -- "$BUNDLE_DIR"
 sha256sum --check SHA256SUMS
 mapfile -t FILES < signal_update_files.txt
-[[ ${#FILES[@]} == 6 ]] || { echo 'Unexpected update file list' >&2; exit 2; }
+[[ ${#FILES[@]} == 10 ]] || { echo 'Unexpected update file list' >&2; exit 2; }
 for file in "${FILES[@]}"; do
   [[ "$file" == morai_ws/src/* && "$file" != *..* && -f "$TARGET_DIR/$file" ]] || {
     echo "Missing/unexpected target: $file" >&2; exit 2;
@@ -29,5 +29,5 @@ for file in "${FILES[@]}"; do
   cp -p -- "$TARGET_DIR/$file" "$BACKUP_DIR/$file"
 done
 for file in "${FILES[@]}"; do cp -- "$BUNDLE_DIR/$file" "$TARGET_DIR/$file"; done
-echo "Updated six host source files. Backup: $BACKUP_DIR"
+echo "Updated ten host source files. Backup: $BACKUP_DIR"
 echo 'Stop the driving launch, then stop the container and run install_curvature_signal.sh before restarting.'
