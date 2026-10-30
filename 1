@@ -1,0 +1,24 @@
+1. Ubuntu 호스트 터미널 — Docker 접속
+
+sudo docker start morai-highway-gpu
+sudo docker exec -it morai-highway-gpu bash
+
+2. Docker 내부 터미널 — 작업 폴더 이동
+cd /root/morai_completion_full
+
+5. Docker 내부 터미널 — 주행 실행
+
+cd /root/morai_completion_full
+
+UBUNTU_IP=192.168.0.10 \
+MORAI_IP=192.168.0.1 \
+bash RUN.sh \
+  bind_ip:=0.0.0.0 \
+  ego_status_port:=9099 \
+  control_remote_port:=9093 \
+  control_source_port:=9094 \
+  max_speed_kph:=20.0 \
+  stopline_approach_speed_kph:=10.0 \
+  highway_cruise_kph:=54.0 \
+  highway_max_speed_kph:=79.2 \
+  stopline_hold_distance_m:=10.0
