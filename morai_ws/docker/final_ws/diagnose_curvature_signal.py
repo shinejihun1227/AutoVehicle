@@ -64,7 +64,7 @@ def summarize(kind, msg, ros_now):
         data = json.loads(msg.data)
         keys = ('enabled', 'active', 'reason', 'correction_rad', 'quality',
                 'confidence', 'stable_frames', 'offset_m', 'heading_error_rad',
-                'source_age_sec', 'source_topic')
+                'source_age_sec', 'source_topic', 'observation_window_m')
         return {key: data[key] for key in keys if key in data}
     if kind == 'lane_info':
         data = json.loads(msg.data)

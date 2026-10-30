@@ -1,6 +1,7 @@
 """Real speed planning/PI callbacks with only ROS messages and time replaced."""
 import importlib.util
 import math
+import json
 from pathlib import Path
 import sys
 from types import SimpleNamespace as NS
@@ -25,6 +26,25 @@ class Message:
 
 
 class StartupTest(unittest.TestCase):
+    def test_short_lane_flows_through_actual_callback_and_control(self):
+        self.params.update({'~enable_lane_centering':True, '~lane_centering_min_frames':3,
+                            '~lane_centering_weight':.55})
+        self.node=self.module.CurvatureSpeedPurePursuitNode()
+        for i in range(6):
+            self.tick(x=10.,speed=21/3.6)
+            info=dict(timestamp=self.now,frame_id='base_link',lane_valid=True,center_source='both',
+                      coordinate_convention=dict(x='forward_m',y='left_m'),lane_width_m=3.3,
+                      centerline_points=[[4.,-.3],[10.,-.3]])
+            for side,sign in (('left',1),('right',-1)):
+                info[side+'_lane']=dict(detected=True,from_guide=False,coasted=False,
+                    confidence=.9,n_points=40,x_range_m=[4.,10.])
+                info[side+'_boundary_points']=[[4.,-.3+sign*1.65],[10.,-.3+sign*1.65]]
+            self.node.lane_info_callback(Message(json.dumps(info)))
+            steering,correction,active=self.node.lane_centered_steering(0.,21/3.6,.05)
+        self.assertTrue(active)
+        self.assertLess(correction,0.)
+        self.assertEqual(self.node.last_lane_window,(5.,10.))
+
     def setUp(self):
         self.now = 100.
         self.params = {"~max_speed_kph": 30., "~initial_speed_kph": 0., "~publish_command": True}

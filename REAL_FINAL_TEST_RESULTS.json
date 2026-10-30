@@ -1,0 +1,29 @@
+{
+  "branch": "real_final",
+  "base_repository": "whddbs3061/car",
+  "base_branch": "test/roundabout-highway",
+  "base_commit": "4259fc184149bc9b3c53f6b929e8a21754febeee",
+  "unique_suite_counts": {
+    "test_new_final": 28,
+    "src/localization/morai_udp_drive_bridge/test": 20,
+    "src/localization/morai_udp_bridge/test": 6,
+    "src/localization/gps_mgeo_converter/test": 3,
+    "src/experimental/curvature_speed_purepursuit/test": 33,
+    "src/control/stopline_control/test": 59,
+    "src/control/turn_signal_controller/test": 241,
+    "src/control/purepursuit_mgeo/test": 102,
+    "src/mission/mission_evaluator/test": 66,
+    "src/detection/lidar_perception/test": 50,
+    "src/detection/camera_perception/test": 94,
+    "src/experimental/stability_stack/test": 41
+  },
+  "total_unique_tests": 743,
+  "all_offline_tests_passed": true,
+  "python38_source_syntax": true,
+  "shell_syntax": true,
+  "ros_catkin_build": false,
+  "docker_build": false,
+  "morai_driving": false,
+  "live_competition_forwarder_verified": false,
+  "limits": "Synthetic bicycle-model convergence and planned speeds are not measured MORAI performance."
+}

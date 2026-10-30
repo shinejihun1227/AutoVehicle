@@ -46,17 +46,44 @@ def _at_x(points, x):
     return None
 
 
-def lane_measurement(info):
+def lane_window(info):
+    """Prefer 7/14 m; accept observed 5/10 or 4/8 m through tighter bends.
+
+    Never extend a boundary beyond either its observed span or its polyline.
+    The chosen span must also be used for route compensation and feedback.
+    """
+    if isinstance(info, dict):
+        for near, far in ((7.0, 14.0), (5.0, 10.0), (4.0, 8.0)):
+            supported = True
+            for side in ('left', 'right'):
+                meta = info.get(side + '_lane')
+                limits = meta.get('x_range_m') if isinstance(meta, dict) else None
+                points = _polyline(info.get(side + '_boundary_points'))
+                if (not isinstance(limits, (tuple, list)) or len(limits) != 2
+                        or not all(_finite(v) for v in limits)
+                        or not limits[0] <= near < far <= limits[1]
+                        or points is None or points[0][0] > near or points[-1][0] < far):
+                    supported = False
+                    break
+            center = _polyline(info.get('centerline_points'))
+            if supported and center and center[0][0] <= near < far <= center[-1][0]:
+                return near, far
+    return _NEAR_M, _FAR_M  # Quality validation will explain missing geometry.
+
+
+def lane_measurement(info, near_m=_NEAR_M, far_m=_FAR_M):
     """Return the LaneDetection convention: -y(7), atan2(y(14)-y(7), 7)."""
     if not isinstance(info, dict):
         return None
     points = _polyline(info.get('centerline_points'))
     if points is None:
         return None
-    near, far = _at_x(points, _NEAR_M), _at_x(points, _FAR_M)
+    if not all(_finite(v) for v in (near_m, far_m)) or not 0 < near_m < far_m:
+        return None
+    near, far = _at_x(points, near_m), _at_x(points, far_m)
     if near is None or far is None:
         return None
-    values = -near[0], math.atan2(far[0] - near[0], _FAR_M - _NEAR_M)
+    values = -near[0], math.atan2(far[0] - near[0], far_m - near_m)
     return values if all(_finite(v) for v in values) else None
 
 
@@ -67,7 +94,7 @@ def _xy(point):
         return float(point[0]), float(point[1])
 
 
-def ideal_lane_reference(points, s_values, progress_s):
+def ideal_lane_reference(points, s_values, progress_s, near_m=_NEAR_M, far_m=_FAR_M):
     """Expected y at body x=7/14 m from the route-center tangent frame.
 
     Arc lengths are the planner's strictly increasing cumulative XY lengths.
@@ -76,7 +103,8 @@ def ideal_lane_reference(points, s_values, progress_s):
     disable the aid instead of extrapolating across an intersection.
     """
     try:
-        if (len(points) != len(s_values) or len(points) < 2
+        if (not all(_finite(v) for v in (near_m, far_m)) or not 0 < near_m < far_m <= 20
+                or len(points) != len(s_values) or len(points) < 2
                 or not _finite(progress_s)
                 or any(not _finite(s) for s in s_values)
                 or any(b <= a for a, b in zip(s_values, s_values[1:]))
@@ -114,7 +142,7 @@ def ideal_lane_reference(points, s_values, progress_s):
                 continue
             if current[0] <= previous[0] + 1e-8:
                 return None
-            for target in (_NEAR_M, _FAR_M)[len(values):]:
+            for target in (near_m, far_m)[len(values):]:
                 if previous[0] <= target <= current[0]:
                     ratio = (target - previous[0]) / (current[0] - previous[0])
                     values.append(previous[1] + ratio * (current[1] - previous[1]))
@@ -126,14 +154,15 @@ def ideal_lane_reference(points, s_values, progress_s):
     return None
 
 
-def lane_quality(info, min_confidence):
+def lane_quality(info, min_confidence, near_m=_NEAR_M, far_m=_FAR_M):
     """Require two observed paint boundaries covering the same 7--14 m span.
 
     Width is measured approximately normal to the local lane tangent. Raw
     left/right y separation grows in a bend and is not the physical width.
     A guide substitution or a coast-only prediction never enables feedback.
     """
-    if not _finite(min_confidence) or not 0.0 <= min_confidence <= 1.0:
+    if (not _finite(min_confidence) or not 0.0 <= min_confidence <= 1.0
+            or not all(_finite(v) for v in (near_m, far_m)) or not 0 < near_m < far_m <= 20):
         raise ValueError('min_confidence must be finite and within [0, 1]')
     minimum = 0.0
 
@@ -170,10 +199,10 @@ def lane_quality(info, min_confidence):
         if (not _finite(count) or count < 2
                 or not isinstance(limits, (list, tuple)) or len(limits) != 2
                 or not all(_finite(v) for v in limits)
-                or not limits[0] <= _NEAR_M < _FAR_M <= limits[1]):
+                or not limits[0] <= near_m < far_m <= limits[1]):
             return reject(side + '_short_observation')
         points = _polyline(info.get(side + '_boundary_points'))
-        if points is None or points[0][0] > _NEAR_M or points[-1][0] < _FAR_M:
+        if points is None or points[0][0] > near_m or points[-1][0] < far_m:
             return reject(side + '_invalid_geometry')
         boundaries.append(points)
     center = _polyline(info.get('centerline_points'))
@@ -182,9 +211,10 @@ def lane_quality(info, min_confidence):
         return reject('invalid_center_geometry')
     # Include source vertices as well as half-metre samples to catch short
     # discontinuities and nonphysical boundary crossings between endpoints.
-    xs = {_NEAR_M + 0.5 * i for i in range(15)}
+    xs = {near_m + 0.5 * i for i in range(int((far_m-near_m)/0.5)+1)}
+    xs.add(far_m)
     xs.update(p[0] for line in boundaries + [center] for p in line
-              if _NEAR_M <= p[0] <= _FAR_M)
+              if near_m <= p[0] <= far_m)
     widths = []
     for x in sorted(xs):
         left, right, middle = (_at_x(line, x) for line in boundaries + [center])
@@ -263,10 +293,11 @@ class LaneCenteringAssist:
             self._invalidate(reason)
 
     def observe(self, lateral, heading, reference_tuple, confidence, quality,
-                stamp, received):
+                stamp, received, near_m=_NEAR_M, far_m=_FAR_M):
         with self._lock:
             if (not all(_finite(v) for v in
-                        (lateral, heading, confidence, quality, stamp, received))
+                        (lateral, heading, confidence, quality, stamp, received, near_m, far_m))
+                    or not 0 < near_m < far_m <= 20
                     or stamp <= 0 or received < 0
                     or not 0 <= confidence <= 1 or not 0 < quality <= 1
                     or not isinstance(reference_tuple, (tuple, list))
@@ -287,10 +318,10 @@ class LaneCenteringAssist:
                 self._invalidate('lane_observation_gap')
             self._last_stamp, self._last_received = stamp, received
             y7 = -lateral
-            y14 = y7 + 7.0 * math.tan(heading)
+            y14 = y7 + (far_m-near_m) * math.tan(heading)
             d7, d14 = y7 - reference_tuple[0], y14 - reference_tuple[1]
-            offset = 2.0 * d7 - d14
-            error = math.atan2(d14 - d7, 7.0)
+            offset = (far_m*d7 - near_m*d14) / (far_m-near_m)
+            error = math.atan2(d14 - d7, far_m-near_m)
             if (not all(_finite(v) for v in (offset, error))
                     or abs(offset) > 1.2 or abs(error) > 0.25):
                 self._invalidate('lane_route_disagreement')

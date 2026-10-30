@@ -1,0 +1,50 @@
+{
+  "repository": "https://github.com/shinejihun1227/AutoVehicle",
+  "branch": "real_final",
+  "base": {
+    "repository": "https://github.com/whddbs3061/car",
+    "branch": "test/roundabout-highway",
+    "commit": "4259fc184149bc9b3c53f6b929e8a21754febeee"
+  },
+  "cumulative_update": {
+    "source_repository": "shinejihun1227/AutoVehicle",
+    "source_commit": "63bf314",
+    "files": [
+      "morai_ws/src/control/turn_signal_controller/scripts/maneuver_fusion_node.py",
+      "morai_ws/src/control/turn_signal_controller/src/turn_signal_controller/signal_association.py",
+      "morai_ws/src/detection/camera_perception/launch/camera_perception.launch",
+      "morai_ws/src/detection/camera_perception/scripts/camera_object_detection_node.py",
+      "morai_ws/src/detection/camera_perception/scripts/traffic_light_stop_node.py",
+      "morai_ws/src/detection/camera_perception/src/camera_perception/traffic_signal.py",
+      "morai_ws/src/localization/ekf_local_enu/scripts/ekf_local_enu_node.py",
+      "morai_ws/src/localization/ekf_local_enu/launch/ekf_local_enu.launch",
+      "morai_ws/src/bringup/morai_bringup/launch/morai_udp_ekf_purepursuit.launch",
+      "morai_ws/src/bringup/morai_bringup/launch/final_ws_curvature_signal.launch"
+    ],
+    "highway_launch_preserved": true
+  },
+  "normal_tuning": {
+    "max_speed_kph": 42,
+    "lateral_accel_limit_mps2": 2.25,
+    "reference_lateral_accel_mps2": 1,
+    "example_curve_target_kph": [
+      14,
+      21
+    ]
+  },
+  "highway_tuning": {
+    "cruise_kph": 61,
+    "max_kph": 79.2,
+    "end_kph": 28
+  },
+  "external_vehicle_status": "Competition only; Ubuntu port remains 9081 unless the user changes the forwarding destination",
+  "network_manual": {
+    "lan_ips": {
+      "ubuntu": "192.168.0.10",
+      "windows": "192.168.0.1"
+    },
+    "reference_last_checked": "2026-10-27",
+    "live_page_recheck": "unavailable",
+    "ubuntu_status_forward_port": "confirm with organiser; do not infer from Windows loopback 9099"
+  }
+}

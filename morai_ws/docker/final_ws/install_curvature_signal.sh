@@ -50,8 +50,13 @@ for file in "${FILES[@]}"; do
   mkdir -p "$STAGE/payload/$(dirname -- "$file")"
   cp -p -- "$WS/$file" "$STAGE/payload/$file"
 done
+# These are public runtime sources/models, never local env files. Restrictive
+# ZIP permissions otherwise survive cp -p and sudo docker cp readback, making
+# the host checksum verifier unable to read the installed files.
+find "$STAGE/payload" -type d -exec chmod 755 {} +
+find "$STAGE/payload" -type f -exec chmod 644 {} +
 # Source executables can run directly even before catkin generates wrappers.
-find "$STAGE/payload/src" -path '*/scripts/*.py' -type f -exec chmod +x {} +
+find "$STAGE/payload/src" -path '*/scripts/*.py' -type f -exec chmod 755 {} +
 curvature_runtime_manifest "$WS" > "$STAGE/manifest"
 cp -- "$STAGE/manifest" "$STAGE/payload/$MANIFEST"
 printf 'state=pending\nrevision=%s\n' "$REVISION" > "$STAGE/state"

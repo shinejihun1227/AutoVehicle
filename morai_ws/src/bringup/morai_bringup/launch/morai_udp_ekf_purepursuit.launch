@@ -42,6 +42,7 @@
   <arg name="max_steering_rad" default="0.6981317008" />
   <arg name="steering_sign" default="1.0" />
   <arg name="ekf_gps_topic" default="/localization/gps" />
+  <arg name="ekf_competition_speed_topic" default="" />
   <arg name="ekf_imu_topic" default="/Imu" />
   <arg name="ekf_default_gps_variance_m2" default="1.0" />
   <arg name="ekf_gyro_noise_std_rad_s" default="0.08" />
@@ -101,6 +102,7 @@
   <!-- 5. GPS + IMU -> MGeo map/base_link EKF -->
   <include file="$(find ekf_local_enu)/launch/ekf_local_enu.launch">
     <arg name="gps_topic" value="$(arg ekf_gps_topic)" />
+    <arg name="competition_speed_topic" value="$(arg ekf_competition_speed_topic)" />
     <arg name="imu_topic" value="$(arg ekf_imu_topic)" />
     <arg name="default_gps_variance_m2" value="$(arg ekf_default_gps_variance_m2)" />
     <arg name="gyro_noise_std_rad_s" value="$(arg ekf_gyro_noise_std_rad_s)" />

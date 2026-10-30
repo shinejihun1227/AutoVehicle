@@ -4,7 +4,7 @@ set -euo pipefail
 SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 WS="$(cd -- "$SCRIPT_DIR/../.." && pwd)"
 ACTION="${1:-show}"
-if [[ $# -gt 2 || ! "$ACTION" =~ ^(show|monitor|drive|diagnose|speed|clearance|approach|lane|turn|models|request-merge|view|rviz)$ ]] ||
+if [[ $# -gt 2 || ! "$ACTION" =~ ^(show|monitor|drive|diagnose|speed|clearance|approach|lane|turn|tune|models|request-merge|view|rviz)$ ]] ||
    [[ "$ACTION" =~ ^(models|request-merge|view|rviz)$ && $# -gt 1 ]] ||
    [[ "$ACTION" == diagnose && $# -gt 1 && "$2" != 2 ]]; then
   echo 'Usage: bash run_test.sh {show|monitor|drive} [1-5]; or {speed KMH|clearance METERS|approach smooth|lane on/off|turn safe/mission|models|request-merge|diagnose [2]|view|rviz}' >&2
@@ -27,6 +27,24 @@ COMPETITION_STATUS_PORT="${COMPETITION_STATUS_PORT:-9081}"
 EGO_STATUS_PORT="$COMPETITION_STATUS_PORT"
 
 source "$SCRIPT_DIR/curvature_runtime_files.sh"
+if [[ "$ACTION" == tune ]]; then
+  [[ "${2:-}" == real_final ]] || { echo 'Usage: bash run_test.sh tune real_final' >&2; exit 2; }
+  cp -p "$SCRIPT_DIR/highway-test.env" "$SCRIPT_DIR/highway-test.env.bak"
+  PLANNING_DECEL="$(awk -v maximum="$MAX_DECEL_MPS2" 'BEGIN {if (maximum <= 0) exit 1; print (maximum < 1.2 ? maximum : 1.2)}')"
+  # Explicitly replace stale personal tuning; keep stop clearance, ports,
+  # roundabout/highway switches and every unrelated user setting unchanged.
+  for entry in TEST_PROFILE=curvature_signal MAX_SPEED_KPH=42.0 LATERAL_ACCEL_LIMIT_MPS2=2.25 MAX_ACCEL_MPS2=1.4 "CURVE_PLANNING_DECEL_MPS2=$PLANNING_DECEL" SPEED_KP=0.45 SPEED_KI=0.05 LOOKAHEAD_GAIN=0.25 MAX_STEERING_RATE_RAD_S=1.2 LANE_INFO_DEVICE=auto LANE_CENTERING_ENABLED=true LANE_CENTERING_WEIGHT=0.55 LANE_CENTERING_MAX_CORRECTION_RAD=0.075 LANE_CENTERING_MIN_CONFIDENCE=0.60 LANE_CENTERING_MIN_FRAMES=3 LANE_CENTERING_FILTER_TAU_SEC=0.20 LANE_CENTERING_CORRECTION_RATE_RAD_S=0.14 LANE_CENTERING_RELEASE_RATE_RAD_S=0.10; do
+    name="${entry%%=*}"; value="${entry#*=}"
+    if grep -q "^${name}=" "$SCRIPT_DIR/highway-test.env"; then
+      sed -i "s/^${name}=.*/${name}=${value}/" "$SCRIPT_DIR/highway-test.env"
+    else
+      printf '\n%s=%s\n' "$name" "$value" >> "$SCRIPT_DIR/highway-test.env"
+    fi
+  done
+  echo 'real_final tune saved: normal ceiling 42 km/h; lateral limit 2.25 m/s^2 (14 -> 21 km/h model target); stronger observed-lane assist; automatic device.'
+  echo 'Stop clearance and ports preserved. Restart the launch to apply.'
+  exit 0
+fi
 if [[ "$ACTION" == view ]]; then
   exec bash "$SCRIPT_DIR/open_camera_dashboard.sh"
 fi
@@ -130,7 +148,7 @@ if [[ "$ACTION" == lane ]]; then
   if [[ "$VALUE" == true ]]; then
     # Apply one explicit preset so saved values from older releases cannot
     # silently keep the previous weight/limit after the implementation changes.
-    for entry in LANE_CENTERING_WEIGHT=0.45 LANE_CENTERING_MAX_CORRECTION_RAD=0.065 LANE_CENTERING_MIN_CONFIDENCE=0.65 LANE_CENTERING_TIMEOUT_SEC=0.4 LANE_CENTERING_MIN_FRAMES=4 LANE_CENTERING_FILTER_TAU_SEC=0.25 LANE_CENTERING_CORRECTION_RATE_RAD_S=0.10 LANE_CENTERING_RELEASE_RATE_RAD_S=0.10; do
+    for entry in LANE_CENTERING_WEIGHT=0.55 LANE_CENTERING_MAX_CORRECTION_RAD=0.075 LANE_CENTERING_MIN_CONFIDENCE=0.60 LANE_CENTERING_TIMEOUT_SEC=0.4 LANE_CENTERING_MIN_FRAMES=3 LANE_CENTERING_FILTER_TAU_SEC=0.20 LANE_CENTERING_CORRECTION_RATE_RAD_S=0.14 LANE_CENTERING_RELEASE_RATE_RAD_S=0.10; do
       name="${entry%%=*}"
       value="${entry#*=}"
       if grep -q "^${name}=" "$SCRIPT_DIR/highway-test.env"; then
@@ -139,7 +157,7 @@ if [[ "$ACTION" == lane ]]; then
         printf '\n%s=%s\n' "$name" "$value" >> "$SCRIPT_DIR/highway-test.env"
       fi
     done
-    echo 'CAM1 residual assist preset saved: weight 0.45, limit 0.065 rad, confidence 0.65, 4 stable frames, age <= 0.4 s, filter 0.25 s, slew 0.10/0.10 rad/s.'
+    echo 'CAM1 observed assist saved: weight 0.55, limit 0.075 rad, confidence 0.60, 3 stable frames, age <= 0.4 s, filter 0.20 s, slew 0.14/0.10 rad/s.'
     echo 'Previous lane tuning is replaced by this preset; speed and stopline settings are unchanged.'
   fi
   echo "LANE_CENTERING_ENABLED=$VALUE saved for case 2. Restart the launch to apply."

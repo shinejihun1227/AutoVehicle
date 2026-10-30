@@ -1,5 +1,12 @@
 # new_final_ws
 
+Latest user-authorised scope: real_final based on whddbs3061/car
+test/roundabout-highway 4259fc1, plus the cumulative ten-file signal/right-turn/
+IMU update. Preserve highway/roundabout wiring and Competition-only inputs.
+Improve observed-lane centering and tune the normal curve target around
+14 -> 21 km/h. Publish only real_final to shinejihun1227/AutoVehicle.
+Keep historical provenance and other branches unchanged. See REAL_FINAL_KO.md.
+
 Current user-authorised follow-up (2026-10-30): modify test/roundabout only for
 the permitted junction entry/dropout lifecycle and exclusive >0.6 signal
 confidence floor. This supersedes the older new_final_ws-only scope below

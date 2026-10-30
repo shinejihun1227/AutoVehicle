@@ -59,6 +59,7 @@ import json
 import math
 import os
 import sys
+import warnings
 from dataclasses import dataclass, field
 
 import cv2
@@ -601,6 +602,9 @@ class Segmenter:
 
     def __init__(self, checkpoint=None, cam_set=None, device=None,
                  sensor_id=DEFAULT_SENSOR_ID, crop_top=CROP_TOP):
+        if device and str(device).startswith('cuda') and not torch.cuda.is_available():
+            warnings.warn('CAM1 CUDA unavailable; falling back to CPU', RuntimeWarning)
+            device = 'cpu'
         self.device = torch.device(
             device or ("cuda" if torch.cuda.is_available() else "cpu"))
 

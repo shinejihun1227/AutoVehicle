@@ -1,5 +1,8 @@
 # MORAI 자율주행 통합 저장소
 
+**현재 `real_final` 실행 안내: [REAL_FINAL_KO.md](REAL_FINAL_KO.md).**
+아래 기존 문서는 이전 브랜치의 설계·실험 이력입니다.
+
 **`new_final_ws` 브랜치 실행 기준:** [Competition 전용 상태 수신과 실행 안내](morai_ws/docs/NEW_FINAL_COMPETITION_KO.md).
 기존 `final_ws`의 GPS·IMU 위치 추정과 곡률·신호등 주행을 유지하고,
 차량 상태 입력을 Competition Vehicle Status / Ubuntu UDP **9081**로 교체했습니다.

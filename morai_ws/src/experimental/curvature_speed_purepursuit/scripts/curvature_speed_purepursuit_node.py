@@ -51,7 +51,7 @@ from curvature_speed_purepursuit.planner import (
     profile_value_at_s,
 )
 from curvature_speed_purepursuit.lane_centering import (
-    LaneCenteringAssist, ideal_lane_reference, lane_quality, lane_measurement,
+    LaneCenteringAssist, ideal_lane_reference, lane_quality, lane_measurement, lane_window,
 )
 
 
@@ -523,8 +523,10 @@ class CurvatureSpeedPurePursuitNode:
                 if stamp <= self.last_lane_stamp:
                     return
                 self.last_lane_stamp = stamp
-                valid, quality, reason, confidence = lane_quality(info, self.lane_centering_min_confidence)
-                measurement = lane_measurement(info) if valid else None
+                near_m, far_m = lane_window(info)
+                valid, quality, reason, confidence = lane_quality(
+                    info, self.lane_centering_min_confidence, near_m, far_m)
+                measurement = lane_measurement(info, near_m, far_m) if valid else None
                 if measurement is None:
                     self.lane_assist.invalidate(reason if not valid else "plausibility_failed")
                     self.lane_observations.clear()
@@ -533,7 +535,7 @@ class CurvatureSpeedPurePursuitNode:
                     self.lane_assist.invalidate("unstable")
                     self.lane_observations.clear()
                 self.lane_observations.append((stamp, time.monotonic(), measurement[0],
-                                               measurement[1], confidence, quality))
+                                               measurement[1], confidence, quality, near_m, far_m))
             except (TypeError, KeyError, ValueError, AttributeError, OverflowError):
                 self.lane_observations.clear()
                 self.lane_assist.invalidate("plausibility_failed")
@@ -760,7 +762,9 @@ class CurvatureSpeedPurePursuitNode:
         ros_now, wall_now = rospy.Time.now().to_sec(), time.monotonic()
         with self.lane_lock:
             while self.enable_lane_centering and self.lane_observations:
-                stamp, received, lateral, heading, confidence, quality = self.lane_observations[0]
+                observation = self.lane_observations[0]
+                stamp, received, lateral, heading, confidence, quality = observation[:6]
+                near_m, far_m = observation[6:] or (7.0, 14.0)
                 if (not -0.05 <= ros_now - stamp <= self.lane_centering_timeout_sec
                         or not 0 <= wall_now - received <= self.lane_centering_timeout_sec):
                     self.lane_observations.popleft()
@@ -807,11 +811,14 @@ class CurvatureSpeedPurePursuitNode:
                     if projection.distance_m > 1.5 or abs(yaw_error) > 0.6:
                         raise ValueError("off-route lane pose")
                     reference = ideal_lane_reference(self.lane_reference_points,
-                                                     self.preview_s_values, projection.progress_s)
+                                                     self.preview_s_values, projection.progress_s,
+                                                     near_m, far_m)
                     if reference is None:
                         self.lane_assist.invalidate("route_reference_unavailable")
                         continue
-                    self.lane_assist.observe(lateral, heading, reference, confidence, quality, stamp, received)
+                    self.lane_assist.observe(lateral, heading, reference, confidence, quality,
+                                             stamp, received, near_m, far_m)
+                    self.last_lane_window = (near_m, far_m)
                 except (AttributeError, TypeError, ValueError, OverflowError):
                     self.lane_assist.invalidate("route_reference_unavailable")
             status = self.lane_assist.update(speed_mps, ros_now, wall_now, dt,
@@ -820,6 +827,7 @@ class CurvatureSpeedPurePursuitNode:
         centered = clamp(nominal + correction, -self.max_steering_rad, self.max_steering_rad)
         status["correction_rad"] = centered - nominal
         status["source_topic"] = self.lane_info_topic
+        status["observation_window_m"] = getattr(self, 'last_lane_window', None)
         self.lane_centering_status_pub.publish(String(data=json.dumps(status, allow_nan=False)))
         return centered, centered - nominal, status["active"]
 
